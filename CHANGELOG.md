@@ -5,3 +5,12 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- `Sample`: georeferenced species observations from a DataFrame or CSV, with
+  distinct points, species count, and convex hull area.
+- `Nest` and `random_nest()`: nest a sample by removing one point at a time
+  uniformly at random, the baseline for every other strategy, and export the
+  area and species table that `sars` fits.
+
