@@ -1756,7 +1756,7 @@ wheels = [
 
 [[package]]
 name = "sars"
-version = "0.7.11"
+version = "0.7.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -1770,9 +1770,9 @@ dependencies = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9a/47/ef79fd8a6ce4679fcfd6d2024b0c9e3e6c16e71898ef1effef4365919cbc/sars-0.7.11.tar.gz", hash = "sha256:bb5637391c3a372e3b4878ae1a51cce65ee9e6c74a66cac26ffaea31e4172284", size = 300323, upload-time = "2026-10-27T05:54:13.831Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2d/bc/b7ada769e97b79b15a72d1b0f44aa931130d28b7d96784271584118781a6/sars-0.7.14.tar.gz", hash = "sha256:981829fd1a2251f5e1cf8edd589f7ac6dff00adc5ba94306254b3d9c1b1bf345", size = 300686, upload-time = "2026-11-02T03:30:04.501Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/8f/7a287e516ee57030df7496a7d4590f47f24631ec9751f40c28f55ae139db/sars-0.7.11-py3-none-any.whl", hash = "sha256:d7616e31844188d06fdaf33f29052cba145fea02e89419f5b522b158d07b135e", size = 26443, upload-time = "2026-10-27T05:54:12.174Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/82/9dd1b90494825846363dcb6c8a449b7961ebef4a5e04b69b3e2d822c2c57/sars-0.7.14-py3-none-any.whl", hash = "sha256:935e265010a204a75433a9a778e382951a5986817b15d6c4dd4682cad7a230fb", size = 26444, upload-time = "2026-11-02T03:30:03.251Z" },
 ]
 
 [[package]]
