@@ -318,7 +318,10 @@ class TestHullDistanceNest:
         for before, gone in removed(nest):
             vertices = hull_vertices(points, before)
             centre = points[vertices].mean(axis=0)
-            expected = min(vertices, key=lambda v: (-sign * np.hypot(*(points[v] - centre)), v))
+            expected = min(
+                vertices,
+                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - centre)):.9g}"), v),
+            )
             assert gone[0] == expected
 
     def test_known_answer(self):
@@ -332,6 +335,17 @@ class TestHullDistanceNest:
     def test_ties_go_to_the_lowest_index(self):
         square = make_sample([[0, 0], [1, 0], [1, 1], [0, 1]])
         assert list(samplesar.hull_distance_nest(square).steps[1]) == [1, 2, 3]
+
+    @pytest.mark.parametrize("remove", ["farthest", "closest"])
+    def test_reproducible_wherever_the_sample_lies(self, remove):
+        # A small square: its corners tie on distance, and at real lon/lat the
+        # distances differ in their last bits.
+        square = [[0, 0], [0.01, 0], [0.01, 0.01], [0, 0.01], [0.004, 0.006]]
+        here = samplesar.hull_distance_nest(make_sample(square), remove=remove)
+        again = samplesar.hull_distance_nest(make_sample(square), remove=remove)
+        there = samplesar.hull_distance_nest(make_sample(shifted(square)), remove=remove)
+        for a, b, c in zip(here.steps, again.steps, there.steps, strict=True):
+            assert np.array_equal(a, b) and np.array_equal(a, c)
 
     def test_rejects_unknown_remove(self, sample):
         with pytest.raises(ValueError, match="remove must be"):

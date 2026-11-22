@@ -258,14 +258,17 @@ def hull_species_nest(
     return _remove_one(sample, min_points, choose)
 
 
-def hull_distance_nest(sample: Sample, remove: str = "farthest", min_points: int = 3) -> Nest:
+def hull_distance_nest(
+    sample: Sample, remove: Literal["farthest", "closest"] = "farthest", min_points: int = 3
+) -> Nest:
     """Nest a sample by removing the hull vertex farthest from, or closest to, its centre.
 
     The centre is the centroid of the current hull's vertices, and distances
-    are Euclidean in degrees. ``remove="farthest"`` trims the outlying
-    corners first, so the sample contracts towards a rounder shape;
-    ``remove="closest"`` removes the vertex nearest the centre, leaving the
-    outliers to last. Ties go to the lowest point index.
+    are Euclidean in degrees: a degree of longitude counts as much as a
+    degree of latitude, as in the hull areas. ``remove="farthest"`` trims the
+    outlying corners first; ``remove="closest"`` removes the vertex nearest
+    the centre, leaving the outliers to last. Ties, to within floating-point
+    rounding, go to the lowest point index.
 
     Parameters
     ----------

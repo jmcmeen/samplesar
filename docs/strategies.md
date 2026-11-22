@@ -62,6 +62,6 @@ nowhere else, so richness falls as fast as possible.
 
 `hull_distance_nest(sample, remove="farthest", min_points=3)` removes the
 vertex farthest from the centroid of the hull's vertices (Euclidean, in
-degrees), trimming outlying corners first so the sample contracts towards a
-rounder shape. `remove="closest"` removes the vertex nearest the centre and
-leaves the outliers to last. Ties go to the lowest point index.
+degrees, so a degree of longitude counts as much as one of latitude),
+trimming outlying corners first. `remove="closest"` removes the vertex nearest
+the centre and leaves the outliers to last. Ties go to the lowest point index.
