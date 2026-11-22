@@ -1,23 +1,16 @@
-"""Species-area relationship datasets from geometric sampling of point observations."""
+"""Species-area relationship datasets from geometric sampling of point observations.
+
+The API is grouped by job: :mod:`samplesar.sources` gets observations into a
+:class:`Sample`, :mod:`samplesar.regions` gives regions to restrict them to,
+:mod:`samplesar.strategies` nests them into a :class:`Nest`,
+:mod:`samplesar.evaluate` fits and compares nests, and :mod:`samplesar.plot`
+draws them.
+"""
 
 from importlib.metadata import PackageNotFoundError, version
 
-from samplesar._diagnostics import nest_diagnostics, residual_autocorrelation
-from samplesar._evaluate import compare_nests, compare_to_baseline, random_baseline
-from samplesar._geoboundaries import boundary
-from samplesar._hull import (
-    concave_peel_nest,
-    hull_area_nest,
-    hull_distance_nest,
-    hull_peel_nest,
-    hull_random_nest,
-    hull_species_nest,
-)
-from samplesar._nest import Nest, nest_from_order, random_nest
-from samplesar._opendata import download_open_data
-from samplesar._plot import animate_nest, plot_nest, plot_nest_curve
-from samplesar._regions import ecoregion, read_boundary
-from samplesar._registry import nest, register_strategy, strategies
+from samplesar import evaluate, plot, regions, sources, strategies
+from samplesar._nest import Nest
 from samplesar._sample import Sample, hull_area
 
 try:
@@ -29,28 +22,10 @@ __all__ = [
     "Nest",
     "Sample",
     "__version__",
-    "animate_nest",
-    "boundary",
-    "compare_nests",
-    "compare_to_baseline",
-    "concave_peel_nest",
-    "ecoregion",
-    "download_open_data",
+    "evaluate",
     "hull_area",
-    "hull_area_nest",
-    "hull_distance_nest",
-    "hull_peel_nest",
-    "hull_random_nest",
-    "hull_species_nest",
-    "nest",
-    "nest_diagnostics",
-    "nest_from_order",
-    "plot_nest",
-    "plot_nest_curve",
-    "random_baseline",
-    "random_nest",
-    "read_boundary",
-    "register_strategy",
-    "residual_autocorrelation",
+    "plot",
+    "regions",
+    "sources",
     "strategies",
 ]

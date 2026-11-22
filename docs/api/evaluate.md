@@ -1,26 +1,23 @@
-# Evaluation API
+# Evaluation
 
-## compare_nests
+`samplesar.evaluate`: fitting and comparing nests. Fitting one nest is [`Nest.fit`][samplesar.Nest.fit].
 
-::: samplesar.compare_nests
+## evaluate.compare
 
-## Nest.fit
+::: samplesar.evaluate.compare
 
-Fitting one nest is the [`Nest.fit`][samplesar.Nest.fit] method, documented with
-[`Nest`][samplesar.Nest].
+## evaluate.baseline
 
-## random_baseline
+::: samplesar.evaluate.baseline
 
-::: samplesar.random_baseline
+## evaluate.against_baseline
 
-## compare_to_baseline
+::: samplesar.evaluate.against_baseline
 
-::: samplesar.compare_to_baseline
+## evaluate.diagnostics
 
-## nest_diagnostics
+::: samplesar.evaluate.diagnostics
 
-::: samplesar.nest_diagnostics
+## evaluate.autocorrelation
 
-## residual_autocorrelation
-
-::: samplesar.residual_autocorrelation
+::: samplesar.evaluate.autocorrelation

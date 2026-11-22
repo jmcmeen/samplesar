@@ -10,25 +10,25 @@ Every strategy below is registered under a short name, so it can be chosen by
 a string, from a script or a config file:
 
 ```python
-samplesar.strategies()                      # name -> one-line description
-nest = samplesar.nest(sample, "hull_area", keep="smallest")
+samplesar.strategies.available()                      # name -> one-line description
+nest = samplesar.strategies.run(sample, "hull_area", keep="smallest")
 nest.label                                  # "hull_area(keep='smallest')"
 ```
 
 Each nest records the strategy that made it and the options it was given
 (`nest.strategy`, `nest.options`), whether it was made by name or by calling
-the function directly. `compare_nests` names its rows by these labels when it
+the function directly. `evaluate.compare` names its rows by these labels when it
 gets a plain list of nests.
 
 ## Random removal
 
-`random_nest(sample, min_points=3, seed=None)` removes one point at a time,
+`strategies.random(sample, min_points=3, seed=None)` removes one point at a time,
 uniformly at random. It's the baseline every other strategy is compared
 against.
 
 ## A given order
 
-`nest_from_order(sample, order, min_points=3)` removes points in the order
+`strategies.from_order(sample, order, min_points=3)` removes points in the order
 given, one per step: any ordering, from a heuristic, an optimiser or an
 experiment's design, becomes a nest to evaluate like the others. The order
 needn't name every point; the nest stops when it runs out or `min_points`
@@ -47,13 +47,13 @@ the hull is a segment, and its vertices are its two ends.
 
 ### Random hull vertex
 
-`hull_random_nest(sample, min_points=3, seed=None)` removes one hull vertex
+`strategies.hull_random(sample, min_points=3, seed=None)` removes one hull vertex
 per step, chosen uniformly at random: the outside-in counterpart of
-`random_nest`.
+`strategies.random`.
 
 ### Hull peeling
 
-`hull_peel_nest(sample, min_points=3)` removes the whole hull boundary at each
+`strategies.hull_peel(sample, min_points=3)` removes the whole hull boundary at each
 step: every vertex and every point on an edge, leaving only the points
 strictly inside. Edges are straight on the sample's projection: a grid laid
 out in a projected CRS (UTM, say) peels ring by ring if the sample is given
@@ -65,10 +65,10 @@ takes off the outer ring. It stops before a layer would leave fewer than
 
 ### Concave hull peeling
 
-`concave_peel_nest(sample, ratio=0.3, min_points=3)` peels the boundary of a
+`strategies.concave_peel(sample, ratio=0.3, min_points=3)` peels the boundary of a
 concave hull instead, which follows the sample's outline rather than spanning
 its gaps: suited to L-shaped or scattered samples. `ratio` runs from 1 (the
-convex hull, as `hull_peel_nest`) down towards 0 (tighter). Areas are still
+convex hull, as `strategies.hull_peel`) down towards 0 (tighter). Areas are still
 convex hull areas.
 
 ## Choosing a vertex
@@ -80,14 +80,14 @@ the lowest point index, so the nest is always the same for the same sample.
 
 ### By area change
 
-`hull_area_nest(sample, keep="largest", min_points=3)` tries removing each
+`strategies.hull_area(sample, keep="largest", min_points=3)` tries removing each
 vertex and keeps the largest remaining hull: the vertex whose loss costs the
 least area goes first, so the area falls as slowly as the points allow.
 `keep="smallest"` does the opposite, cutting the area as fast as possible.
 
 ### By species change
 
-`hull_species_nest(sample, keep="most", min_points=3)` removes the vertex
+`strategies.hull_species(sample, keep="most", min_points=3)` removes the vertex
 whose loss leaves the most species: a vertex whose species all occur at other
 remaining points costs nothing, so species richness falls as late as
 possible. `keep="fewest"` removes first the vertices holding species found
@@ -95,7 +95,7 @@ nowhere else, so richness falls as fast as possible.
 
 ### By distance from the centre
 
-`hull_distance_nest(sample, remove="farthest", min_points=3)` removes the
+`strategies.hull_distance(sample, remove="farthest", min_points=3)` removes the
 vertex farthest from the centroid of the hull's vertices (in km on the
 sample's projection), trimming outlying corners first. `remove="closest"` removes the vertex nearest
 the centre and leaves the outliers to last. Ties go to the lowest point index.
@@ -103,21 +103,21 @@ the centre and leaves the outliers to last. Ties go to the lowest point index.
 ## Comparing strategies
 
 `Nest.fit(model="power")` fits one of [sars](https://jmcmeen.github.io/sars/)'
-models to a nest, and `compare_nests` fits the same model to several nests,
+models to a nest, and `evaluate.compare` fits the same model to several nests,
 one row each, so strategies can be compared on one sample:
 
 ```python
 import samplesar
 
 nests = {
-    "random": samplesar.random_nest(sample, seed=0),
-    "hull random": samplesar.hull_random_nest(sample, seed=0),
-    "peel": samplesar.hull_peel_nest(sample),
-    "largest area": samplesar.hull_area_nest(sample, keep="largest"),
-    "most species": samplesar.hull_species_nest(sample, keep="most"),
-    "farthest": samplesar.hull_distance_nest(sample, remove="farthest"),
+    "random": samplesar.strategies.random(sample, seed=0),
+    "hull random": samplesar.strategies.hull_random(sample, seed=0),
+    "peel": samplesar.strategies.hull_peel(sample),
+    "largest area": samplesar.strategies.hull_area(sample, keep="largest"),
+    "most species": samplesar.strategies.hull_species(sample, keep="most"),
+    "farthest": samplesar.strategies.hull_distance(sample, remove="farthest"),
 }
-samplesar.compare_nests(nests)   # n_steps, n_fitted, c, z, r_squared, aicc, converged
+samplesar.evaluate.compare(nests)   # n_steps, n_fitted, c, z, r_squared, aicc, converged
 ```
 
 The areas are convex hull areas in km², so `c` is per km²; `z` doesn't
@@ -137,8 +137,8 @@ independent evidence. Compare a strategy with the spread of fits from many
 random nests of the same sample instead:
 
 ```python
-baseline = samplesar.random_baseline(sample, n=99, strategy="hull_random")
-samplesar.compare_to_baseline(samplesar.hull_peel_nest(sample), baseline)
+baseline = samplesar.evaluate.baseline(sample, n=99, strategy="hull_random")
+samplesar.evaluate.against_baseline(samplesar.strategies.hull_peel(sample), baseline)
 ```
 
 Each parameter gets the nest's value, the baseline's mean, spread and 95%
@@ -155,7 +155,7 @@ name, is listed by `strategies()` and labels its nests like the built-in ones:
 import numpy as np
 import samplesar
 
-@samplesar.register_strategy("every_other")
+@samplesar.strategies.register("every_other")
 def every_other_nest(sample, min_points=3):
     """Drop every other point at each step."""
     remaining = np.arange(sample.n_points)
@@ -165,8 +165,8 @@ def every_other_nest(sample, min_points=3):
         steps.append(remaining)
     return samplesar.Nest(sample=sample, steps=tuple(steps))
 
-samplesar.compare_nests([
-    samplesar.nest(sample, "every_other"),
-    samplesar.nest(sample, "hull_peel"),
+samplesar.evaluate.compare([
+    samplesar.strategies.run(sample, "every_other"),
+    samplesar.strategies.run(sample, "hull_peel"),
 ])
 ```

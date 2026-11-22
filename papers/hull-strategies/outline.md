@@ -87,7 +87,7 @@ On the Steele Creek Park sample (all nine strategies):
 - The fitness, or comparison, criterion that respects pseudo-replication.
 - Fits at parameter bounds (samplesar #48).
 - Whether greedy choices (S4 to S7) are close to the best orders, which can
-  be checked by evaluating searched orders with `nest_from_order`.
+  be checked by evaluating searched orders with `strategies.from_order`.
 - Extensions: α-hulls and concave hulls, kernel-smoothed boundaries,
   spatially weighted and multi-scale removal.
 

@@ -78,7 +78,7 @@ def _features(iso: str, level: int, simplified: bool, cache: Path) -> tuple[list
     return json.loads(_cached(geo_path, meta[key]))["features"], meta
 
 
-def boundary(
+def admin(
     country: str,
     level: int = 0,
     name: str | None = None,
@@ -90,7 +90,7 @@ def boundary(
     """A country's boundary, or a state's, county's or district's, from geoBoundaries.
 
     For [`Sample.within`][samplesar.Sample.within] and
-    [`Sample.from_open_data`][samplesar.Sample.from_open_data]'s
+    [`sources.open_data`][samplesar.sources.open_data]'s
     ``boundary``. Boundaries come from geoBoundaries' open release (Runfola
     et al. 2020), downloaded once and cached. Each country's boundaries carry
     their own license (CC BY 4.0 or ODbL; see geoboundaries.org) and need
@@ -115,7 +115,7 @@ def boundary(
         exact near the edges.
     inside : polygon, optional
         Keep only units lying in this region (by a point inside each unit),
-        to tell apart units with one name: ``inside=samplesar.boundary("USA",
+        to tell apart units with one name: ``inside=samplesar.regions.admin("USA",
         1, "Tennessee")`` picks Tennessee's Sullivan County.
     cache_dir : str or Path, optional
         Where downloads are kept; by default ``$SAMPLESAR_CACHE/geoboundaries``
@@ -136,9 +136,9 @@ def boundary(
 
     Examples
     --------
-    >>> costa_rica = samplesar.boundary("CRI")  # doctest: +SKIP
-    >>> tennessee = samplesar.boundary("USA", level=1, name="Tennessee")  # doctest: +SKIP
-    >>> county = samplesar.boundary("USA", 2, "Sullivan", inside=tennessee)  # doctest: +SKIP
+    >>> costa_rica = samplesar.regions.admin("CRI")  # doctest: +SKIP
+    >>> tennessee = samplesar.regions.admin("USA", level=1, name="Tennessee")  # doctest: +SKIP
+    >>> county = samplesar.regions.admin("USA", 2, "Sullivan", inside=tennessee)  # doctest: +SKIP
     """
     if not (isinstance(country, str) and re.fullmatch(r"[A-Za-z]{3}", country)):
         raise ValueError(

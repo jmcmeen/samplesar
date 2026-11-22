@@ -16,11 +16,11 @@ df = pd.DataFrame(
         "lat": [36.50, 36.55, 36.52, 36.58, 36.51, 36.56],
     }
 )
-sample = samplesar.Sample.from_df(df)
+sample = samplesar.sources.dataframe(df)
 sample.n_points, sample.n_species, sample.area   # area in km²
 ```
 
-`Sample.from_csv` reads the same three columns from a file; pass
+`sources.csv` reads the same three columns from a file; pass
 `species_col`, `lon_col` and `lat_col` if yours are named differently.
 
 ## Coordinate systems
@@ -31,14 +31,14 @@ the CRS, and areas and distances are measured in it, so the grid stays
 exactly straight:
 
 ```python
-utm = samplesar.Sample.from_df(df, lon_col="easting", lat_col="northing", crs="EPSG:32617")
+utm = samplesar.sources.dataframe(df, lon_col="easting", lat_col="northing", crs="EPSG:32617")
 ```
 
 A GeoDataFrame of points works directly; its CRS is read from the frame
 (geopandas isn't needed by samplesar itself):
 
 ```python
-sample = samplesar.Sample.from_geodataframe(gdf, species_col="species")
+sample = samplesar.sources.geodataframe(gdf, species_col="species")
 ```
 
 ## From iNaturalist
@@ -48,7 +48,7 @@ iNaturalist, fetched through pyinaturalist (or from records you already
 have):
 
 ```python
-sample = samplesar.Sample.from_pyinaturalist(
+sample = samplesar.sources.inaturalist(
     taxon_id=20979, place_id=45, quality_grade="research"   # frogs in Tennessee
 )
 ```
@@ -68,8 +68,8 @@ open-data export instead of calling the API (`pip install
 ```python
 from pathlib import Path
 
-parquet = samplesar.download_open_data(Path.home() / "data" / "inaturalist-open-data")
-frogs = samplesar.Sample.from_open_data(
+parquet = samplesar.sources.download_open_data(Path.home() / "data" / "inaturalist-open-data")
+frogs = samplesar.sources.open_data(
     parquet, bbox=(-85.0, 35.0, -81.5, 37.0), taxon_id=20979   # frogs, East Tennessee
 )
 ```
@@ -83,31 +83,31 @@ is the filter available for that.
 ## Within a boundary
 
 `Sample.within` keeps the observations inside a region's outline, and
-`from_open_data(boundary=...)` reads only those. `samplesar.boundary` fetches
+`sources.open_data(boundary=...)` reads only those. `samplesar.regions.admin` fetches
 countries, states and counties from geoBoundaries (cached after the first
 download); any shapely polygon, or a GeoDataFrame in any CRS, works too:
 
 ```python
-costa_rica = samplesar.boundary("CRI")
-frogs = samplesar.Sample.from_open_data(parquet, boundary=costa_rica, taxon_id=20979)
+costa_rica = samplesar.regions.admin("CRI")
+frogs = samplesar.sources.open_data(parquet, boundary=costa_rica, taxon_id=20979)
 
-tennessee = samplesar.boundary("USA", level=1, name="Tennessee")
-sullivan = samplesar.boundary("USA", 2, "Sullivan", inside=tennessee)
+tennessee = samplesar.regions.admin("USA", level=1, name="Tennessee")
+sullivan = samplesar.regions.admin("USA", 2, "Sullivan", inside=tennessee)
 ```
 
 Regions that cross political lines come from boundary files.
-`samplesar.ecoregion` reads known ecoregion datasets (US EPA Level III and
-IV, and RESOLVE 2017 worldwide), and `samplesar.read_boundary` any other
+`samplesar.regions.ecoregion` reads known ecoregion datasets (US EPA Level III and
+IV, and RESOLVE 2017 worldwide), and `samplesar.regions.read` any other
 file or URL (physiographic provinces, watersheds, protected areas), with
 `pip install 'samplesar[geo]'`. Downloads are cached, so a script that names
 its sources is reproducible:
 
 ```python
 # The Southern Appalachians: three EPA ecoregions south of the Roanoke Gap.
-southern_appalachians = samplesar.ecoregion(
+southern_appalachians = samplesar.regions.ecoregion(
     "epa_l3", codes=["66", "67", "68"], clip=(-90, 30, -75, 37.3)
 )
-salamanders = samplesar.Sample.from_open_data(
+salamanders = samplesar.sources.open_data(
     parquet, boundary=southern_appalachians, taxon_id=26718
 )
 ```
@@ -122,7 +122,7 @@ subset of the points of the step before, so the areas and species counts form
 a nested species-area curve.
 
 ```python
-nest = samplesar.random_nest(sample, seed=0)
+nest = samplesar.strategies.random(sample, seed=0)
 nest.to_frame()      # step, n_points, area (km²), species
 ```
 
@@ -142,9 +142,9 @@ fit.params["z"], fit.r_squared
 ## Plotting
 
 ```python
-samplesar.plot_nest(nest, step=10)       # the points and hull at step 10
-samplesar.plot_nest_curve(nest)          # species against area, log axes, with a power fit
-animation = samplesar.animate_nest(nest)
+samplesar.plot.nest(nest, step=10)       # the points and hull at step 10
+samplesar.plot.curve(nest)          # species against area, log axes, with a power fit
+animation = samplesar.plot.animate(nest)
 animation.save("nest.gif", writer="pillow")
 ```
 

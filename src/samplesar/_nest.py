@@ -14,15 +14,15 @@ import pandas as pd
 from pyproj import CRS
 from pyproj.exceptions import CRSError
 
-from samplesar._registry import Options, register_strategy
-from samplesar._sample import Sample, hull_area, point_species
+from samplesar._registry import Options, register
+from samplesar._sample import Sample, _validate, hull_area, point_species
 
 
 @dataclass(frozen=True)
 class Nest:
     """A nested sequence of sub-samples of one [`Sample`][samplesar.Sample].
 
-    Made by a nesting strategy such as [`random_nest`][samplesar.random_nest]. Strategies differ only
+    Made by a nesting strategy such as [`strategies.random`][samplesar.strategies.random]. Strategies differ only
     in which points they drop at each step.
 
     Attributes
@@ -184,7 +184,7 @@ class Nest:
                 f"Saved with nest format {version}; this samplesar reads up to "
                 f"{FORMAT_VERSION}. Upgrade samplesar to load it."
             )
-        sample = Sample.from_df(pd.DataFrame(data["observations"]))
+        sample = Sample(_validate(pd.DataFrame(data["observations"])))
         centre = data.get("centre")
         crs = data.get("crs")
         if centre is not None or crs is not None:
@@ -333,8 +333,8 @@ def _plain(name: str, value: Any) -> Any:
     )
 
 
-@register_strategy("random")
-def random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
+@register("random")
+def random(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
     """Nest a sample by removing one point at a time, uniformly at random.
 
     The baseline every other strategy is compared against.
@@ -369,8 +369,8 @@ def random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) ->
     return Nest(sample=sample, steps=tuple(steps))
 
 
-@register_strategy("order")
-def nest_from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_points: int = 3) -> Nest:
+@register("order")
+def from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_points: int = 3) -> Nest:
     """Nest a sample by removing its points in a given order.
 
     Any ordering, from a heuristic, an optimiser or an experiment's design,
@@ -391,7 +391,7 @@ def nest_from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_point
     Returns
     -------
     Nest
-        Registered as ``"order"``, so ``samplesar.nest(sample, "order",
+        Registered as ``"order"``, so ``samplesar.strategies.run(sample, "order",
         order=...)`` is the same.
 
     Raises

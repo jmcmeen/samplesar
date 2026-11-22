@@ -11,15 +11,15 @@ def square_with_centre():
     # A 1 km square in UTM with a point at its centre.
     x = [500_000, 501_000, 501_000, 500_000, 500_500]
     y = [4_000_000, 4_000_000, 4_001_000, 4_001_000, 4_000_500]
-    return samplesar.Sample.from_df(
+    return samplesar.sources.dataframe(
         pd.DataFrame({"species": list("abcde"), "lon": x, "lat": y}), crs="EPSG:32617"
     )
 
 
 def test_nest_diagnostics_on_a_known_shape():
     sample = square_with_centre()
-    nest = samplesar.nest_from_order(sample, [2], min_points=3)  # drop one corner
-    table = samplesar.nest_diagnostics(nest)
+    nest = samplesar.strategies.from_order(sample, [2], min_points=3)  # drop one corner
+    table = samplesar.evaluate.diagnostics(nest)
     first, second = table.iloc[0], table.iloc[1]
     assert first["compactness"] == pytest.approx(np.pi / 4, rel=1e-3)  # a square
     assert first["area_share"] == pytest.approx(1.0)
@@ -34,7 +34,9 @@ def test_nest_diagnostics_on_a_known_shape():
 
 def test_steps_without_a_polygon():
     sample = square_with_centre()
-    table = samplesar.nest_diagnostics(samplesar.random_nest(sample, min_points=1, seed=0))
+    table = samplesar.evaluate.diagnostics(
+        samplesar.strategies.random(sample, min_points=1, seed=0)
+    )
     last = table.iloc[-1]
     assert last["n_points"] == 1 and np.isnan(last["compactness"]) and last["area"] == 0
 
@@ -42,7 +44,7 @@ def test_steps_without_a_polygon():
 def test_residual_autocorrelation():
     rng = np.random.default_rng(0)
     n = 60
-    sample = samplesar.Sample.from_df(
+    sample = samplesar.sources.dataframe(
         pd.DataFrame(
             {
                 "species": rng.choice([f"s{i}" for i in range(20)], n),
@@ -51,9 +53,9 @@ def test_residual_autocorrelation():
             }
         )
     )
-    result = samplesar.residual_autocorrelation(samplesar.hull_peel_nest(sample))
+    result = samplesar.evaluate.autocorrelation(samplesar.strategies.hull_peel(sample))
     assert set(result) == {"lag1", "durbin_watson", "n"}
     assert -1 <= result["lag1"] <= 1 and 0 <= result["durbin_watson"] <= 4
     # One-at-a-time nests have strongly autocorrelated residuals.
-    smooth = samplesar.residual_autocorrelation(samplesar.random_nest(sample, seed=0))
+    smooth = samplesar.evaluate.autocorrelation(samplesar.strategies.random(sample, seed=0))
     assert smooth["lag1"] > 0.5 and smooth["durbin_watson"] < 1

@@ -70,14 +70,14 @@ $r_t$:
 
 | | Strategy | $r_t$ | Function |
 | --- | --- | --- | --- |
-| S1 | Random | uniform on $Q_t$ | `random_nest` |
-| S2 | Random hull vertex | uniform on $V(Q_t)$ | `hull_random_nest` |
-| S4 | Largest remaining area | maximises $A(Q_t \setminus \{v\})$ over $v \in V(Q_t)$ | `hull_area_nest(keep="largest")` |
-| S5 | Smallest remaining area | minimises $A(Q_t \setminus \{v\})$ | `hull_area_nest(keep="smallest")` |
-| S6 | Most remaining species | minimises $L_{Q_t}(v)$ | `hull_species_nest(keep="most")` |
-| S7 | Fewest remaining species | maximises $L_{Q_t}(v)$ | `hull_species_nest(keep="fewest")` |
-| S8 | Farthest from the centre | maximises $d_{Q_t}(v)$; ties by index only | `hull_distance_nest(remove="farthest")` |
-| S9 | Closest to the centre | minimises $d_{Q_t}(v)$; ties by index only | `hull_distance_nest(remove="closest")` |
+| S1 | Random | uniform on $Q_t$ | `strategies.random` |
+| S2 | Random hull vertex | uniform on $V(Q_t)$ | `strategies.hull_random` |
+| S4 | Largest remaining area | maximises $A(Q_t \setminus \{v\})$ over $v \in V(Q_t)$ | `strategies.hull_area(keep="largest")` |
+| S5 | Smallest remaining area | minimises $A(Q_t \setminus \{v\})$ | `strategies.hull_area(keep="smallest")` |
+| S6 | Most remaining species | minimises $L_{Q_t}(v)$ | `strategies.hull_species(keep="most")` |
+| S7 | Fewest remaining species | maximises $L_{Q_t}(v)$ | `strategies.hull_species(keep="fewest")` |
+| S8 | Farthest from the centre | maximises $d_{Q_t}(v)$; ties by index only | `strategies.hull_distance(remove="farthest")` |
+| S9 | Closest to the centre | minimises $d_{Q_t}(v)$; ties by index only | `strategies.hull_distance(remove="closest")` |
 
 S1 and S2 are random (a seed makes them reproducible); S4 to S9 are
 deterministic.
@@ -86,7 +86,7 @@ deterministic.
 
 | | Strategy | Step | Function |
 | --- | --- | --- | --- |
-| S3 | Hull peeling | $Q_{t+1} = Q_t \setminus B(Q_t)$, while $\lvert Q_{t+1} \rvert \ge m$ | `hull_peel_nest` |
+| S3 | Hull peeling | $Q_{t+1} = Q_t \setminus B(Q_t)$, while $\lvert Q_{t+1} \rvert \ge m$ | `strategies.hull_peel` |
 
 S3 gives the sample's convex layers (onion peeling). It removes many points
 per step, so its nest is short: $T$ is the number of layers peeled while at
@@ -107,7 +107,7 @@ error rather than return a nest with nothing to fit.
 3. **Greedy, not optimal.** S4 to S7 choose the best single step; they don't
    find the order that keeps the most area (or species) over the whole
    nest. Optimising whole orders is a separate problem; any order can be
-   evaluated as a nest with `nest_from_order`.
+   evaluated as a nest with `strategies.from_order`.
 4. **Exactness of S6 and S7.** Because $R(Q \setminus \{v\}) = R(Q) -
    L_Q(v)$, keeping $h_Q$ up to date gives each step's choice exactly,
    without recounting the sample.

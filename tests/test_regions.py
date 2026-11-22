@@ -23,7 +23,7 @@ def provinces(tmp_path):
 
 
 def test_rows_by_column_dissolved_in_wgs84(provinces):
-    region = samplesar.read_boundary(provinces, "CODE", [66, "67"])
+    region = samplesar.regions.read(provinces, "CODE", [66, "67"])
     assert (
         region.equals_exact(box(0, 0, 2, 2), 1e-6)
         or region.symmetric_difference(box(0, 0, 2, 2)).area < 1e-9
@@ -31,15 +31,15 @@ def test_rows_by_column_dissolved_in_wgs84(provinces):
 
 
 def test_values_ignore_case(provinces):
-    region = samplesar.read_boundary(provinces, "NAME", ["piedmont"])
+    region = samplesar.regions.read(provinces, "NAME", ["piedmont"])
     assert region.symmetric_difference(box(2, 0, 3, 2)).area < 1e-9
 
 
 def test_every_row_and_a_clip(provinces):
-    assert samplesar.read_boundary(provinces).symmetric_difference(box(0, 0, 3, 2)).area < 1e-9
-    clipped = samplesar.read_boundary(provinces, clip=(0, 0, 3, 1))
+    assert samplesar.regions.read(provinces).symmetric_difference(box(0, 0, 3, 2)).area < 1e-9
+    clipped = samplesar.regions.read(provinces, clip=(0, 0, 3, 1))
     assert clipped.symmetric_difference(box(0, 0, 3, 1)).area < 1e-9
-    by_polygon = samplesar.read_boundary(provinces, clip=box(0.5, 0, 1.5, 2))
+    by_polygon = samplesar.regions.read(provinces, clip=box(0.5, 0, 1.5, 2))
     assert by_polygon.symmetric_difference(box(0.5, 0, 1.5, 2)).area < 1e-9
 
 
@@ -53,17 +53,17 @@ def test_every_row_and_a_clip(provinces):
 )
 def test_bad_selections(provinces, args, error, match):
     with pytest.raises(error, match=match):
-        samplesar.read_boundary(provinces, *args)
+        samplesar.regions.read(provinces, *args)
 
 
 def test_a_clip_that_leaves_nothing(provinces):
     with pytest.raises(ValueError, match="Nothing of the region"):
-        samplesar.read_boundary(provinces, clip=(10, 10, 11, 11))
+        samplesar.regions.read(provinces, clip=(10, 10, 11, 11))
 
 
 def test_a_missing_file(tmp_path):
     with pytest.raises(ValueError, match="No boundary file"):
-        samplesar.read_boundary(tmp_path / "nothing.gpkg")
+        samplesar.regions.read(tmp_path / "nothing.gpkg")
 
 
 def test_a_url_is_downloaded_once(provinces, tmp_path, monkeypatch):
@@ -76,7 +76,7 @@ def test_a_url_is_downloaded_once(provinces, tmp_path, monkeypatch):
     monkeypatch.setattr(_regions, "_fetch_to", fetch)
     url = "https://example.org/data/provinces.gpkg"
     for _ in range(2):
-        region = samplesar.read_boundary(url, "CODE", ["45"], cache_dir=tmp_path / "cache")
+        region = samplesar.regions.read(url, "CODE", ["45"], cache_dir=tmp_path / "cache")
     assert calls == [url]
     assert region.symmetric_difference(box(2, 0, 3, 2)).area < 1e-9
 
@@ -88,15 +88,15 @@ def test_ecoregion_uses_the_dataset_columns(provinces, monkeypatch):
         seen.update(source=source, column=column, values=list(values), clip=clip)
         return box(0, 0, 1, 1)
 
-    monkeypatch.setattr(_regions, "read_boundary", read)
-    samplesar.ecoregion("epa_l3", codes=["66"], clip=(0, 0, 1, 1))
+    monkeypatch.setattr(_regions, "read", read)
+    samplesar.regions.ecoregion("epa_l3", codes=["66"], clip=(0, 0, 1, 1))
     assert seen == {
         "source": _regions.ECOREGIONS["epa_l3"]["url"],
         "column": "US_L3CODE",
         "values": ["66"],
         "clip": (0, 0, 1, 1),
     }
-    samplesar.ecoregion("resolve_2017", names=["Talamancan montane forests"])
+    samplesar.regions.ecoregion("resolve_2017", names=["Talamancan montane forests"])
     assert seen["column"] == "ECO_NAME"
 
 
@@ -105,22 +105,20 @@ def test_ecoregion_uses_the_dataset_columns(provinces, monkeypatch):
 )
 def test_ecoregion_bad_arguments(kwargs, match):
     with pytest.raises(ValueError, match=match):
-        samplesar.ecoregion(**kwargs)
+        samplesar.regions.ecoregion(**kwargs)
 
 
 def test_a_single_value_and_numbers(provinces):
     assert (
-        samplesar.read_boundary(provinces, "CODE", "66").symmetric_difference(box(0, 0, 1, 2)).area
+        samplesar.regions.read(provinces, "CODE", "66").symmetric_difference(box(0, 0, 1, 2)).area
         < 1e-9
     )
     assert (
-        samplesar.read_boundary(provinces, "CODE", 67).symmetric_difference(box(1, 0, 2, 2)).area
+        samplesar.regions.read(provinces, "CODE", 67).symmetric_difference(box(1, 0, 2, 2)).area
         < 1e-9
     )
     assert (
-        samplesar.read_boundary(provinces, "CODE", [66.0])
-        .symmetric_difference(box(0, 0, 1, 2))
-        .area
+        samplesar.regions.read(provinces, "CODE", [66.0]).symmetric_difference(box(0, 0, 1, 2)).area
         < 1e-9
     )
 
@@ -131,14 +129,14 @@ def test_a_float_column_matches_integer_codes(tmp_path):
         {"ECO_ID": [66.0, 67.0]}, geometry=[box(0, 0, 1, 1), box(1, 0, 2, 1)], crs=4326
     ).to_file(path)
     assert (
-        samplesar.read_boundary(path, "ECO_ID", ["66"]).symmetric_difference(box(0, 0, 1, 1)).area
+        samplesar.regions.read(path, "ECO_ID", ["66"]).symmetric_difference(box(0, 0, 1, 1)).area
         < 1e-9
     )
 
 
 def test_no_values(provinces):
     with pytest.raises(ValueError, match="No values given"):
-        samplesar.read_boundary(provinces, "CODE", [])
+        samplesar.regions.read(provinces, "CODE", [])
 
 
 def test_a_clip_across_the_antimeridian(tmp_path):
@@ -146,7 +144,7 @@ def test_a_clip_across_the_antimeridian(tmp_path):
     gpd.GeoDataFrame(
         {"N": [1, 2]}, geometry=[box(170, 0, 180, 1), box(-180, 0, -170, 1)], crs=4326
     ).to_file(path)
-    clipped = samplesar.read_boundary(path, clip=(175, 0, -175, 1))
+    clipped = samplesar.regions.read(path, clip=(175, 0, -175, 1))
     expected = box(175, 0, 180, 1).union(box(-180, 0, -175, 1))
     assert clipped.symmetric_difference(expected).area < 1e-9
 
@@ -166,9 +164,7 @@ def test_a_zip_at_a_url_with_a_query(tmp_path, monkeypatch):
         _regions, "_fetch_to", lambda url, path: path.write_bytes(archive.read_bytes())
     )
     cache = tmp_path / "cache"
-    region = samplesar.read_boundary(
-        "https://example.org/download?id=3&format=shp", cache_dir=cache
-    )
+    region = samplesar.regions.read("https://example.org/download?id=3&format=shp", cache_dir=cache)
     assert region.symmetric_difference(box(0, 0, 1, 1)).area < 1e-9
     assert [f.name.split("_", 1)[1] for f in cache.iterdir()] == ["download.zip"]
-    samplesar.read_boundary("https://example.org/download?id=3&format=shp", cache_dir=cache)
+    samplesar.regions.read("https://example.org/download?id=3&format=shp", cache_dir=cache)

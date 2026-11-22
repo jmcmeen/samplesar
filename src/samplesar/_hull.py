@@ -10,8 +10,9 @@ import shapely
 from shapely.geometry import MultiPoint, Polygon
 
 from samplesar._nest import Nest, check_size
-from samplesar._registry import register_strategy
-from samplesar._sample import Sample, hull_area, point_species
+from samplesar._registry import register
+from samplesar._sample import Sample, point_species
+from samplesar._sample import hull_area as convex_area
 
 
 def _hull(points: np.ndarray, idx: np.ndarray) -> shapely.Geometry:
@@ -100,11 +101,11 @@ def _remove_one(
     return Nest(sample=sample, steps=tuple(steps))
 
 
-@register_strategy("hull_random")
-def hull_random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
+@register("hull_random")
+def hull_random(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
     """Nest a sample by removing a random vertex of its convex hull at each step.
 
-    Like `random_nest`, but only points on the outside can go, so the sample
+    Like `strategies.random`, but only points on the outside can go, so the sample
     shrinks from its edges inwards.
 
     Parameters
@@ -129,8 +130,8 @@ def hull_random_nest(sample: Sample, min_points: int = 3, seed: int | None = Non
     return _remove_one(sample, min_points, lambda _, vertices: int(rng.choice(vertices)))
 
 
-@register_strategy("hull_peel")
-def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
+@register("hull_peel")
+def hull_peel(sample: Sample, min_points: int = 3) -> Nest:
     """Nest a sample by peeling off its whole convex hull at each step.
 
     Each step removes every point on the hull's boundary, the vertices and
@@ -197,8 +198,8 @@ def _pick(vertices: np.ndarray, score: np.ndarray, distance: np.ndarray) -> int:
     return int(vertices[farthest].min())
 
 
-@register_strategy("hull_area")
-def hull_area_nest(
+@register("hull_area")
+def hull_area(
     sample: Sample, keep: Literal["largest", "smallest"] = "largest", min_points: int = 3
 ) -> Nest:
     """Nest a sample by removing the hull vertex that changes its area least or most.
@@ -236,14 +237,14 @@ def hull_area_nest(
     points = sample.xy
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
-        areas = np.array([hull_area(points[remaining[remaining != v]]) for v in vertices])
+        areas = np.array([convex_area(points[remaining[remaining != v]]) for v in vertices])
         return _pick(vertices, sign * areas, _centre_distance(points, vertices))
 
     return _remove_one(sample, min_points, choose)
 
 
-@register_strategy("hull_species")
-def hull_species_nest(
+@register("hull_species")
+def hull_species(
     sample: Sample, keep: Literal["most", "fewest"] = "most", min_points: int = 3
 ) -> Nest:
     """Nest a sample by removing the hull vertex that loses the fewest or most species.
@@ -295,8 +296,8 @@ def hull_species_nest(
     return _remove_one(sample, min_points, choose)
 
 
-@register_strategy("hull_distance")
-def hull_distance_nest(
+@register("hull_distance")
+def hull_distance(
     sample: Sample, remove: Literal["farthest", "closest"] = "farthest", min_points: int = 3
 ) -> Nest:
     """Nest a sample by removing the hull vertex farthest from, or closest to, its centre.
@@ -339,11 +340,11 @@ def hull_distance_nest(
     return _remove_one(sample, min_points, choose)
 
 
-@register_strategy("concave_peel")
-def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nest:
+@register("concave_peel")
+def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nest:
     """Nest a sample by peeling off its concave hull at each step.
 
-    Like [`hull_peel_nest`][samplesar.hull_peel_nest], but each step removes
+    Like [`strategies.hull_peel`][samplesar.strategies.hull_peel], but each step removes
     the points on the boundary of a concave hull, which follows the sample's
     outline instead of spanning its gaps: suited to L-shaped or scattered
     samples (a valley, a coastline, a trail network). The concave hull is
@@ -355,7 +356,7 @@ def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -
     sample : Sample
         The sample to nest.
     ratio : float
-        Between 0 and 1: 1 is the convex hull (the same as ``hull_peel_nest``),
+        Between 0 and 1: 1 is the convex hull (the same as ``strategies.hull_peel``),
         smaller values follow the outline more tightly.
     min_points : int
         Stop rather than leave fewer than this many points.
@@ -377,7 +378,7 @@ def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -
         raise ValueError(f"ratio must be between 0 and 1, got {ratio!r}.")
     if shapely.geos_version < (3, 11):
         raise RuntimeError(
-            f"concave_peel_nest needs GEOS 3.11 or newer for shapely's concave_hull; this "
+            f"strategies.concave_peel needs GEOS 3.11 or newer for shapely's concave_hull; this "
             f"shapely uses GEOS {'.'.join(map(str, shapely.geos_version))}."
         )
     check_size(sample, min_points)

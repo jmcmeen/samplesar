@@ -8,16 +8,41 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
-- `Sample.within(boundary)` and `Sample.from_open_data(..., boundary=...)`:
+- `Sample.within(boundary)` and `sources.open_data(..., boundary=...)`:
   keep only the observations inside a region's outline, from a shapely
   polygon in WGS84 or a GeoDataFrame or GeoSeries in any CRS.
-- `samplesar.boundary(country, level=0, name=None)`: a country's, state's or
+- `regions.admin(country, level=0, name=None)`: a country's, state's or
   county's boundary from geoBoundaries' open release, cached, for
   `within` and `boundary=`.
-- `samplesar.read_boundary(source, column, values, clip=...)` and
-  `samplesar.ecoregion(source, codes=..., names=...)`: regions from any
+- `regions.read(source, column, values, clip=...)` and
+  `regions.ecoregion(source, codes=..., names=...)`: regions from any
   boundary file or URL (cached), or from the US EPA's Level III and IV and
   RESOLVE 2017 ecoregions, through the new `geo` extra (geopandas).
+
+### Changed
+
+- **Breaking: the API is grouped by job, and the old top-level names are
+  gone** (no aliases):
+  - `samplesar.sources`: `dataframe`, `csv`, `geodataframe`, `inaturalist`,
+    `open_data` and `download_open_data` replace `Sample.from_df`,
+    `from_csv`, `from_geodataframe`, `from_pyinaturalist`, `from_open_data`
+    and `samplesar.download_open_data`.
+  - `samplesar.regions`: `admin`, `ecoregion` and `read`.
+  - `samplesar.strategies`: `random`, `from_order`, `hull_random`,
+    `hull_peel`, `hull_area`, `hull_species`, `hull_distance` and
+    `concave_peel` replace the `*_nest` functions and `nest_from_order`;
+    `run`, `available` and `register` replace `nest`, `strategies` and
+    `register_strategy`.
+  - `samplesar.evaluate`: `compare`, `baseline`, `against_baseline`,
+    `diagnostics` and `autocorrelation` replace `compare_nests`,
+    `random_baseline`, `compare_to_baseline`, `nest_diagnostics` and
+    `residual_autocorrelation`.
+  - `samplesar.plot`: `nest`, `curve` and `animate` replace `plot_nest`,
+    `plot_nest_curve` and `animate_nest`.
+
+  `Sample`, `Nest` and `hull_area` stay at the top level, as do methods such
+  as `Sample.within` and `Nest.fit`. Registered strategy names, nest labels
+  and saved nests are unchanged.
 
 ## [0.1.3] - 2026-11-22
 

@@ -248,7 +248,7 @@ treats S2 as the reference.
 
 **Next steps.** A known-answer simulation (communities with a set *z*), more
 regions and taxa, plot-based data (NEON) for independent-plot SARs, multi-model
-fits, searched removal orders (evaluated with `nest_from_order`) to see how
+fits, searched removal orders (evaluated with `strategies.from_order`) to see how
 far the greedy rules are from optimal, and further strategies: kernel-smoothed
 boundaries, spatially weighted and multi-scale removal.
 
@@ -258,7 +258,7 @@ All strategies are in samplesar (`pip install 'samplesar[opendata]'`) with
 sars for fitting. From the repository root:
 
 ```bash
-uv run python -c "import samplesar, pathlib; samplesar.download_open_data(pathlib.Path.home() / 'data/inaturalist-open-data')"
+uv run python -c "import samplesar, pathlib; samplesar.sources.download_open_data(pathlib.Path.home() / 'data/inaturalist-open-data')"
 uv run python papers/hull-strategies/analysis/run.py \
     --opendata ~/data/inaturalist-open-data/observations.parquet \
     --local-sample path/to/steele_creek.csv

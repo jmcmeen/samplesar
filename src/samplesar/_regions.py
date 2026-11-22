@@ -118,7 +118,7 @@ def _geopandas() -> Any:
     return geopandas
 
 
-def read_boundary(
+def read(
     source: str | Path,
     column: str | None = None,
     values: Iterable[Any] | None = None,
@@ -131,7 +131,7 @@ def read_boundary(
     For regions that cross political lines (ecoregions, physiographic
     provinces, watersheds, protected areas) or any other polygons, to pass to
     [`Sample.within`][samplesar.Sample.within] and
-    [`Sample.from_open_data`][samplesar.Sample.from_open_data]'s
+    [`sources.open_data`][samplesar.sources.open_data]'s
     ``boundary``. The file is read with geopandas (``pip install
     'samplesar[geo]'``); a URL is downloaded once and cached, so a script
     that names its sources is reproducible.
@@ -174,7 +174,7 @@ def read_boundary(
 
     Examples
     --------
-    >>> region = samplesar.read_boundary(  # doctest: +SKIP
+    >>> region = samplesar.regions.read(  # doctest: +SKIP
     ...     "https://example.org/provinces.zip", "PROVINCE", ["Blue Ridge"]
     ... )
     """
@@ -243,7 +243,7 @@ def ecoregion(
     - ``"resolve_2017"``: RESOLVE Ecoregions 2017, worldwide (Dinerstein et
       al. 2017), CC BY 4.0; ``ECO_ID`` codes or ``ECO_NAME`` names.
 
-    Any other file works through [`read_boundary`][samplesar.read_boundary].
+    Any other file works through [`regions.read`][samplesar.regions.read].
 
     Parameters
     ----------
@@ -255,9 +255,9 @@ def ecoregion(
         Ecoregion names (case doesn't matter), instead of codes.
     clip : tuple of float or polygon, optional
         Cut the region to a (west, south, east, north) box or a polygon, as
-        [`read_boundary`][samplesar.read_boundary] does.
+        [`regions.read`][samplesar.regions.read] does.
     cache_dir : str or Path, optional
-        As [`read_boundary`][samplesar.read_boundary].
+        As [`regions.read`][samplesar.regions.read].
 
     Returns
     -------
@@ -268,14 +268,14 @@ def ecoregion(
     ------
     ValueError
         If ``source`` is unknown, both or neither of ``codes`` and ``names``
-        are given, or as [`read_boundary`][samplesar.read_boundary].
+        are given, or as [`regions.read`][samplesar.regions.read].
 
     Examples
     --------
     The Southern Appalachians: the Blue Ridge, Ridge and Valley and
     Southwestern Appalachians south of the Roanoke Gap.
 
-    >>> region = samplesar.ecoregion(  # doctest: +SKIP
+    >>> region = samplesar.regions.ecoregion(  # doctest: +SKIP
     ...     "epa_l3", codes=["66", "67", "68"], clip=(-90, 30, -75, 37.3)
     ... )
     """
@@ -285,4 +285,4 @@ def ecoregion(
     if (codes is None) == (names is None):
         raise ValueError("Give codes or names (one of them).")
     column, values = (spec["code"], codes) if codes is not None else (spec["name"], names)
-    return read_boundary(spec["url"], column, values, clip=clip, cache_dir=cache_dir)
+    return read(spec["url"], column, values, clip=clip, cache_dir=cache_dir)

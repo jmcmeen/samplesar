@@ -11,7 +11,7 @@ from shapely.geometry import MultiPoint, Polygon
 from samplesar._nest import Nest
 
 
-def nest_diagnostics(nest: Nest) -> pd.DataFrame:
+def diagnostics(nest: Nest) -> pd.DataFrame:
     """Shape and spread of each step's convex hull.
 
     Parameters
@@ -61,7 +61,7 @@ def nest_diagnostics(nest: Nest) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def residual_autocorrelation(nest: Nest, model: str = "power", **kwargs: Any) -> dict[str, float]:
+def autocorrelation(nest: Nest, model: str = "power", **kwargs: Any) -> dict[str, float]:
     """How far a fit's residuals along a nest are from independent.
 
     Neighbouring steps share all but one point, so their residuals tend to

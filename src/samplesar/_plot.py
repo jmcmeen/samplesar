@@ -64,7 +64,7 @@ def _frame_axes(ax: Axes, points: np.ndarray, own_axes: bool) -> None:
         ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{(x + 180) % 360 - 180:g}"))
 
 
-def plot_nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: bool = True) -> Axes:
+def nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: bool = True) -> Axes:
     """Draw one step of a nest: its points and convex hull.
 
     Parameters
@@ -123,7 +123,7 @@ def _draw(
     ax.set_title(_caption(nest, step, table))
 
 
-def plot_nest_curve(nest: Nest, ax: Axes | None = None, fit: bool = True) -> Axes:
+def curve(nest: Nest, ax: Axes | None = None, fit: bool = True) -> Axes:
     """Draw a nest's species-area curve on log axes.
 
     Parameters
@@ -164,7 +164,7 @@ def plot_nest_curve(nest: Nest, ax: Axes | None = None, fit: bool = True) -> Axe
     return ax
 
 
-def animate_nest(
+def animate(
     nest: Nest,
     interval: int = 200,
     show_removed: bool = True,

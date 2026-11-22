@@ -6,7 +6,7 @@ Usage (from the repository root):
         --opendata ~/data/inaturalist-open-data/observations.parquet \\
         [--local-sample path/to/observations.csv] [--quick]
 
-``--opendata`` is the Parquet file built by ``samplesar.download_open_data``.
+``--opendata`` is the Parquet file built by ``samplesar.sources.download_open_data``.
 ``--local-sample`` is an optional CSV of iNaturalist observations with
 ``species``, ``longitude`` and ``latitude`` columns. ``--quick`` uses fewer
 baseline nests and simulation replicates, for a fast check.
@@ -83,11 +83,11 @@ def thin(sample: samplesar.Sample, max_points: int, seed: int = 0) -> samplesar.
 def load_datasets(parquet: Path | None, local: Path | None) -> list[Dataset]:
     datasets = []
     if local is not None:
-        sample = samplesar.Sample.from_csv(local, lon_col="longitude", lat_col="latitude")
+        sample = samplesar.sources.csv(local, lon_col="longitude", lat_col="latitude")
         datasets.append(Dataset("local", "Steele Creek Park, one observer", sample, 10))
     if parquet is not None:
         for key, label, query, merge in regional():
-            sample = samplesar.Sample.from_open_data(parquet, **query)
+            sample = samplesar.sources.open_data(parquet, **query)
             datasets.append(Dataset(key, label, sample, merge))
     return datasets
 
@@ -112,7 +112,7 @@ def simulated_community(rng: np.random.Generator, cluster_share: float) -> sampl
         species.append(f"sp{rng.choice(present) if len(present) else rng.integers(n_species)}")
     origin = np.array([500_000.0, 4_040_000.0])
     df = pd.DataFrame({"species": species, "x": points[:, 0] + origin[0], "y": points[:, 1] + origin[1]})
-    return samplesar.Sample.from_df(df, lon_col="x", lat_col="y", crs="EPSG:32617")
+    return samplesar.sources.dataframe(df, lon_col="x", lat_col="y", crs="EPSG:32617")
 
 
 POWER_Z_BOUND = 5.0  # sars searches the power model's z within ±5
@@ -129,7 +129,7 @@ def at_bounds(fit) -> str:
 
 def fit_row(nest: samplesar.Nest) -> dict:
     fit = nest.fit()
-    auto = samplesar.residual_autocorrelation(nest)
+    auto = samplesar.evaluate.autocorrelation(nest)
     return {
         "n_steps": nest.n_steps,
         "n_fitted": len(nest.sar_data()),
@@ -144,13 +144,13 @@ def fit_row(nest: samplesar.Nest) -> dict:
 
 def run_strategies(sample: samplesar.Sample, baseline_n: int) -> tuple[pd.DataFrame, dict]:
     rows, nests = [], {}
-    baseline = samplesar.random_baseline(sample, n=baseline_n, strategy="hull_random", seed=1000)
+    baseline = samplesar.evaluate.baseline(sample, n=baseline_n, strategy="hull_random", seed=1000)
     for code, name, options in STRATEGIES:
         start = time.perf_counter()
         try:
-            nest = samplesar.nest(sample, name, **options)
+            nest = samplesar.strategies.run(sample, name, **options)
             row = {"strategy": code, "label": nest.label, **fit_row(nest)}
-            placed = samplesar.compare_to_baseline(nest, baseline)
+            placed = samplesar.evaluate.against_baseline(nest, baseline)
             row["z_baseline_mean"] = placed.loc["z", "mean"]
             row["z_baseline_q025"] = placed.loc["z", "q025"]
             row["z_baseline_q975"] = placed.loc["z", "q975"]
@@ -170,7 +170,7 @@ def merge_sensitivity(sample: samplesar.Sample, distances: list[float]) -> pd.Da
         merged = thin(merged, MAX_POINTS)
         for code, name, options in STRATEGIES:
             try:
-                nest = samplesar.nest(merged, name, **options)
+                nest = samplesar.strategies.run(merged, name, **options)
                 fit = nest.fit()
                 rows.append({"merge_m": metres, "n_points": merged.n_points, "strategy": code,
                              "z": fit.params["z"], "at_bounds": at_bounds(fit),
@@ -189,7 +189,7 @@ def simulations(replicates: int) -> pd.DataFrame:
                 used = sample if merge == 0 else sample.merge_within(merge)
                 for code, name, options in STRATEGIES:
                     try:
-                        z = samplesar.nest(used, name, **options).fit().params["z"]
+                        z = samplesar.strategies.run(used, name, **options).fit().params["z"]
                     except ValueError:
                         z = np.nan
                     rows.append({"cluster_share": share, "replicate": rep, "merge_m": merge,
@@ -203,9 +203,9 @@ def figure_schematic(path: Path) -> None:
     sample = simulated_community(np.random.default_rng(7), 0.0)
     fig, axes = plt.subplots(2, 5, figsize=(20, 8.5))
     for ax, (code, name, options) in zip(axes.flat, STRATEGIES, strict=True):
-        nest = samplesar.nest(sample, name, **options)
+        nest = samplesar.strategies.run(sample, name, **options)
         half = min(range(nest.n_steps), key=lambda i: abs(len(nest.steps[i]) - sample.n_points / 2))
-        samplesar.plot_nest(nest, half, ax=ax)
+        samplesar.plot.nest(nest, half, ax=ax)
         ax.set_title(f"{code}: {nest.label}", fontsize=10)
         ax.set_xlabel("")
         ax.set_ylabel("")
@@ -290,7 +290,7 @@ def figure_simulation(sim: pd.DataFrame, path: Path) -> None:
 def figure_compactness(nests: dict, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
     for code, nest in nests.items():
-        d = samplesar.nest_diagnostics(nest)
+        d = samplesar.evaluate.diagnostics(nest)
         share = 1 - d["n_points"] / d["n_points"].iloc[0]
         ax.plot(share, d["compactness"], label=code, linewidth=1)
     ax.set_xlabel("Share of points removed")

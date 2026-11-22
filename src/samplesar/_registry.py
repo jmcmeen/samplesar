@@ -72,15 +72,15 @@ def _summary(func: Callable[..., Any]) -> str:
 _REGISTRY: dict[str, _Strategy] = {}
 
 
-def register_strategy(
+def register(
     name: str, description: str | None = None
 ) -> Callable[[Callable[P, Nest]], Callable[P, Nest]]:
     """Register a sampling strategy, so it can be run by name.
 
     Decorate a function that takes a [`Sample`][samplesar.Sample] first, any
     options as keywords, and returns a [`Nest`][samplesar.Nest]. Once
-    registered it runs through [`nest`][samplesar.nest], is listed by
-    [`strategies`][samplesar.strategies], and every nest it returns records
+    registered it runs through [`strategies.run`][samplesar.strategies.run], is listed by
+    [`strategies.available`][samplesar.strategies.available], and every nest it returns records
     the strategy's name and the options it was called with.
 
     Parameters
@@ -88,7 +88,7 @@ def register_strategy(
     name : str
         The name to run it by, such as ``"hull_area"``.
     description : str, optional
-        One line for [`strategies`][samplesar.strategies]; by default the
+        One line for [`strategies.available`][samplesar.strategies.available]; by default the
         first line of the function's docstring.
 
     Returns
@@ -104,7 +104,7 @@ def register_strategy(
 
     Examples
     --------
-    >>> @samplesar.register_strategy("every_other")  # doctest: +SKIP
+    >>> @samplesar.strategies.register("every_other")  # doctest: +SKIP
     ... def every_other_nest(sample, min_points=3):
     ...     \"\"\"Drop every other point at each step.\"\"\"
     ...     ...
@@ -136,23 +136,23 @@ def register_strategy(
     return decorate
 
 
-def strategies() -> dict[str, str]:
+def available() -> dict[str, str]:
     """The registered sampling strategies.
 
     Returns
     -------
     dict of str to str
-        Each strategy's name, as [`nest`][samplesar.nest] takes it, and a
+        Each strategy's name, as [`strategies.run`][samplesar.strategies.run] takes it, and a
         one-line description, in the order they were registered.
     """
     return {s.name: s.description for s in _REGISTRY.values()}
 
 
-def nest(sample: Sample, strategy: str = "random", /, **options: Any) -> Nest:
+def run(sample: Sample, strategy: str = "random", /, **options: Any) -> Nest:
     """Nest a sample with any registered strategy, by name.
 
-    ``samplesar.nest(sample, "hull_area", keep="smallest")`` is the same as
-    ``samplesar.hull_area_nest(sample, keep="smallest")``; naming the
+    ``samplesar.strategies.run(sample, "hull_area", keep="smallest")`` is the same as
+    ``samplesar.strategies.hull_area(sample, keep="smallest")``; naming the
     strategy as a string lets a script or a config file choose it.
 
     Parameters
@@ -160,7 +160,7 @@ def nest(sample: Sample, strategy: str = "random", /, **options: Any) -> Nest:
     sample : Sample
         The sample to nest.
     strategy : str
-        A name from [`strategies`][samplesar.strategies].
+        A name from [`strategies.available`][samplesar.strategies.available].
     **options
         The strategy's options, such as ``keep``, ``min_points`` or
         ``seed``.

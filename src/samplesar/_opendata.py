@@ -164,7 +164,7 @@ def download_open_data(
     one row per observation with its taxon's name, rank and ancestry,
     grouped by 1° cell so that a query for a region reads little of it.
     Build samples from it with
-    [`Sample.from_open_data`][samplesar.Sample.from_open_data].
+    [`sources.open_data`][samplesar.sources.open_data].
 
     The export holds the observations with openly licensed photos, not all
     of iNaturalist. Obscured observations carry their public, randomised

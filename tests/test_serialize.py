@@ -14,7 +14,7 @@ def sample():
     rng = np.random.default_rng(0)
     points = rng.uniform(-82.3, -82.2, size=(30, 2))
     pick = rng.integers(0, 30, size=80)
-    return samplesar.Sample.from_df(
+    return samplesar.sources.dataframe(
         pd.DataFrame(
             {
                 "species": rng.choice([f"sp{i}" for i in range(15)], size=80),
@@ -36,10 +36,10 @@ def same(a, b):
 @pytest.mark.parametrize(
     "make",
     [
-        lambda s: samplesar.random_nest(s, seed=np.int64(4)),
-        lambda s: samplesar.hull_peel_nest(s),
-        lambda s: samplesar.nest(s, "hull_area", keep="smallest", min_points=5),
-        lambda s: samplesar.nest_from_order(s, [3, 1, 4]),
+        lambda s: samplesar.strategies.random(s, seed=np.int64(4)),
+        lambda s: samplesar.strategies.hull_peel(s),
+        lambda s: samplesar.strategies.run(s, "hull_area", keep="smallest", min_points=5),
+        lambda s: samplesar.strategies.from_order(s, [3, 1, 4]),
         lambda s: samplesar.Nest(sample=s, steps=(np.arange(s.n_points),)),
     ],
 )
@@ -52,7 +52,7 @@ def test_round_trip(sample, tmp_path, make):
 
 
 def test_steps_are_stored_as_removals(sample):
-    data = samplesar.random_nest(sample, seed=0).to_dict()
+    data = samplesar.strategies.random(sample, seed=0).to_dict()
     assert data["format"] == "samplesar.nest" and data["version"] == 2
     assert len(data["first"]) == sample.n_points
     assert all(len(gone) == 1 for gone in data["removed"])
@@ -60,7 +60,7 @@ def test_steps_are_stored_as_removals(sample):
 
 
 def test_numpy_options_are_saved_plainly(sample):
-    data = samplesar.random_nest(sample, seed=np.int64(4)).to_dict()
+    data = samplesar.strategies.random(sample, seed=np.int64(4)).to_dict()
     assert data["options"] == {"seed": 4} and type(data["options"]["seed"]) is int
 
 
@@ -86,7 +86,7 @@ def test_steps_that_are_not_nested_cannot_be_saved(sample):
     ],
 )
 def test_bad_saved_data(sample, change, match):
-    data = {**samplesar.random_nest(sample, seed=0).to_dict(), **change}
+    data = {**samplesar.strategies.random(sample, seed=0).to_dict(), **change}
     if match is None:  # keys missing altogether
         data = {k: v for k, v in data.items() if change.get(k, 1) is not None}
         match = "Not a saved samplesar nest"
@@ -95,7 +95,7 @@ def test_bad_saved_data(sample, change, match):
 
 
 def test_options_that_json_cant_hold(sample):
-    nest = samplesar.random_nest(sample, seed=np.random.default_rng(1))
+    nest = samplesar.strategies.random(sample, seed=np.random.default_rng(1))
     with pytest.raises(ValueError, match="Option seed=Generator"):
         nest.to_dict()
 
@@ -118,21 +118,21 @@ def test_nested_options_with_numpy_values(sample):
 def test_round_trip_keeps_the_crs_and_centre(tmp_path):
     x = [500_000, 501_000, 501_000, 500_000, 500_700]
     y = [4_000_000, 4_000_000, 4_001_000, 4_001_000, 4_000_300]
-    utm = samplesar.Sample.from_df(
+    utm = samplesar.sources.dataframe(
         pd.DataFrame({"species": list("abcde"), "lon": x, "lat": y}), crs="EPSG:32617"
     )
     for sample in (
         utm,
         utm.subset([0, 1, 2, 4]),
-        samplesar.Sample.from_df(utm.data).subset([0, 1, 2, 4]),
+        samplesar.sources.dataframe(utm.data).subset([0, 1, 2, 4]),
     ):
-        nest = samplesar.hull_peel_nest(sample, min_points=1)
+        nest = samplesar.strategies.hull_peel(sample, min_points=1)
         again = samplesar.Nest.from_dict(nest.to_dict())
         assert again.sample.crs == sample.crs and again.sample.centre == sample.centre
         pd.testing.assert_frame_equal(again.to_frame(), nest.to_frame())
 
 
 def test_reads_format_version_1(sample):
-    data = samplesar.random_nest(sample, seed=0).to_dict()
+    data = samplesar.strategies.random(sample, seed=0).to_dict()
     old = {k: v for k, v in data.items() if k not in ("centre", "crs")} | {"version": 1}
     assert samplesar.Nest.from_dict(old).n_steps == sample.n_points - 2
