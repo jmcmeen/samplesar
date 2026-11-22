@@ -167,3 +167,98 @@ class TestFromGeoDataFrame:
         gdf = gpd.GeoDataFrame({"name": ["a"]}, geometry=gpd.points_from_xy([0], [0]))
         with pytest.raises(KeyError, match="species"):
             samplesar.Sample.from_geodataframe(gdf)
+
+
+class TestValidation:
+    def good(self, **change):
+        return pd.DataFrame(
+            {"species": ["a", "b", "c"], "lon": [0.0, 1.0, 1.0], "lat": [0.0, 0.0, 1.0], **change}
+        )
+
+    @pytest.mark.parametrize(
+        ("change", "error", "match"),
+        [
+            ({"species": [None, "b", "c"]}, ValueError, "species contains missing"),
+            ({"lon": ["x", 1.0, 1.0]}, ValueError, "numeric"),
+            ({"lat": [np.nan, 0.0, 1.0]}, ValueError, "numeric"),
+            ({"lat": [91.0, 0.0, 1.0]}, ValueError, r"lat must be within \[-90, 90\]"),
+            ({"lat": [-90.5, 0.0, 1.0]}, ValueError, "lat must be within"),
+            ({"lon": [180.5, 1.0, 1.0]}, ValueError, r"lon must be within \[-180, 180\]"),
+        ],
+    )
+    def test_bad_values(self, change, error, match):
+        with pytest.raises(error, match=match):
+            samplesar.Sample.from_df(self.good(**change))
+
+    def test_missing_column(self):
+        with pytest.raises(KeyError, match=r"Missing column\(s\): \['lat'\]"):
+            samplesar.Sample.from_df(self.good().drop(columns="lat"))
+
+    def test_no_rows(self):
+        with pytest.raises(ValueError, match="no observations"):
+            samplesar.Sample.from_df(self.good().iloc[:0])
+
+    def test_normalises(self):
+        df = self.good(species=[1, 2, 3], lon=["0", "1", "1"], extra=["x", "y", "z"])
+        sample = samplesar.Sample.from_df(df)
+        assert list(sample.data.columns) == ["species", "lon", "lat"]
+        assert sample.data["species"].tolist() == ["1", "2", "3"]
+        assert sample.data["lon"].dtype == float
+
+    def test_bounds_are_inclusive(self):
+        df = pd.DataFrame({"species": ["a", "b"], "lon": [-180.0, 180.0], "lat": [-90.0, 90.0]})
+        assert samplesar.Sample.from_df(df).n_observations == 2
+
+    def test_from_csv(self, tmp_path):
+        path = tmp_path / "obs.csv"
+        self.good().rename(columns={"lon": "x"}).to_csv(path, index=False)
+        assert samplesar.Sample.from_csv(path, lon_col="x").n_points == 3
+        with pytest.raises(TypeError):
+            samplesar.Sample.from_csv(path, sep=";")
+
+
+class TestSubset:
+    def sample(self):
+        # Points 0 and 1 hold two observations each.
+        return samplesar.Sample.from_df(
+            pd.DataFrame(
+                {
+                    "species": ["a", "b", "a", "c", "d", "e"],
+                    "lon": [0.0, 0.0, 1.0, 1.0, 1.0, 0.0],
+                    "lat": [0.0, 0.0, 0.0, 0.0, 1.0, 1.0],
+                }
+            )
+        )
+
+    def test_keeps_every_observation_at_the_points(self):
+        part = self.sample().subset([0, 1])
+        assert part.n_observations == 4 and part.n_points == 2
+        assert sorted(part.data["species"]) == ["a", "a", "b", "c"]
+
+    def test_points_and_counts(self):
+        sample = self.sample()
+        assert sample.n_observations == 6 and sample.n_points == 4 and sample.n_species == 5
+        np.testing.assert_array_equal(sample.points, [[0, 0], [1, 0], [1, 1], [0, 1]])
+
+    def test_an_empty_subset(self):
+        part = self.sample().subset([])
+        assert part.n_observations == 0 and part.n_points == 0 and part.area == 0.0
+
+
+class TestDegenerateHulls:
+    @pytest.mark.parametrize("n", [0, 1, 2])
+    def test_fewer_than_three_points(self, n):
+        assert samplesar.hull_area(np.zeros((n, 2)) + np.arange(n)[:, None]) == 0.0
+
+    def test_collinear_points(self):
+        assert samplesar.hull_area(np.array([[0, 0], [1, 1], [2, 2], [3, 3.0]])) == 0.0
+        line = samplesar.Sample.from_df(frame([0.0, 0.1, 0.2], [0.0, 0.0, 0.0]))
+        assert line.area == pytest.approx(0.0, abs=1e-9)
+
+    def test_duplicates_dont_count(self):
+        square = np.array([[0, 0], [1, 0], [1, 1], [0, 1], [1, 1], [0, 0.0]])
+        assert samplesar.hull_area(square) == pytest.approx(1.0)
+
+    def test_interior_points_dont_change_the_area(self):
+        square = np.array([[0, 0], [2, 0], [2, 2], [0, 2.0]])
+        assert samplesar.hull_area(np.vstack([square, [[1, 1], [0.5, 1.5]]])) == pytest.approx(4.0)
