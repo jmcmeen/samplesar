@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Literal
 
 import numpy as np
+import pandas as pd
 import shapely
 from shapely.geometry import MultiPoint, Polygon
 
@@ -190,5 +191,66 @@ def hull_area_nest(
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
         areas = np.array([hull_area(points[remaining[remaining != v]]) for v in vertices])
         return _pick(vertices, sign * areas, _centre_distance(points, vertices))
+
+    return _remove_one(sample, min_points, choose)
+
+
+def _point_species(sample: Sample) -> tuple[list[np.ndarray], int]:
+    """The species codes found at each of the sample's points, and the number
+    of species."""
+    data = sample.data
+    codes, uniques = pd.factorize(data["species"])
+    lookup = {(x, y): i for i, (x, y) in enumerate(map(tuple, sample.points))}
+    which = np.array([lookup[(x, y)] for x, y in zip(data["lon"], data["lat"], strict=True)])
+    grouped = pd.Series(codes).groupby(which).unique()
+    return [np.asarray(grouped[i], dtype=int) for i in range(sample.n_points)], len(uniques)
+
+
+def hull_species_nest(sample: Sample, keep: str = "most", min_points: int = 3) -> Nest:
+    """Nest a sample by removing the hull vertex that loses the fewest or most species.
+
+    At each step every vertex of the current convex hull is tried, and the
+    one whose removal leaves the most species (``keep="most"``: a vertex
+    whose species all occur elsewhere costs nothing) or the fewest
+    (``keep="fewest"``: a vertex holding species found nowhere else goes
+    first) is removed. Ties go to the vertex farthest from the centroid of
+    the hull's vertices, then to the lowest point index, so the nest is
+    deterministic.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    keep : {"most", "fewest"}
+        Which remaining species count to keep at each step.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``keep`` is unknown, ``min_points`` is below 1 or the sample has
+        fewer points.
+    """
+    if keep not in ("most", "fewest"):
+        raise ValueError(f"keep must be 'most' or 'fewest', got {keep!r}")
+    sign = 1.0 if keep == "most" else -1.0
+    points = sample.points
+    species, n_species = _point_species(sample)
+    # How many remaining points hold each species: removing a point loses the
+    # species it is the last holder of.
+    holders = np.zeros(n_species, dtype=int)
+    for found in species:
+        holders[found] += 1
+
+    def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
+        lost = np.array([np.count_nonzero(holders[species[v]] == 1) for v in vertices])
+        drop = _pick(vertices, -sign * lost, _centre_distance(points, vertices))
+        holders[species[drop]] -= 1
+        return drop
 
     return _remove_one(sample, min_points, choose)

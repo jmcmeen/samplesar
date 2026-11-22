@@ -49,3 +49,11 @@ the lowest point index, so the nest is always the same for the same sample.
 vertex and keeps the largest remaining hull: the vertex whose loss costs the
 least area goes first, so the area falls as slowly as the points allow.
 `keep="smallest"` does the opposite, cutting the area as fast as possible.
+
+### By species change
+
+`hull_species_nest(sample, keep="most", min_points=3)` removes the vertex
+whose loss leaves the most species: a vertex whose species all occur at other
+remaining points costs nothing, so species richness falls as late as
+possible. `keep="fewest"` removes first the vertices holding species found
+nowhere else, so richness falls as fast as possible.

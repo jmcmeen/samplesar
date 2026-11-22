@@ -11,6 +11,7 @@ STRATEGIES = [
     samplesar.hull_random_nest,
     samplesar.hull_peel_nest,
     samplesar.hull_area_nest,
+    samplesar.hull_species_nest,
 ]
 
 
@@ -238,3 +239,43 @@ class TestHullAreaNest:
     def test_rejects_unknown_keep(self, sample):
         with pytest.raises(ValueError, match="keep must be"):
             samplesar.hull_area_nest(sample, keep="biggest")
+
+
+def species_at(sample, rest):
+    """Distinct species at the given point rows, recounted from scratch."""
+    return sample.subset(rest).n_species
+
+
+class TestHullSpeciesNest:
+    @pytest.mark.parametrize("keep", ["most", "fewest"])
+    def test_matches_brute_force(self, sample, keep):
+        sign = 1 if keep == "most" else -1
+        nest = samplesar.hull_species_nest(sample, keep=keep)
+        assert nest.n_steps == sample.n_points - 3 + 1
+        assert_nested(nest)
+        for before, gone in removed(nest):
+            expected = brute_force_choice(
+                sample, before, lambda rest: sign * species_at(sample, rest)
+            )
+            assert gone[0] == expected
+
+    def test_shared_points_count_once(self):
+        # Two observations at one point: its species are lost together.
+        df = pd.DataFrame(
+            {
+                "species": ["a", "b", "a", "c", "c", "d"],
+                "lon": [0.0, 0.0, 1.0, 1.0, 0.0, 0.5],
+                "lat": [0.0, 0.0, 0.0, 1.0, 1.0, 0.5],
+            }
+        )
+        sample = samplesar.Sample.from_df(df)
+        # Points: (0,0) holds a and b, (1,0) a, (1,1) c, (0,1) c, (0.5,0.5) d.
+        # Dropping (1,0) or (1,1) or (0,1) loses nothing; (0,0) loses b.
+        most = samplesar.hull_species_nest(sample, keep="most")
+        assert 0 in most.steps[1]
+        fewest = samplesar.hull_species_nest(sample, keep="fewest")
+        assert list(fewest.steps[1]) == [1, 2, 3, 4]
+
+    def test_rejects_unknown_keep(self, sample):
+        with pytest.raises(ValueError, match="keep must be"):
+            samplesar.hull_species_nest(sample, keep="many")
