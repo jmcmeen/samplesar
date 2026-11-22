@@ -18,15 +18,58 @@ def _hull(points: np.ndarray, idx: np.ndarray) -> shapely.Geometry:
     return MultiPoint(points[idx]).convex_hull
 
 
+def _tolerance(hull: Polygon) -> float:
+    """How near counts as on the hull's boundary: 1e-9 of its bounding box's
+    diagonal. A row of points laid out straight in the sample's crs (a UTM
+    grid, say) is straight here only to within rounding after its round trip
+    through longitude and latitude."""
+    x0, y0, x1, y1 = hull.bounds
+    return 1e-9 * float(np.hypot(x1 - x0, y1 - y0))
+
+
+def _off_line(corners: np.ndarray, before: np.ndarray, after: np.ndarray) -> np.ndarray:
+    """Each corner's distance from the line through its two neighbours."""
+    edge = after - before
+    cross = np.abs(edge[:, 0] * (corners - before)[:, 1] - edge[:, 1] * (corners - before)[:, 0])
+    return cross / np.maximum(np.hypot(edge[:, 0], edge[:, 1]), 1e-300)
+
+
+def _true_corners(ring: np.ndarray, tolerance: float) -> np.ndarray:
+    """The ring's corners without those within ``tolerance`` of the line
+    through their neighbours: edge points that rounding pushed outward. If
+    what's left is a sliver (points collinear but for rounding), its two far
+    ends."""
+    corners = ring
+    while len(corners) > 3:
+        off = _off_line(corners, np.roll(corners, 1, axis=0), np.roll(corners, -1, axis=0))
+        # One corner per pass, the flattest, so each later decision is made
+        # against the corner's current neighbours, not ones already dropped.
+        flattest = int(np.argmin(off))
+        if off[flattest] > tolerance:
+            break
+        corners = np.delete(corners, flattest, axis=0)
+    if len(corners) == 3:
+        off = _off_line(corners, np.roll(corners, 1, axis=0), np.roll(corners, -1, axis=0))
+        if off.min() <= tolerance:
+            gaps = [np.hypot(*(corners[a] - corners[b])) for a, b in ((0, 1), (1, 2), (0, 2))]
+            a, b = ((0, 1), (1, 2), (0, 2))[int(np.argmax(gaps))]
+            corners = corners[[a, b]]
+    return corners
+
+
 def hull_vertices(points: np.ndarray, idx: np.ndarray) -> np.ndarray:
     """The rows of ``idx`` whose points are vertices of their convex hull.
 
-    Points on an edge between two vertices aren't vertices. When the points
-    are collinear the hull is a segment and its vertices are its two ends.
-    Returned in the order of ``idx``.
+    Points on an edge between two vertices aren't vertices, to within
+    rounding (1e-9 of the hull's bounding-box diagonal). When the points are collinear the hull is
+    a segment and its vertices are its two ends. Returned in the order of
+    ``idx``.
     """
     hull = _hull(points, idx)
-    coords = hull.exterior.coords if isinstance(hull, Polygon) else hull.coords
+    if isinstance(hull, Polygon):
+        coords = _true_corners(np.asarray(hull.exterior.coords)[:-1], _tolerance(hull))
+    else:
+        coords = np.asarray(hull.coords)
     corners = {tuple(c) for c in coords}
     return np.array([i for i in idx if tuple(points[i]) in corners], dtype=int)
 
@@ -38,12 +81,8 @@ def _on_boundary(points: np.ndarray, idx: np.ndarray) -> np.ndarray:
     hull = _hull(points, idx)
     if not isinstance(hull, Polygon):
         return idx.copy()
-    # Within rounding of the boundary counts as on it: a row of points laid out
-    # straight in the sample's crs (a UTM grid, say) is straight here only to
-    # within rounding after its round trip through longitude and latitude.
-    x0, y0, x1, y1 = hull.bounds
-    tolerance = 1e-9 * np.hypot(x1 - x0, y1 - y0)
-    return idx[shapely.distance(hull.boundary, shapely.points(points[idx])) <= tolerance]
+    distance = shapely.distance(hull.boundary, shapely.points(points[idx]))
+    return idx[distance <= _tolerance(hull)]
 
 
 def _remove_one(
@@ -298,3 +337,68 @@ def hull_distance_nest(
         return _pick(vertices, sign * distance, np.zeros(len(vertices)))
 
     return _remove_one(sample, min_points, choose)
+
+
+@register_strategy("concave_peel")
+def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nest:
+    """Nest a sample by peeling off its concave hull at each step.
+
+    Like [`hull_peel_nest`][samplesar.hull_peel_nest], but each step removes
+    the points on the boundary of a concave hull, which follows the sample's
+    outline instead of spanning its gaps: suited to L-shaped or scattered
+    samples (a valley, a coastline, a trail network). The concave hull is
+    shapely's, with ``ratio`` setting how tightly it follows the points. The
+    nest's areas are still convex hull areas, as for every strategy.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    ratio : float
+        Between 0 and 1: 1 is the convex hull (the same as ``hull_peel_nest``),
+        smaller values follow the outline more tightly.
+    min_points : int
+        Stop rather than leave fewer than this many points.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``ratio`` is outside 0 to 1, ``min_points`` is below 1, the sample
+        has fewer points, or no layer can be peeled.
+    RuntimeError
+        If shapely is built on a GEOS older than 3.11 (the PyPI wheels of
+        shapely 2.0 and later aren't).
+    """
+    if not 0 <= ratio <= 1:
+        raise ValueError(f"ratio must be between 0 and 1, got {ratio!r}.")
+    if shapely.geos_version < (3, 11):
+        raise RuntimeError(
+            f"concave_peel_nest needs GEOS 3.11 or newer for shapely's concave_hull; this "
+            f"shapely uses GEOS {'.'.join(map(str, shapely.geos_version))}."
+        )
+    check_size(sample, min_points)
+    points = sample.xy
+    remaining = np.arange(sample.n_points)
+    steps = [remaining.copy()]
+    while True:
+        hull = shapely.concave_hull(MultiPoint(points[remaining]), ratio=ratio)
+        if isinstance(hull, Polygon):
+            distance = shapely.distance(hull.exterior, shapely.points(points[remaining]))
+            on = remaining[distance <= _tolerance(hull)]
+        else:
+            on = remaining
+        inside = remaining[~np.isin(remaining, on)]
+        if len(inside) < min_points:
+            break
+        remaining = inside
+        steps.append(remaining.copy())
+    if len(steps) == 1:
+        raise ValueError(
+            f"No layer can be peeled: fewer than {min_points} points lie inside the "
+            "sample's concave hull."
+        )
+    return Nest(sample=sample, steps=tuple(steps))

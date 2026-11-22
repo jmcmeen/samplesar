@@ -2,8 +2,10 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from samplesar._evaluate import compare_nests
+from samplesar._diagnostics import nest_diagnostics, residual_autocorrelation
+from samplesar._evaluate import compare_nests, compare_to_baseline, random_baseline
 from samplesar._hull import (
+    concave_peel_nest,
     hull_area_nest,
     hull_distance_nest,
     hull_peel_nest,
@@ -11,6 +13,7 @@ from samplesar._hull import (
     hull_species_nest,
 )
 from samplesar._nest import Nest, nest_from_order, random_nest
+from samplesar._opendata import download_open_data
 from samplesar._plot import animate_nest, plot_nest, plot_nest_curve
 from samplesar._registry import nest, register_strategy, strategies
 from samplesar._sample import Sample, hull_area
@@ -26,6 +29,9 @@ __all__ = [
     "__version__",
     "animate_nest",
     "compare_nests",
+    "compare_to_baseline",
+    "concave_peel_nest",
+    "download_open_data",
     "hull_area",
     "hull_area_nest",
     "hull_distance_nest",
@@ -33,10 +39,13 @@ __all__ = [
     "hull_random_nest",
     "hull_species_nest",
     "nest",
+    "nest_diagnostics",
     "nest_from_order",
     "plot_nest",
     "plot_nest_curve",
+    "random_baseline",
     "random_nest",
     "register_strategy",
+    "residual_autocorrelation",
     "strategies",
 ]

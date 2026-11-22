@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `concave_peel_nest()` (registered as `"concave_peel"`): peel a sample by
+  the boundary of a concave hull, which follows its outline instead of
+  spanning its gaps.
+- `nest_diagnostics()` and `residual_autocorrelation()`: each step's hull
+  perimeter, compactness, area share, density and centroid shift, and the
+  lag-1 autocorrelation and Durbin-Watson statistic of a fit's residuals
+  along the nest.
+- `random_baseline()` and `compare_to_baseline()`: fit a model to many
+  seeded random nests of a sample, and place a strategy's fit among them
+  (mean, spread, quantiles and a rank p-value per parameter), since one
+  nest's R² and AICc aren't independent evidence.
+- `Sample.merge_within(metres)`: merge points within a distance of each
+  other into one, keeping every observation, so records at one spot (GPS jitter) don't
+  make the last steps of a hull nest measure centimetre-wide hulls.
+- `compare_nests()` has an `at_bounds` column naming the parameters that
+  stopped on a bound of sars' search (such as the power model's z at 5 for a
+  near-vertical curve), and warns about them; it needs a sars with
+  `SARFit.at_bounds`, and is left unknown with an older one.
+- `download_open_data()` and `Sample.from_open_data()`: a local copy of
+  iNaturalist's open-data export as one Parquet file, and samples queried
+  from it by region, taxon (and everything under it), grade, date and
+  positional accuracy, through the new `opendata` extra (DuckDB).
+- `papers/`: manuscripts built on samplesar. The first, on the hull
+  strategies, has an outline and a formal specification of strategies S1 to
+  S9 that the code is checked against.
+
+### Fixed
+
+- `plot_nest` shows at most a handful of coordinate ticks, so long
+  longitudes no longer run into each other.
+
+- A point on a hull edge that rounding pushed a hair outward (as in a grid
+  laid out in a sample's UTM CRS) no longer counts as a hull vertex, so the
+  vertex strategies can't pick it and it doesn't move the vertex centroid;
+  vertices and the peeling boundary now share one tolerance.
+
 ## [0.1.2] - 2026-11-22
 
 ### Added

@@ -262,3 +262,67 @@ class TestDegenerateHulls:
     def test_interior_points_dont_change_the_area(self):
         square = np.array([[0, 0], [2, 0], [2, 2], [0, 2.0]])
         assert samplesar.hull_area(np.vstack([square, [[1, 1], [0.5, 1.5]]])) == pytest.approx(4.0)
+
+
+class TestMergeWithin:
+    def near(self):
+        # Points 0-2 within a few metres (GPS jitter at one spot); 3 is 1 km away.
+        lons = [-82.0, -82.00001, -82.00002, -81.99]
+        lats = [36.5, 36.50001, 36.5, 36.5]
+        return samplesar.Sample.from_df(frame(lons, lats, species=["a", "b", "c", "d"]))
+
+    def test_merges_jitter_and_keeps_observations(self):
+        sample = self.near()
+        merged = sample.merge_within(10)
+        assert merged.n_points == 2 and merged.n_observations == 4 and merged.n_species == 4
+        # The group sits at its first-seen member's coordinates.
+        np.testing.assert_array_equal(merged.points, [[-82.0, 36.5], [-81.99, 36.5]])
+        assert merged.projection_centre == sample.projection_centre
+
+    def test_a_small_distance_merges_nothing(self):
+        assert self.near().merge_within(0.1).n_points == 4
+
+    def test_links_chain(self):
+        x = [500_000, 500_000.8, 500_001.6, 500_100]
+        sample = samplesar.Sample.from_df(frame(x, [4_000_000] * 4), crs="EPSG:32617")
+        assert sample.merge_within(1).n_points == 2
+
+    def test_no_more_centimetre_hulls(self):
+        rng = np.random.default_rng(0)
+        spread = rng.uniform(-0.01, 0.01, size=(60, 2))
+        jitter = rng.normal(0, 1e-7, size=(40, 2))  # 40 records at one spot
+        pts = np.vstack([spread, jitter]) + [-82.2, 36.5]
+        sample = samplesar.Sample.from_df(
+            frame(pts[:, 0], pts[:, 1], [f"s{i % 30}" for i in range(100)])
+        )
+        smallest = samplesar.hull_peel_nest(sample, min_points=3).sar_data()["area"].min()
+        merged = (
+            samplesar.hull_peel_nest(sample.merge_within(5), min_points=3).sar_data()["area"].min()
+        )
+        assert smallest < 1e-6 < merged  # km²: below a square metre, then not
+
+    def test_numpy_distances(self):
+        assert self.near().merge_within(np.int64(10)).n_points == 2
+
+    def test_a_long_chain_warns(self):
+        # Records every 4 m along a 500 m line, merged within 5 m: one chain.
+        x = 500_000 + np.arange(0, 500, 4.0)
+        sample = samplesar.Sample.from_df(frame(x, [4_000_000] * len(x)), crs="EPSG:32617")
+        with pytest.warns(UserWarning, match="chain over"):
+            assert sample.merge_within(5).n_points == 1
+
+    def test_a_distorting_crs_merges_at_true_distances(self):
+        from pyproj import Transformer
+
+        # Two points 8 m apart on the ground at 60°N, given in Web Mercator
+        # (where they're about 16 m apart in its units).
+        lon, lat = [10.0, 10.0 + 8 / (111_320 * np.cos(np.radians(60)))], [60.0, 60.0]
+        x, y = Transformer.from_crs(4326, 3857, always_xy=True).transform(lon, lat)
+        sample = samplesar.Sample.from_df(frame(x, y), crs=3857)
+        assert sample.merge_within(10).n_points == 1
+        assert sample.merge_within(5).n_points == 2
+
+    @pytest.mark.parametrize("bad", [0, -1, float("nan"), "5", True])
+    def test_bad_distance(self, bad):
+        with pytest.raises(ValueError, match="metres must be a positive number"):
+            self.near().merge_within(bad)

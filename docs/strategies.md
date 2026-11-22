@@ -63,6 +63,14 @@ can remove many points, so the nest has few steps; on a regular grid each step
 takes off the outer ring. It stops before a layer would leave fewer than
 `min_points` points.
 
+### Concave hull peeling
+
+`concave_peel_nest(sample, ratio=0.3, min_points=3)` peels the boundary of a
+concave hull instead, which follows the sample's outline rather than spanning
+its gaps: suited to L-shaped or scattered samples. `ratio` runs from 1 (the
+convex hull, as `hull_peel_nest`) down towards 0 (tighter). Areas are still
+convex hull areas.
+
 ## Choosing a vertex
 
 The next strategies each remove one hull vertex per step, chosen by a rule
@@ -121,6 +129,20 @@ it gives a steep curve; the outside-in strategies shrink the area from the
 first step, so their slopes are shallower. Nested steps share most of their
 points, so R² and AICc describe how smooth a strategy's curve is, not
 independent evidence: compare them across strategies on the same sample.
+
+## Against a random baseline
+
+Steps of one nest share most of their points, so its R² and AICc aren't
+independent evidence. Compare a strategy with the spread of fits from many
+random nests of the same sample instead:
+
+```python
+baseline = samplesar.random_baseline(sample, n=99, strategy="hull_random")
+samplesar.compare_to_baseline(samplesar.hull_peel_nest(sample), baseline)
+```
+
+Each parameter gets the nest's value, the baseline's mean, spread and 95%
+range, and a two-sided rank p-value.
 
 ## Adding a strategy
 

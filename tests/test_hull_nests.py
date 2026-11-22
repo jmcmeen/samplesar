@@ -65,6 +65,30 @@ def test_hull_vertices_skip_points_on_edges():
     assert list(hull_vertices(points, np.arange(6))) == [0, 2, 3, 4]
 
 
+def test_hull_vertices_skip_edge_points_rounding_pushed_out():
+    points = np.array([[0, 0], [1, -1e-13], [2, 0], [2, 2], [0, 2]], dtype=float)
+    assert list(hull_vertices(points, np.arange(5))) == [0, 2, 3, 4]
+
+
+def test_a_utm_grid_has_only_its_corners_as_vertices():
+    sample = make_sample(grid(7), crs=UTM_17N)
+    vertices = hull_vertices(sample.xy, np.arange(sample.n_points))
+    assert sorted(vertices) == [0, 6, 42, 48]
+
+
+def test_a_row_collinear_but_for_rounding_has_two_ends():
+    row = make_sample(grid(7)[:7], crs=UTM_17N)
+    assert sorted(hull_vertices(row.xy, np.arange(row.n_points))) == [0, 6]
+    points = np.array([[0, 0], [1, 1e-13], [2, -1e-13], [3, 0], [1.5, 2e-13]])
+    assert sorted(hull_vertices(points, np.arange(5))) == [0, 3]
+
+
+def test_a_real_bend_is_kept():
+    # A corner well off the line through its neighbours stays a vertex.
+    points = np.array([[0, 0], [1, -1e-3], [2, 0], [2, 2], [0, 2]], dtype=float)
+    assert list(hull_vertices(points, np.arange(5))) == [0, 1, 2, 3, 4]
+
+
 def test_hull_vertices_of_collinear_points_are_the_ends():
     points = np.array([[0, 0], [1, 1], [3, 3], [2, 2]], dtype=float)
     assert sorted(hull_vertices(points, np.arange(4))) == [0, 2]
@@ -371,3 +395,58 @@ class TestHullDistanceNest:
     def test_rejects_unknown_remove(self, sample):
         with pytest.raises(ValueError, match="remove must be"):
             samplesar.hull_distance_nest(sample, remove="outer")
+
+
+class TestConcavePeelNest:
+    def l_shape(self):
+        # An L of points: the convex hull spans the empty corner, a concave
+        # hull follows the L.
+        arm = [[x, y] for x in np.arange(0, 10) for y in (0, 1)]
+        leg = [[x, y] for x in (0, 1) for y in np.arange(2, 10)]
+        inner = [[0.5, 0.5], [5, 0.5], [0.5, 5]]
+        return make_sample(np.array(arm + leg + inner, dtype=float) * 0.001)
+
+    def test_nested_and_registered(self):
+        sample = self.l_shape()
+        nest = samplesar.concave_peel_nest(sample, ratio=0.2, min_points=1)
+        assert_nested(nest)
+        assert nest.label == "concave_peel(ratio=0.2, min_points=1)"
+        by_name = samplesar.nest(sample, "concave_peel", ratio=0.2, min_points=1)
+        assert all(np.array_equal(a, b) for a, b in zip(nest.steps, by_name.steps, strict=True))
+
+    def test_ratio_one_is_hull_peeling(self, sample):
+        concave = samplesar.concave_peel_nest(sample, ratio=1.0)
+        convex = samplesar.hull_peel_nest(sample)
+        assert [len(s) for s in concave.steps] == [len(s) for s in convex.steps]
+
+    def test_follows_the_outline(self):
+        # On the L, a tight concave hull's first layer is the whole outline:
+        # only the three points inside it (indices 36 to 38) remain. The
+        # convex hull's first layer leaves far more.
+        sample = self.l_shape()
+        concave = samplesar.concave_peel_nest(sample, ratio=0.05, min_points=1)
+        assert list(concave.steps[1]) == [36, 37, 38]
+        convex = samplesar.hull_peel_nest(sample, min_points=1)
+        assert len(convex.steps[1]) > 3
+
+    def test_each_layer_is_the_concave_hull_boundary(self):
+        # Brute force: each removed set is the points on shapely's concave
+        # hull of the step before, within the shared tolerance.
+        import shapely
+        from shapely.geometry import MultiPoint
+
+        sample = self.l_shape()
+        nest = samplesar.concave_peel_nest(sample, ratio=0.5, min_points=1)
+        xy = sample.xy
+        for before, gone in removed(nest):
+            hull = shapely.concave_hull(MultiPoint(xy[before]), ratio=0.5)
+            x0, y0, x1, y1 = hull.bounds
+            near = shapely.distance(hull.exterior, shapely.points(xy[before])) <= 1e-9 * np.hypot(
+                x1 - x0, y1 - y0
+            )
+            assert set(gone) == set(before[near])
+
+    @pytest.mark.parametrize("ratio", [-0.1, 1.5])
+    def test_bad_ratio(self, sample, ratio):
+        with pytest.raises(ValueError, match="ratio must be between 0 and 1"):
+            samplesar.concave_peel_nest(sample, ratio=ratio)

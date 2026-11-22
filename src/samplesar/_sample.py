@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import numbers
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -288,6 +290,82 @@ class Sample:
             )
         return cls.from_df(frame)
 
+    @classmethod
+    def from_open_data(
+        cls,
+        path: str | Path,
+        *,
+        bbox: tuple[float, float, float, float] | None = None,
+        taxon_id: int | None = None,
+        quality_grade: str | Iterable[str] | None = "research",
+        ranks: Iterable[str] | None = ("species", "subspecies", "variety", "form"),
+        since: date | str | None = None,
+        until: date | str | None = None,
+        max_accuracy: float | None = None,
+    ) -> Sample:
+        """Build a sample from a local copy of iNaturalist's open data.
+
+        Queries the Parquet file [`download_open_data`][samplesar.download_open_data]
+        builds, with DuckDB (``pip install 'samplesar[opendata]'``), so a
+        region or taxon comes back in moments without the API.
+
+        Parameters
+        ----------
+        path : str or Path
+            ``observations.parquet``.
+        bbox : tuple of float, optional
+            (west, south, east, north) in degrees; west greater than east
+            crosses the antimeridian.
+        taxon_id : int, optional
+            An iNaturalist taxon: it and everything under it (by ancestry),
+            so ``20979`` is every frog.
+        quality_grade : str, iterable of str or None
+            By default research grade only; ``None`` keeps every grade.
+        ranks : iterable of str or None
+            By default species and below, a subspecies, variety or form
+            counting as its species; ``None`` keeps every rank.
+        since, until : date or str, optional
+            Observed on or after, and on or before, these dates (ISO).
+        max_accuracy : float, optional
+            Keep observations whose positional accuracy is given and at most
+            this many metres. The export doesn't mark obscured observations,
+            whose public coordinates are randomised; this is the filter
+            available.
+
+        Returns
+        -------
+        Sample
+
+        Raises
+        ------
+        ValueError
+            If no observations match, ``bbox`` isn't (west, south, east,
+            north), or ``quality_grade`` or ``ranks`` is empty.
+        ImportError
+            If DuckDB isn't installed.
+
+        Examples
+        --------
+        >>> frogs = samplesar.Sample.from_open_data(  # doctest: +SKIP
+        ...     "observations.parquet", bbox=(-85.0, 35.0, -81.5, 37.0), taxon_id=20979
+        ... )
+        """
+        from samplesar._opendata import open_data_frame
+
+        frame = open_data_frame(
+            path,
+            bbox=bbox,
+            taxon_id=taxon_id,
+            quality_grade=quality_grade,
+            ranks=ranks,
+            since=since,
+            until=until,
+            max_accuracy=max_accuracy,
+        )
+        if frame.empty:
+            raise ValueError("No observations in the open data match these filters.")
+        return cls.from_df(frame)
+
     @property
     def n_observations(self) -> int:
         """The number of observations."""
@@ -392,6 +470,70 @@ class Sample:
         remain.
         """
         return hull_area(self.xy) / self.area_scale
+
+    def merge_within(self, metres: float) -> Sample:
+        """Merge points within a distance of each other into one, keeping every observation.
+
+        Records made at one spot (a trailhead, a feeder, a car park) differ
+        only by GPS jitter. Left apart, they make the last steps of a hull
+        nest measure hulls centimetres across, which aren't area but dominate
+        the species-area curve. Points at most ``metres`` apart are linked
+        (on [`xy`][samplesar.Sample.xy], with a distorting ``crs`` corrected
+        by its scale at the sample's centre), and each linked group becomes
+        one point at its first-seen member's coordinates, holding all the
+        group's observations. Linking chains: three points 0.8 apart with
+        ``metres=1`` become one, and a warning says when a chain spans more
+        than ten times ``metres``, since its observations then move far.
+
+        Parameters
+        ----------
+        metres : float
+            Merge points at most this far apart (positive).
+
+        Returns
+        -------
+        Sample
+            With the same projection as this one.
+
+        Raises
+        ------
+        ValueError
+            If ``metres`` isn't a positive number.
+        """
+        if isinstance(metres, bool) or not isinstance(metres, numbers.Real):
+            raise ValueError(f"metres must be a positive number, got {metres!r}.")
+        metres = float(metres)
+        if not (np.isfinite(metres) and metres > 0):
+            raise ValueError(f"metres must be a positive number, got {metres!r}.")
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+        from scipy.spatial import cKDTree
+
+        n = self.n_points
+        # xy is in the projection's km; a distorting crs stretches lengths by
+        # about the square root of its areal scale.
+        radius = metres / 1000.0 * np.sqrt(self.area_scale)
+        pairs = cKDTree(self.xy).query_pairs(radius, output_type="ndarray")
+        graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(n, n))
+        _, group = connected_components(graph, directed=False)
+        # Each group's first-seen point represents it.
+        first = np.full(group.max() + 1, n)
+        np.minimum.at(first, group, np.arange(n))
+        target = self.points[first[group]]
+        shared = np.unique(group[np.bincount(group)[group] > 1])
+        spans = [np.ptp(self.xy[group == g], axis=0).max() for g in shared]
+        if spans and max(spans) > 10 * radius:
+            warnings.warn(
+                f"Linked points chain over {max(spans) * 1000 / np.sqrt(self.area_scale):.0f} m, "
+                f"more than ten times {metres:g} m, so some observations move far; a "
+                "smaller distance keeps them nearer.",
+                stacklevel=2,
+            )
+        keys = pd.MultiIndex.from_frame(self.data[["lon", "lat"]])
+        rows = pd.MultiIndex.from_arrays([self.points[:, 0], self.points[:, 1]]).get_indexer(keys)
+        data = self.data.copy()
+        data["lon"], data["lat"] = target[rows, 0], target[rows, 1]
+        return Sample(data, centre=self.projection_centre, crs=self.crs)
 
     def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at some of the sample's points.

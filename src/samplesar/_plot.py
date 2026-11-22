@@ -43,7 +43,7 @@ def _caption(nest: Nest, step: int, table: Any) -> str:
     )
 
 
-def _frame_axes(ax: Axes, points: np.ndarray) -> None:
+def _frame_axes(ax: Axes, points: np.ndarray, own_axes: bool) -> None:
     pad = 0.05 * np.ptp(points, axis=0).max()
     ax.set_xlim(points[:, 0].min() - pad, points[:, 0].max() + pad)
     ax.set_ylim(points[:, 1].min() - pad, points[:, 1].max() + pad)
@@ -51,6 +51,17 @@ def _frame_axes(ax: Axes, points: np.ndarray) -> None:
     ax.set_aspect(1 / np.cos(np.radians(points[:, 1].mean())))
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
+    from matplotlib.ticker import FuncFormatter, MaxNLocator
+
+    if own_axes:
+        # Long coordinates (-82.245) collide when matplotlib picks many ticks;
+        # axes a caller passed in keep whatever ticks they set.
+        ax.xaxis.set_major_locator(MaxNLocator(4))
+        ax.yaxis.set_major_locator(MaxNLocator(5))
+    if points[:, 0].min() < -180 or points[:, 0].max() > 180:
+        # Across the antimeridian, longitudes were unwrapped to draw the
+        # sample in one piece; label them back within [-180, 180).
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{(x + 180) % 360 - 180:g}"))
 
 
 def plot_nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: bool = True) -> Axes:
@@ -63,7 +74,8 @@ def plot_nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: b
     step : int
         Which step: 0 is the full sample.
     ax : matplotlib.axes.Axes, optional
-        Axes to draw on; by default a new figure.
+        Axes to draw on, keeping their tick locators; by default a new
+        figure, with few enough ticks that long coordinates don't collide.
     show_removed : bool
         Also draw the points already removed, faintly.
 
@@ -80,14 +92,21 @@ def plot_nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: b
 
     if not -nest.n_steps <= step < nest.n_steps:
         raise IndexError(f"The nest has steps 0 to {nest.n_steps - 1}, not {step}.")
+    own_axes = ax is None
     if ax is None:
         _, ax = plt.subplots()
-    _draw(nest, step % nest.n_steps, ax, show_removed, nest.to_frame(), _lonlat(nest))
+    _draw(nest, step % nest.n_steps, ax, show_removed, nest.to_frame(), _lonlat(nest), own_axes)
     return ax
 
 
 def _draw(
-    nest: Nest, step: int, ax: Axes, show_removed: bool, table: Any, points: np.ndarray
+    nest: Nest,
+    step: int,
+    ax: Axes,
+    show_removed: bool,
+    table: Any,
+    points: np.ndarray,
+    own_axes: bool = True,
 ) -> None:
     """Draw a step, given the nest's table and unwrapped points (computed once
     for an animation rather than per frame)."""
@@ -100,7 +119,7 @@ def _draw(
     if ring is not None:
         ax.fill(ring[:, 0], ring[:, 1], color="C1", alpha=0.2, zorder=1)
         ax.plot(ring[:, 0], ring[:, 1], color="C1", linewidth=1.5, zorder=2)
-    _frame_axes(ax, points)
+    _frame_axes(ax, points, own_axes)
     ax.set_title(_caption(nest, step, table))
 
 
