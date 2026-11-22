@@ -6,7 +6,8 @@
 
 ## Nest.fit
 
-::: samplesar.Nest.fit
+Fitting one nest is the [`Nest.fit`][samplesar.Nest.fit] method, documented with
+[`Nest`][samplesar.Nest].
 
 ## random_baseline
 
