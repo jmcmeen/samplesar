@@ -65,6 +65,23 @@ def test_hull_vertices_skip_points_on_edges():
     assert list(hull_vertices(points, np.arange(6))) == [0, 2, 3, 4]
 
 
+def test_hull_vertices_skip_edge_points_rounding_pushed_out():
+    points = np.array([[0, 0], [1, -1e-13], [2, 0], [2, 2], [0, 2]], dtype=float)
+    assert list(hull_vertices(points, np.arange(5))) == [0, 2, 3, 4]
+
+
+def test_a_utm_grid_has_only_its_corners_as_vertices():
+    sample = make_sample(grid(7), crs=UTM_17N)
+    vertices = hull_vertices(sample.xy, np.arange(sample.n_points))
+    assert sorted(vertices) == [0, 6, 42, 48]
+
+
+def test_a_real_bend_is_kept():
+    # A corner well off the line through its neighbours stays a vertex.
+    points = np.array([[0, 0], [1, -1e-3], [2, 0], [2, 2], [0, 2]], dtype=float)
+    assert list(hull_vertices(points, np.arange(5))) == [0, 1, 2, 3, 4]
+
+
 def test_hull_vertices_of_collinear_points_are_the_ends():
     points = np.array([[0, 0], [1, 1], [3, 3], [2, 2]], dtype=float)
     assert sorted(hull_vertices(points, np.arange(4))) == [0, 2]

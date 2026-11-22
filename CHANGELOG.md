@@ -12,6 +12,13 @@ All notable changes to this project are documented here. The format is based on
   strategies, has an outline and a formal specification of strategies S1 to
   S9 that the code is checked against.
 
+### Fixed
+
+- A point on a hull edge that rounding pushed a hair outward (as in a grid
+  laid out in a sample's UTM CRS) no longer counts as a hull vertex, so the
+  vertex strategies can't pick it and it doesn't move the vertex centroid;
+  vertices and the peeling boundary now share one tolerance.
+
 ## [0.1.2] - 2026-11-22
 
 ### Added

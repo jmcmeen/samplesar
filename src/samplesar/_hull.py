@@ -18,15 +18,49 @@ def _hull(points: np.ndarray, idx: np.ndarray) -> shapely.Geometry:
     return MultiPoint(points[idx]).convex_hull
 
 
+def _tolerance(hull: Polygon) -> float:
+    """How near counts as on the hull's boundary: 1e-9 of its bounding box's
+    diagonal. A row of points laid out straight in the sample's crs (a UTM
+    grid, say) is straight here only to within rounding after its round trip
+    through longitude and latitude."""
+    x0, y0, x1, y1 = hull.bounds
+    return 1e-9 * float(np.hypot(x1 - x0, y1 - y0))
+
+
+def _true_corners(ring: np.ndarray, tolerance: float) -> np.ndarray:
+    """The ring's corners without those within ``tolerance`` of the line
+    through their neighbours: edge points that rounding pushed outward."""
+    corners = ring
+    changed = True
+    while changed and len(corners) > 3:
+        before, after = np.roll(corners, 1, axis=0), np.roll(corners, -1, axis=0)
+        edge = after - before
+        cross = np.abs(
+            edge[:, 0] * (corners - before)[:, 1] - edge[:, 1] * (corners - before)[:, 0]
+        )
+        off_line = cross / np.maximum(np.hypot(edge[:, 0], edge[:, 1]), 1e-300)
+        # Drop the flattest corner first, one at a time, so two neighbouring
+        # near-collinear corners can't both go.
+        flattest = int(np.argmin(off_line))
+        changed = bool(off_line[flattest] <= tolerance)
+        if changed:
+            corners = np.delete(corners, flattest, axis=0)
+    return corners
+
+
 def hull_vertices(points: np.ndarray, idx: np.ndarray) -> np.ndarray:
     """The rows of ``idx`` whose points are vertices of their convex hull.
 
-    Points on an edge between two vertices aren't vertices. When the points
-    are collinear the hull is a segment and its vertices are its two ends.
-    Returned in the order of ``idx``.
+    Points on an edge between two vertices aren't vertices, to within
+    rounding (1e-9 of the hull's bounding-box diagonal). When the points are collinear the hull is
+    a segment and its vertices are its two ends. Returned in the order of
+    ``idx``.
     """
     hull = _hull(points, idx)
-    coords = hull.exterior.coords if isinstance(hull, Polygon) else hull.coords
+    if isinstance(hull, Polygon):
+        coords = _true_corners(np.asarray(hull.exterior.coords)[:-1], _tolerance(hull))
+    else:
+        coords = np.asarray(hull.coords)
     corners = {tuple(c) for c in coords}
     return np.array([i for i in idx if tuple(points[i]) in corners], dtype=int)
 
@@ -38,12 +72,8 @@ def _on_boundary(points: np.ndarray, idx: np.ndarray) -> np.ndarray:
     hull = _hull(points, idx)
     if not isinstance(hull, Polygon):
         return idx.copy()
-    # Within rounding of the boundary counts as on it: a row of points laid out
-    # straight in the sample's crs (a UTM grid, say) is straight here only to
-    # within rounding after its round trip through longitude and latitude.
-    x0, y0, x1, y1 = hull.bounds
-    tolerance = 1e-9 * np.hypot(x1 - x0, y1 - y0)
-    return idx[shapely.distance(hull.boundary, shapely.points(points[idx])) <= tolerance]
+    distance = shapely.distance(hull.boundary, shapely.points(points[idx]))
+    return idx[distance <= _tolerance(hull)]
 
 
 def _remove_one(
