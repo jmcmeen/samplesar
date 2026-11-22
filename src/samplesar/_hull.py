@@ -337,3 +337,62 @@ def hull_distance_nest(
         return _pick(vertices, sign * distance, np.zeros(len(vertices)))
 
     return _remove_one(sample, min_points, choose)
+
+
+@register_strategy("concave_peel")
+def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nest:
+    """Nest a sample by peeling off its concave hull at each step.
+
+    Like [`hull_peel_nest`][samplesar.hull_peel_nest], but each step removes
+    the points on the boundary of a concave hull, which follows the sample's
+    outline instead of spanning its gaps: suited to L-shaped or scattered
+    samples (a valley, a coastline, a trail network). The concave hull is
+    shapely's, with ``ratio`` setting how tightly it follows the points. The
+    nest's areas are still convex hull areas, as for every strategy.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    ratio : float
+        Between 0 and 1: 1 is the convex hull (the same as ``hull_peel_nest``),
+        smaller values follow the outline more tightly.
+    min_points : int
+        Stop rather than leave fewer than this many points.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``ratio`` is outside 0 to 1, ``min_points`` is below 1, the sample
+        has fewer points, or no layer can be peeled.
+    """
+    if not 0 <= ratio <= 1:
+        raise ValueError(f"ratio must be between 0 and 1, got {ratio!r}.")
+    check_size(sample, min_points)
+    points = sample.xy
+    remaining = np.arange(sample.n_points)
+    steps = [remaining.copy()]
+    while True:
+        hull = shapely.concave_hull(MultiPoint(points[remaining]), ratio=ratio)
+        if isinstance(hull, Polygon):
+            x0, y0, x1, y1 = hull.bounds
+            tolerance = 1e-9 * float(np.hypot(x1 - x0, y1 - y0))
+            distance = shapely.distance(hull.exterior, shapely.points(points[remaining]))
+            on = remaining[distance <= tolerance]
+        else:
+            on = remaining
+        inside = remaining[~np.isin(remaining, on)]
+        if len(inside) < min_points:
+            break
+        remaining = inside
+        steps.append(remaining.copy())
+    if len(steps) == 1:
+        raise ValueError(
+            f"No layer can be peeled: fewer than {min_points} points lie inside the "
+            "sample's concave hull."
+        )
+    return Nest(sample=sample, steps=tuple(steps))

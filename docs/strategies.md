@@ -63,6 +63,14 @@ can remove many points, so the nest has few steps; on a regular grid each step
 takes off the outer ring. It stops before a layer would leave fewer than
 `min_points` points.
 
+### Concave hull peeling
+
+`concave_peel_nest(sample, ratio=0.3, min_points=3)` peels the boundary of a
+concave hull instead, which follows the sample's outline rather than spanning
+its gaps: suited to L-shaped or scattered samples. `ratio` runs from 1 (the
+convex hull, as `hull_peel_nest`) down towards 0 (tighter). Areas are still
+convex hull areas.
+
 ## Choosing a vertex
 
 The next strategies each remove one hull vertex per step, chosen by a rule

@@ -31,3 +31,7 @@
 ## nest_from_order
 
 ::: samplesar.nest_from_order
+
+## concave_peel_nest
+
+::: samplesar.concave_peel_nest

@@ -5,6 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 from samplesar._diagnostics import nest_diagnostics, residual_autocorrelation
 from samplesar._evaluate import compare_nests, compare_to_baseline, random_baseline
 from samplesar._hull import (
+    concave_peel_nest,
     hull_area_nest,
     hull_distance_nest,
     hull_peel_nest,
@@ -29,6 +30,7 @@ __all__ = [
     "animate_nest",
     "compare_nests",
     "compare_to_baseline",
+    "concave_peel_nest",
     "download_open_data",
     "hull_area",
     "hull_area_nest",

@@ -395,3 +395,39 @@ class TestHullDistanceNest:
     def test_rejects_unknown_remove(self, sample):
         with pytest.raises(ValueError, match="remove must be"):
             samplesar.hull_distance_nest(sample, remove="outer")
+
+
+class TestConcavePeelNest:
+    def l_shape(self):
+        # An L of points: the convex hull spans the empty corner, a concave
+        # hull follows the L.
+        arm = [[x, y] for x in np.arange(0, 10) for y in (0, 1)]
+        leg = [[x, y] for x in (0, 1) for y in np.arange(2, 10)]
+        inner = [[0.5, 0.5], [5, 0.5], [0.5, 5]]
+        return make_sample(np.array(arm + leg + inner, dtype=float) * 0.001)
+
+    def test_nested_and_registered(self):
+        sample = self.l_shape()
+        nest = samplesar.concave_peel_nest(sample, ratio=0.2, min_points=1)
+        assert_nested(nest)
+        assert nest.label == "concave_peel(ratio=0.2, min_points=1)"
+        by_name = samplesar.nest(sample, "concave_peel", ratio=0.2, min_points=1)
+        assert all(np.array_equal(a, b) for a, b in zip(nest.steps, by_name.steps, strict=True))
+
+    def test_ratio_one_is_hull_peeling(self, sample):
+        concave = samplesar.concave_peel_nest(sample, ratio=1.0)
+        convex = samplesar.hull_peel_nest(sample)
+        assert [len(s) for s in concave.steps] == [len(s) for s in convex.steps]
+
+    def test_follows_the_outline(self):
+        # On the L, the first concave layer takes the whole outline (every
+        # point but the three inside), the convex one only part of it.
+        sample = self.l_shape()
+        concave = samplesar.concave_peel_nest(sample, ratio=0.05, min_points=1)
+        convex = samplesar.hull_peel_nest(sample, min_points=1)
+        assert len(concave.steps[1]) < len(convex.steps[1])
+
+    @pytest.mark.parametrize("ratio", [-0.1, 1.5])
+    def test_bad_ratio(self, sample, ratio):
+        with pytest.raises(ValueError, match="ratio must be between 0 and 1"):
+            samplesar.concave_peel_nest(sample, ratio=ratio)

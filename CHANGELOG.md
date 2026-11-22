@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `concave_peel_nest()` (registered as `"concave_peel"`): peel a sample by
+  the boundary of a concave hull, which follows its outline instead of
+  spanning its gaps.
 - `nest_diagnostics()` and `residual_autocorrelation()`: each step's hull
   perimeter, compactness, area share, density and centroid shift, and the
   lag-1 autocorrelation and Durbin-Watson statistic of a fit's residuals
