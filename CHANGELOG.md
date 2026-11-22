@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-22
+
 ### Added
 
 - `nest(sample, strategy, **options)` runs any strategy by name, and
