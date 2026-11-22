@@ -206,7 +206,9 @@ def _point_species(sample: Sample) -> tuple[list[np.ndarray], int]:
     return [np.asarray(grouped[i], dtype=int) for i in range(sample.n_points)], len(uniques)
 
 
-def hull_species_nest(sample: Sample, keep: str = "most", min_points: int = 3) -> Nest:
+def hull_species_nest(
+    sample: Sample, keep: Literal["most", "fewest"] = "most", min_points: int = 3
+) -> Nest:
     """Nest a sample by removing the hull vertex that loses the fewest or most species.
 
     At each step every vertex of the current convex hull is tried, and the

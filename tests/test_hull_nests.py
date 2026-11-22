@@ -246,9 +246,20 @@ def species_at(sample, rest):
     return sample.subset(rest).n_species
 
 
+@pytest.fixture
+def shared_points_sample():
+    """Several observations at most points, so species group per point."""
+    rng = np.random.default_rng(4)
+    points = rng.uniform(0, 0.1, size=(25, 2))
+    pick = rng.integers(0, 25, size=90)
+    return make_sample(points[pick], species=rng.choice([f"sp{i}" for i in range(20)], size=90))
+
+
 class TestHullSpeciesNest:
     @pytest.mark.parametrize("keep", ["most", "fewest"])
-    def test_matches_brute_force(self, sample, keep):
+    @pytest.mark.parametrize("which", ["sample", "shared_points_sample"])
+    def test_matches_brute_force(self, request, which, keep):
+        sample = request.getfixturevalue(which)
         sign = 1 if keep == "most" else -1
         nest = samplesar.hull_species_nest(sample, keep=keep)
         assert nest.n_steps == sample.n_points - 3 + 1
@@ -271,10 +282,24 @@ class TestHullSpeciesNest:
         sample = samplesar.Sample.from_df(df)
         # Points: (0,0) holds a and b, (1,0) a, (1,1) c, (0,1) c, (0.5,0.5) d.
         # Dropping (1,0) or (1,1) or (0,1) loses nothing; (0,0) loses b.
+        # Points 1, 2 and 3 tie on species and on distance from the centre, so
+        # the lowest index goes.
         most = samplesar.hull_species_nest(sample, keep="most")
-        assert 0 in most.steps[1]
+        assert list(most.steps[1]) == [0, 2, 3, 4]
         fewest = samplesar.hull_species_nest(sample, keep="fewest")
         assert list(fewest.steps[1]) == [1, 2, 3, 4]
+
+    @pytest.mark.parametrize("keep", ["most", "fewest"])
+    def test_reproducible_wherever_the_sample_lies(self, shared_points_sample, keep):
+        data = shared_points_sample.data
+        moved = samplesar.Sample.from_df(
+            data.assign(lon=data["lon"] - 80.1, lat=data["lat"] + 35.2)
+        )
+        here = samplesar.hull_species_nest(shared_points_sample, keep=keep)
+        again = samplesar.hull_species_nest(shared_points_sample, keep=keep)
+        there = samplesar.hull_species_nest(moved, keep=keep)
+        for a, b, c in zip(here.steps, again.steps, there.steps, strict=True):
+            assert np.array_equal(a, b) and np.array_equal(a, c)
 
     def test_rejects_unknown_keep(self, sample):
         with pytest.raises(ValueError, match="keep must be"):
