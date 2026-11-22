@@ -256,3 +256,43 @@ def hull_species_nest(
         return drop
 
     return _remove_one(sample, min_points, choose)
+
+
+def hull_distance_nest(sample: Sample, remove: str = "farthest", min_points: int = 3) -> Nest:
+    """Nest a sample by removing the hull vertex farthest from, or closest to, its centre.
+
+    The centre is the centroid of the current hull's vertices, and distances
+    are Euclidean in degrees. ``remove="farthest"`` trims the outlying
+    corners first, so the sample contracts towards a rounder shape;
+    ``remove="closest"`` removes the vertex nearest the centre, leaving the
+    outliers to last. Ties go to the lowest point index.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    remove : {"farthest", "closest"}
+        Which vertex to remove at each step.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``remove`` is unknown, ``min_points`` is below 1 or the sample has
+        fewer points.
+    """
+    if remove not in ("farthest", "closest"):
+        raise ValueError(f"remove must be 'farthest' or 'closest', got {remove!r}")
+    sign = 1.0 if remove == "farthest" else -1.0
+    points = sample.points
+
+    def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
+        distance = _centre_distance(points, vertices)
+        return _pick(vertices, sign * distance, np.zeros(len(vertices)))
+
+    return _remove_one(sample, min_points, choose)

@@ -23,3 +23,7 @@
 ## hull_species_nest
 
 ::: samplesar.hull_species_nest
+
+## hull_distance_nest
+
+::: samplesar.hull_distance_nest

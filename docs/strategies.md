@@ -57,3 +57,11 @@ whose loss leaves the most species: a vertex whose species all occur at other
 remaining points costs nothing, so species richness falls as late as
 possible. `keep="fewest"` removes first the vertices holding species found
 nowhere else, so richness falls as fast as possible.
+
+### By distance from the centre
+
+`hull_distance_nest(sample, remove="farthest", min_points=3)` removes the
+vertex farthest from the centroid of the hull's vertices (Euclidean, in
+degrees), trimming outlying corners first so the sample contracts towards a
+rounder shape. `remove="closest"` removes the vertex nearest the centre and
+leaves the outliers to last. Ties go to the lowest point index.

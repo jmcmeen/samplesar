@@ -12,6 +12,7 @@ STRATEGIES = [
     samplesar.hull_peel_nest,
     samplesar.hull_area_nest,
     samplesar.hull_species_nest,
+    samplesar.hull_distance_nest,
 ]
 
 
@@ -304,3 +305,34 @@ class TestHullSpeciesNest:
     def test_rejects_unknown_keep(self, sample):
         with pytest.raises(ValueError, match="keep must be"):
             samplesar.hull_species_nest(sample, keep="many")
+
+
+class TestHullDistanceNest:
+    @pytest.mark.parametrize("remove", ["farthest", "closest"])
+    def test_matches_brute_force(self, sample, remove):
+        sign = 1 if remove == "farthest" else -1
+        points = sample.points
+        nest = samplesar.hull_distance_nest(sample, remove=remove)
+        assert nest.n_steps == sample.n_points - 3 + 1
+        assert_nested(nest)
+        for before, gone in removed(nest):
+            vertices = hull_vertices(points, before)
+            centre = points[vertices].mean(axis=0)
+            expected = min(vertices, key=lambda v: (-sign * np.hypot(*(points[v] - centre)), v))
+            assert gone[0] == expected
+
+    def test_known_answer(self):
+        # A square with one corner pulled far out: "farthest" takes it first.
+        points = [[0, 0], [1, 0], [1, 1], [0, 1], [5, 5], [0.5, 0.5]]
+        far = samplesar.hull_distance_nest(make_sample(points))
+        assert 4 not in far.steps[1]
+        near = samplesar.hull_distance_nest(make_sample(points), remove="closest")
+        assert 4 in near.steps[-1]
+
+    def test_ties_go_to_the_lowest_index(self):
+        square = make_sample([[0, 0], [1, 0], [1, 1], [0, 1]])
+        assert list(samplesar.hull_distance_nest(square).steps[1]) == [1, 2, 3]
+
+    def test_rejects_unknown_remove(self, sample):
+        with pytest.raises(ValueError, match="remove must be"):
+            samplesar.hull_distance_nest(sample, remove="outer")

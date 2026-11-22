@@ -16,6 +16,8 @@ All notable changes to this project are documented here. The format is based on
   vertex whose loss leaves the largest (or smallest) remaining hull.
 - `hull_species_nest()`: nest a sample by removing, at each step, the hull
   vertex whose loss leaves the most (or fewest) species.
+- `hull_distance_nest()`: nest a sample by removing, at each step, the hull
+  vertex farthest from (or closest to) the centroid of the hull's vertices.
 - `make typecheck` (mypy), part of `make check`; tests run in parallel.
 - A documentation site: getting started, the sampling strategies and an API
   reference (`make docs`, built on every pull request, deployed on each
