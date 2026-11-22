@@ -470,6 +470,55 @@ class Sample:
         """
         return hull_area(self.xy) / self.area_scale
 
+    def merge_within(self, metres: float) -> Sample:
+        """Merge points closer than a distance into one, keeping every observation.
+
+        Records made at one spot (a trailhead, a feeder, a car park) differ
+        only by GPS jitter. Left apart, they make the last steps of a hull
+        nest measure hulls centimetres across, which aren't area but dominate
+        the species-area curve. Points within ``metres`` of each other on
+        [`xy`][samplesar.Sample.xy] are linked, and each linked group becomes
+        one point at its first-seen member's coordinates, holding all the
+        group's observations. Linking chains: three points 0.8 apart with
+        ``metres=1`` become one.
+
+        Parameters
+        ----------
+        metres : float
+            Merge points closer than this (positive).
+
+        Returns
+        -------
+        Sample
+            With the same projection as this one.
+
+        Raises
+        ------
+        ValueError
+            If ``metres`` isn't a positive number.
+        """
+        if not (isinstance(metres, int | float) and np.isfinite(metres) and metres > 0):
+            raise ValueError(f"metres must be a positive number, got {metres!r}.")
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+        from scipy.spatial import cKDTree
+
+        n = self.n_points
+        pairs = cKDTree(self.xy).query_pairs(metres / 1000.0, output_type="ndarray")
+        graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(n, n))
+        _, group = connected_components(graph, directed=False)
+        # Each group's first-seen point represents it.
+        first = np.full(group.max() + 1, n)
+        np.minimum.at(first, group, np.arange(n))
+        target = self.points[first[group]]
+        lookup = {tuple(p): i for i, p in enumerate(self.points)}
+        rows = np.array(
+            [lookup[(x, y)] for x, y in zip(self.data["lon"], self.data["lat"], strict=True)]
+        )
+        data = self.data.copy()
+        data["lon"], data["lat"] = target[rows, 0], target[rows, 1]
+        return Sample(data, centre=self.projection_centre, crs=self.crs)
+
     def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at some of the sample's points.
 
