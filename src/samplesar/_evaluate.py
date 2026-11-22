@@ -185,7 +185,8 @@ def random_baseline(
     seed : int
         The first seed; nest ``i`` uses ``seed + i``.
     strategy : str
-        A random strategy: ``"random"`` (S1) or ``"hull_random"`` (S2).
+        A registered strategy that takes a ``seed``, such as ``"random"``
+        (S1) or ``"hull_random"`` (S2).
     **options
         Passed to the strategy, such as ``min_points``.
 
@@ -198,17 +199,25 @@ def random_baseline(
     Raises
     ------
     ValueError
-        If ``n`` is below 1 or ``strategy`` takes no seed.
+        If ``n`` is below 1, or ``strategy`` isn't a registered strategy
+        that takes a seed.
     """
+    import inspect
+
+    from samplesar._registry import _REGISTRY
     from samplesar._registry import nest as run
 
     if n < 1:
         raise ValueError(f"n must be at least 1, got {n}.")
-    if strategy not in ("random", "hull_random"):
-        raise ValueError(f"strategy must be 'random' or 'hull_random', got {strategy!r}.")
+    found = _REGISTRY.get(strategy)
+    if found is None or "seed" not in inspect.signature(found.original).parameters:
+        raise ValueError(
+            f"strategy must be a registered strategy that takes a seed, got {strategy!r}."
+        )
     nests = {str(seed + i): run(sample, strategy, seed=seed + i, **options) for i in range(n)}
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # bounds are reported per row instead
+        # Bounds are reported per row instead; other warnings still show.
+        warnings.filterwarnings("ignore", message="Parameters stopped on a bound")
         table = compare_nests(nests, model=model)
     table.index = table.index.astype(int)
     table.index.name = "seed"
@@ -232,28 +241,41 @@ def compare_to_baseline(nest: Nest, baseline: pd.DataFrame, model: str = "power"
     -------
     pd.DataFrame
         One row per parameter and for ``r_squared``: the nest's ``value``,
-        the baseline's ``mean``, ``sd``, ``q025`` and ``q975``, and ``p``,
-        the two-sided rank p-value ``(1 + #as-extreme) / (n + 1)`` (as
-        extreme: at least as far from the baseline's median). Its ``attrs``
+        the baseline's ``mean``, ``sd``, ``q025`` and ``q975``, ``n`` (the
+        baseline fits used, those with a finite value; failed fits are left
+        out) and ``p``, the two-sided rank p-value
+        ``(1 + #as-extreme) / (n + 1)`` (as extreme: at least as far from
+        the baseline's median), missing if the nest's own value isn't
+        finite. Its ``attrs``
         record ``at_bounds_share``, the share of baseline fits with a
         parameter on a bound, whose values are bounds, not estimates.
 
     Raises
     ------
     ValueError
-        If the baseline is empty or lacks the model's parameters.
+        If the baseline is empty, lacks the model's parameters or has no
+        finite value of one, or the model gives no single fit with
+        parameters.
     """
     if baseline.empty:
         raise ValueError("The baseline is empty.")
     fit = fit_nest(nest, model)
+    if not hasattr(fit, "params"):
+        raise ValueError(
+            f"sars.sar_{model} returns {type(fit).__name__}, not a single fit with "
+            "parameters; choose a single model such as 'power'."
+        )
     names = [*fit.params, "r_squared"]
     missing = [p for p in names if p not in baseline.columns]
     if missing:
         raise ValueError(f"The baseline has no {', '.join(missing)}: fitted with another model?")
     rows = {}
     for name in names:
-        value = fit.params[name] if name in fit.params else fit.r_squared
+        value = float(fit.params[name] if name in fit.params else fit.r_squared)
         values = baseline[name].to_numpy(dtype=float)
+        values = values[np.isfinite(values)]
+        if len(values) == 0:
+            raise ValueError(f"No baseline fit has a finite {name}.")
         centre = np.median(values)
         extreme = np.count_nonzero(np.abs(values - centre) >= abs(value - centre))
         rows[name] = {
@@ -262,7 +284,8 @@ def compare_to_baseline(nest: Nest, baseline: pd.DataFrame, model: str = "power"
             "sd": values.std(ddof=1) if len(values) > 1 else np.nan,
             "q025": np.quantile(values, 0.025),
             "q975": np.quantile(values, 0.975),
-            "p": (1 + extreme) / (len(values) + 1),
+            "n": len(values),
+            "p": (1 + extreme) / (len(values) + 1) if np.isfinite(value) else np.nan,
         }
     table = pd.DataFrame.from_dict(rows, orient="index")
     if "at_bounds" in baseline.columns:

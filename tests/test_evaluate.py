@@ -203,3 +203,20 @@ class TestBaseline:
             samplesar.compare_to_baseline(samplesar.random_nest(sample), pd.DataFrame())
         with pytest.raises(ValueError, match="another model"):
             samplesar.compare_to_baseline(samplesar.random_nest(sample), pd.DataFrame({"a": [1.0]}))
+
+
+def test_failed_baseline_fits_are_left_out(sample):
+    baseline = pd.DataFrame(
+        {
+            "c": [1.0, 2, np.nan, 4],
+            "z": [0.1, 0.2, np.nan, 0.4],
+            "r_squared": [0.5, 0.6, np.nan, 0.7],
+        }
+    )
+    table = samplesar.compare_to_baseline(samplesar.random_nest(sample, seed=0), baseline)
+    assert table.loc["z", "n"] == 3 and np.isfinite(table.loc["z", "mean"])
+    assert table.loc["z", "p"] >= 1 / 4
+
+
+def test_a_registered_strategy_with_a_seed(sample):
+    assert len(samplesar.random_baseline(sample, n=2, strategy="hull_random")) == 2
