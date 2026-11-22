@@ -53,10 +53,15 @@ def test_xy_and_points_are_read_only():
 
 class TestCRS:
     def test_projected_coordinates_are_measured_in_their_crs(self):
-        # A 1 km square in UTM zone 17N: exactly 1 km², however it projects.
+        # A square 1 km a side in UTM zone 17N metres. UTM shrinks distances by
+        # 0.9996 near its central meridian, so on the ground it's 1.0008 km².
         x, y = [500_000, 501_000, 501_000, 500_000], [4_000_000, 4_000_000, 4_001_000, 4_001_000]
         sample = samplesar.Sample.from_df(frame(x, y), crs="EPSG:32617")
-        assert sample.area == pytest.approx(1.0, rel=1e-9)
+        assert sample.area == pytest.approx(1 / 0.9996**2, rel=1e-5)
+        geodesic = abs(
+            Geod(ellps="WGS84").polygon_area_perimeter(sample.points[:, 0], sample.points[:, 1])[0]
+        )
+        assert sample.area == pytest.approx(geodesic / 1e6, rel=1e-5)
         assert sample.crs.to_epsg() == 32617
         # data holds WGS84 longitude and latitude.
         assert sample.data["lon"].between(-82, -80).all()
@@ -79,7 +84,45 @@ class TestCRS:
     def test_a_subset_keeps_the_crs(self):
         x, y = [500_000, 501_000, 501_000, 500_000], [4_000_000, 4_000_000, 4_001_000, 4_001_000]
         sample = samplesar.Sample.from_df(frame(x, y), crs="EPSG:32617")
-        assert sample.subset([0, 1, 2]).area == pytest.approx(0.5, rel=1e-9)
+        assert sample.subset([0, 1, 2]).area == pytest.approx(sample.area / 2, rel=1e-9)
+
+    def test_web_mercator_areas_are_corrected(self):
+        # A Web Mercator square near 60°N enlarges areas about 4x; the area is
+        # corrected to match the same points measured on the default projection.
+        from pyproj import Transformer
+
+        lon, lat = [10.0, 10.02, 10.02, 10.0], [60.0, 60.0, 60.01, 60.01]
+        x, y = Transformer.from_crs(4326, 3857, always_xy=True).transform(lon, lat)
+        mercator = samplesar.Sample.from_df(frame(x, y), crs=3857)
+        plain = samplesar.Sample.from_df(frame(lon, lat))
+        assert mercator.area_scale == pytest.approx(4.0, rel=0.01)
+        # Web Mercator treats WGS84 coordinates as if on a sphere, so this is
+        # only good to a few 0.1% (uncorrected it would be 4x).
+        assert mercator.area == pytest.approx(plain.area, rel=0.01)
+
+    def test_a_wide_sample_in_a_distorting_crs_warns(self):
+        from pyproj import Transformer
+
+        lon, lat = [0.0, 10.0, 10.0, 0.0], [40.0, 40.0, 60.0, 60.0]
+        x, y = Transformer.from_crs(4326, 3857, always_xy=True).transform(lon, lat)
+        sample = samplesar.Sample.from_df(frame(x, y), crs=3857)
+        with pytest.warns(UserWarning, match="distorts areas"):
+            _ = sample.area
+
+    def test_a_crs_that_isnt_for_points(self):
+        with pytest.raises(ValueError, match="neither geographic nor projected"):
+            samplesar.Sample.from_df(frame([0, 1, 1], [0, 0, 1]), crs="EPSG:5703")
+
+    def test_a_numpy_centre(self):
+        sample = samplesar.Sample.from_df(frame([0, 1, 1], [35, 35, 36]))
+        moved = samplesar.Sample(sample.data, centre=(np.float64(0.5), np.float64(35.5)))
+        assert moved.centre == (0.5, 35.5) and type(moved.centre[0]) is float
+        assert moved.area == pytest.approx(sample.area, rel=1e-3)
+
+    def test_a_bad_centre(self):
+        sample = samplesar.Sample.from_df(frame([0, 1, 1], [35, 35, 36]))
+        with pytest.raises(ValueError, match="centre must be"):
+            samplesar.Sample(sample.data, centre=(0.0, 95.0))
 
 
 class TestFromGeoDataFrame:
@@ -92,7 +135,7 @@ class TestFromGeoDataFrame:
             {"taxon": list("abcd")}, geometry=gpd.points_from_xy(x, y), crs="EPSG:32617"
         )
         sample = samplesar.Sample.from_geodataframe(gdf, species_col="taxon")
-        assert sample.n_species == 4 and sample.area == pytest.approx(1.0, rel=1e-9)
+        assert sample.n_species == 4 and sample.area == pytest.approx(1 / 0.9996**2, rel=1e-5)
 
     def test_no_crs_means_lon_lat(self):
         gpd = self.geopandas
@@ -109,6 +152,14 @@ class TestFromGeoDataFrame:
             {"species": ["a", "b"]}, geometry=[Point(0, 0), LineString([(0, 0), (1, 1)])]
         )
         with pytest.raises(ValueError, match="must be a point"):
+            samplesar.Sample.from_geodataframe(gdf)
+
+    def test_missing_geometries(self):
+        gpd = self.geopandas
+        from shapely.geometry import Point
+
+        gdf = gpd.GeoDataFrame({"species": ["a", "b"]}, geometry=[Point(0, 0), None])
+        with pytest.raises(ValueError, match="missing or empty"):
             samplesar.Sample.from_geodataframe(gdf)
 
     def test_missing_species_column(self):

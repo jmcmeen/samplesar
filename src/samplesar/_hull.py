@@ -38,9 +38,9 @@ def _on_boundary(points: np.ndarray, idx: np.ndarray) -> np.ndarray:
     hull = _hull(points, idx)
     if not isinstance(hull, Polygon):
         return idx.copy()
-    # Within rounding of the boundary counts as on it: a row of points that is
-    # straight in longitude and latitude is straight in km only to within
-    # rounding once projected.
+    # Within rounding of the boundary counts as on it: a row of points laid out
+    # straight in the sample's crs (a UTM grid, say) is straight here only to
+    # within rounding after its round trip through longitude and latitude.
     x0, y0, x1, y1 = hull.bounds
     tolerance = 1e-9 * np.hypot(x1 - x0, y1 - y0)
     return idx[shapely.distance(hull.boundary, shapely.points(points[idx])) <= tolerance]

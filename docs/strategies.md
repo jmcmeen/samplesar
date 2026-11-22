@@ -55,7 +55,10 @@ per step, chosen uniformly at random: the outside-in counterpart of
 
 `hull_peel_nest(sample, min_points=3)` removes the whole hull boundary at each
 step: every vertex and every point on an edge, leaving only the points
-strictly inside. These are the sample's convex layers (onion peeling). A step
+strictly inside. Edges are straight on the sample's projection: a grid laid
+out in a projected CRS (UTM, say) peels ring by ring if the sample is given
+that CRS, but rows along parallels of longitude and latitude are curved on
+the Earth, so a grid laid out in degrees doesn't peel by whole rows. These are the sample's convex layers (onion peeling). A step
 can remove many points, so the nest has few steps; on a regular grid each step
 takes off the outer ring. It stops before a layer would leave fewer than
 `min_points` points.

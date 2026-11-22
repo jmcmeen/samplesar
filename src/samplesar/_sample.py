@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
@@ -10,7 +11,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from pyproj import CRS, Transformer
+from pyproj import CRS, Proj, Transformer
+from pyproj.exceptions import ProjError
 from shapely.geometry import MultiPoint
 
 COLUMNS = ("species", "lon", "lat")
@@ -34,12 +36,21 @@ def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
     lat = pd.to_numeric(out["lat"], errors="coerce")
     if lon.isna().any() or lat.isna().any():
         raise ValueError("Coordinates must be numeric with no missing values")
-    if crs is not None and crs != WGS84:
-        to_wgs84 = Transformer.from_crs(crs, WGS84, always_xy=True)
-        x, y = to_wgs84.transform(lon.to_numpy(float), lat.to_numpy(float))
+    converted = crs is not None and crs != WGS84
+    if converted:
+        assert crs is not None
+        try:
+            to_wgs84 = Transformer.from_crs(crs, WGS84, always_xy=True)
+            x, y = to_wgs84.transform(lon.to_numpy(float), lat.to_numpy(float))
+        except ProjError as err:
+            raise ValueError(f"Can't convert coordinates in {crs.name} to WGS84: {err}") from err
         if not (np.isfinite(x).all() and np.isfinite(y).all()):
             raise ValueError(f"Some coordinates fall outside {crs.name}.")
         lon, lat = pd.Series(x), pd.Series(y)
+    out_of_range = ((lat < -90) | (lat > 90)).any() or ((lon < -180) | (lon > 180)).any()
+    if out_of_range and converted:
+        assert crs is not None
+        raise ValueError(f"Some coordinates fall outside {crs.name}'s area once converted.")
     if ((lat < -90) | (lat > 90)).any():
         raise ValueError("lat must be within [-90, 90]")
     if ((lon < -180) | (lon > 180)).any():
@@ -81,6 +92,13 @@ class Sample:
     data: pd.DataFrame
     centre: tuple[float, float] | None = None
     crs: CRS | None = None
+
+    def __post_init__(self) -> None:
+        if self.centre is not None:
+            lon, lat = (float(v) for v in self.centre)
+            if not (np.isfinite(lon) and np.isfinite(lat) and -90 <= lat <= 90):
+                raise ValueError(f"centre must be a (lon, lat) in degrees, got {self.centre!r}.")
+            object.__setattr__(self, "centre", (lon, lat))
 
     @classmethod
     def from_df(
@@ -159,6 +177,8 @@ class Sample:
             If the species column is missing.
         """
         geometry = gdf.geometry
+        if (geometry.isna() | geometry.is_empty).any():
+            raise ValueError("Some geometries are missing or empty; every row needs a point.")
         kinds = set(geometry.geom_type)
         if kinds - {"Point"}:
             raise ValueError(f"Every geometry must be a point; found {', '.join(sorted(kinds))}.")
@@ -245,7 +265,37 @@ class Sample:
         if self.crs is not None:
             return self.crs
         lon, lat = self.projection_centre
-        return CRS.from_proj4(f"+proj=laea +lat_0={lat!r} +lon_0={lon!r} +ellps=WGS84 +units=m")
+        return CRS.from_proj4(
+            f"+proj=laea +lat_0={lat:.12f} +lon_0={lon:.12f} +ellps=WGS84 +units=m"
+        )
+
+    @cached_property
+    def area_scale(self) -> float:
+        """How much [`projection`][samplesar.Sample.projection] enlarges areas
+        at [`projection_centre`][samplesar.Sample.projection_centre]; areas
+        are divided by it.
+
+        1 for the default equal-area projection, about 1 for UTM within its
+        zone, and 4 for Web Mercator at 60° latitude (where the corrected
+        areas are good to a few 0.1%: Web Mercator treats WGS84 coordinates as
+        if on a sphere). A warning is given if it
+        varies by more than 1% across the sample, where one factor can't
+        correct every part of it.
+        """
+        if self.crs is None:
+            return 1.0
+        proj = Proj(self.crs)
+        lon, lat = self.projection_centre
+        scale = float(proj.get_factors(lon, lat).areal_scale)
+        across = np.asarray(proj.get_factors(self.points[:, 0], self.points[:, 1]).areal_scale)
+        if across.size and (across.max() / across.min() > 1.01):
+            warnings.warn(
+                f"{self.crs.name} distorts areas by {across.min():.3g}x to {across.max():.3g}x "
+                "across this sample, so its areas are only approximate; a CRS that is "
+                "equal-area here, or none (the default projection), measures them truly.",
+                stacklevel=2,
+            )
+        return scale
 
     @cached_property
     def xy(self) -> np.ndarray:
@@ -268,11 +318,13 @@ class Sample:
     def area(self) -> float:
         """Area of the convex hull of the points, in km².
 
-        Measured on [`xy`][samplesar.Sample.xy]: by default an equal-area
-        projection centred on the sample, or the sample's ``crs``.
-        Zero when fewer than three distinct, non-collinear points remain.
+        Measured on [`xy`][samplesar.Sample.xy] and divided by
+        [`area_scale`][samplesar.Sample.area_scale]: true areas on the
+        default equal-area projection, and corrected for a ``crs``'s area
+        distortion. Zero when fewer than three distinct, non-collinear points
+        remain.
         """
-        return hull_area(self.xy)
+        return hull_area(self.xy) / self.area_scale
 
     def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at some of the sample's points.
@@ -289,8 +341,8 @@ class Sample:
         """
         keep = self.points[list(point_indices)]
         mask = pd.MultiIndex.from_frame(self.data[["lon", "lat"]]).isin([tuple(p) for p in keep])
-        centre = self.projection_centre if self.crs is None else self.centre
-        return Sample(self.data.loc[mask].reset_index(drop=True), centre=centre, crs=self.crs)
+        data = self.data.loc[mask].reset_index(drop=True)
+        return Sample(data, centre=self.projection_centre, crs=self.crs)
 
     def __repr__(self) -> str:
         return (
@@ -303,9 +355,14 @@ def _parse_crs(crs: Any) -> CRS | None:
     if crs is None:
         return None
     try:
-        return CRS.from_user_input(crs)
+        parsed = CRS.from_user_input(crs)
     except Exception as err:  # pyproj raises CRSError; anything else is equally unusable
         raise ValueError(f"Not a coordinate reference system: {crs!r} ({err})") from err
+    if not (parsed.is_geographic or parsed.is_projected):
+        raise ValueError(
+            f"{parsed.name} is neither geographic nor projected; give a CRS for points."
+        )
+    return parsed
 
 
 def centre_of(points: np.ndarray) -> tuple[float, float]:

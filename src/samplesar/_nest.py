@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from pyproj import CRS
+from pyproj.exceptions import CRSError
 
 from samplesar._registry import Options, register_strategy
 from samplesar._sample import Sample, hull_area, point_species
@@ -93,7 +94,7 @@ class Nest:
                 {
                     "step": i,
                     "n_points": len(idx),
-                    "area": hull_area(points[idx]),
+                    "area": hull_area(points[idx]) / self.sample.area_scale,
                     "species": int(np.count_nonzero(holders)),
                 }
             )
@@ -187,11 +188,14 @@ class Nest:
         centre = data.get("centre")
         crs = data.get("crs")
         if centre is not None or crs is not None:
-            sample = dataclasses.replace(
-                sample,
-                centre=tuple(centre) if centre is not None else None,
-                crs=CRS.from_wkt(crs) if crs is not None else None,
-            )
+            try:
+                sample = dataclasses.replace(
+                    sample,
+                    centre=tuple(centre) if centre is not None else None,
+                    crs=CRS.from_wkt(crs) if crs is not None else None,
+                )
+            except (TypeError, ValueError, CRSError) as err:
+                raise ValueError(f"The saved centre or crs is unusable: {err}") from err
         remaining = _indices(data["first"])
         if remaining.size and (remaining.min() < 0 or remaining.max() >= sample.n_points):
             raise ValueError("The saved steps name points outside the saved sample.")
@@ -293,7 +297,7 @@ def check_size(sample: Sample, min_points: int) -> None:
 
 
 FORMAT = "samplesar.nest"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2  # 2 adds the sample's centre and crs
 
 
 def _package_version() -> str:

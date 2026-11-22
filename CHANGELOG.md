@@ -22,7 +22,9 @@ All notable changes to this project are documented here. The format is based on
 - `Sample.from_df(..., crs=...)` takes coordinates in any coordinate reference
   system; in a projected one (UTM, a national grid) areas and distances are
   measured in it. `Sample.from_geodataframe()` reads point GeoDataFrames
-  (geopandas isn't required). `Sample.xy`, `Sample.projection`.
+  (geopandas isn't required). `Sample.xy`, `Sample.projection`; areas in a
+  CRS that isn't equal-area are corrected by its area distortion
+  (`Sample.area_scale`).
 
 ### Changed
 

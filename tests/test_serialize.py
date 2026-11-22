@@ -53,7 +53,7 @@ def test_round_trip(sample, tmp_path, make):
 
 def test_steps_are_stored_as_removals(sample):
     data = samplesar.random_nest(sample, seed=0).to_dict()
-    assert data["format"] == "samplesar.nest" and data["version"] == 1
+    assert data["format"] == "samplesar.nest" and data["version"] == 2
     assert len(data["first"]) == sample.n_points
     assert all(len(gone) == 1 for gone in data["removed"])
     json.dumps(data)
@@ -80,6 +80,8 @@ def test_steps_that_are_not_nested_cannot_be_saved(sample):
         ({"first": [0, 0, 1]}, "repeats a point"),
         ({"first": [0.5, 1]}, "whole-number point indices"),
         ({"version": "2"}, "whole number"),
+        ({"centre": [1]}, "centre or crs is unusable"),
+        ({"crs": "garbage"}, "centre or crs is unusable"),
         ({"observations": None, "first": None}, None),
     ],
 )
@@ -128,3 +130,9 @@ def test_round_trip_keeps_the_crs_and_centre(tmp_path):
         again = samplesar.Nest.from_dict(nest.to_dict())
         assert again.sample.crs == sample.crs and again.sample.centre == sample.centre
         pd.testing.assert_frame_equal(again.to_frame(), nest.to_frame())
+
+
+def test_reads_format_version_1(sample):
+    data = samplesar.random_nest(sample, seed=0).to_dict()
+    old = {k: v for k, v in data.items() if k not in ("centre", "crs")} | {"version": 1}
+    assert samplesar.Nest.from_dict(old).n_steps == sample.n_points - 2
