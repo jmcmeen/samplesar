@@ -6,9 +6,11 @@ import hashlib
 import logging
 import os
 import urllib.request
+import zipfile
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import shapely
 from shapely.geometry import box
@@ -76,12 +78,34 @@ def _local(source: str | Path, cache_dir: str | Path | None) -> Path:
         return path
     cache = cache_root(cache_dir, "regions")
     cache.mkdir(parents=True, exist_ok=True)
-    name = text.rstrip("/").rsplit("/", 1)[-1] or "boundary"
+    name = urlsplit(text).path.rstrip("/").rsplit("/", 1)[-1] or "boundary"
     path = cache / f"{hashlib.sha1(text.encode()).hexdigest()[:10]}_{name}"
+    zipped = path.with_name(path.name + ".zip")
+    if zipped.exists():
+        return zipped
     if not path.exists():
         logger.info("Downloading %s", text)
         _fetch_to(text, path)
+        if path.suffix.lower() != ".zip" and zipfile.is_zipfile(path):
+            os.replace(path, zipped)  # GDAL opens zips only by their extension
+            return zipped
     return path
+
+
+def _key(value: Any) -> str:
+    """A value as text for matching: case folded, and without a float's
+    trailing ``.0``, so ``66``, ``"66"`` and ``66.0`` match."""
+    text = str(value).strip().casefold()
+    if text.endswith(".0") and text[:-2].lstrip("-").isdigit():
+        return text[:-2]
+    return text
+
+
+def _box(west: float, south: float, east: float, north: float) -> Any:
+    """A box in degrees; west > east crosses the antimeridian."""
+    if west > east:
+        return shapely.union_all([box(west, south, 180, north), box(-180, south, east, north)])
+    return box(west, south, east, north)
 
 
 def _geopandas() -> Any:
@@ -120,11 +144,12 @@ def read_boundary(
     column : str, optional
         The column to select rows by. By default every row is used.
     values : iterable, optional
-        Keep rows whose ``column`` is one of these, compared as text without
-        regard to case (so codes may be given as ``"66"`` or ``66``).
+        Keep rows whose ``column`` is one of these (or this one value),
+        compared as text without regard to case, so codes may be given as
+        ``"66"``, ``66`` or ``66.0``.
     clip : tuple of float or polygon, optional
-        Cut the region to a (west, south, east, north) box in degrees, or to
-        a polygon (as ``Sample.within`` takes).
+        Cut the region to a (west, south, east, north) box in degrees (west
+        greater than east crosses the antimeridian), or to a polygon (as ``Sample.within`` takes).
     cache_dir : str or Path, optional
         Where downloads are kept; by default ``regions`` under
         ``$SAMPLESAR_CACHE``, or ``samplesar/regions`` under
@@ -157,14 +182,18 @@ def read_boundary(
         raise ValueError("Give column and values together, or neither.")
     gpd = _geopandas()
     path = _local(source, cache_dir)
-    frame = gpd.read_file(f"zip://{path}" if path.suffix == ".zip" else path)
+    frame = gpd.read_file(f"zip://{path}" if path.suffix.lower() == ".zip" else path)
     if column is not None and values is not None:
         if column not in frame.columns:
             raise KeyError(
                 f"No column {column!r}; the file has {', '.join(map(str, frame.columns))}."
             )
-        wanted = [str(v).casefold() for v in values]
-        present = frame[column].astype(str).str.casefold()
+        if isinstance(values, str | bytes) or not isinstance(values, Iterable):
+            values = [values]
+        wanted = [_key(v) for v in values]
+        if not wanted:
+            raise ValueError(f"No values given to select {column} by.")
+        present = frame[column].map(_key)
         missing = [v for v in wanted if v not in set(present)]
         if missing:
             available = sorted(set(frame[column].astype(str)))
@@ -176,7 +205,7 @@ def read_boundary(
     region = shapely.union_all(shapely.make_valid(frame.geometry.to_numpy()))
     if clip is not None:
         if isinstance(clip, tuple | list) and len(clip) == 4:
-            region = region.intersection(box(*clip))
+            region = region.intersection(_box(*clip))
         else:
             from samplesar._boundary import as_geometry
 
@@ -187,7 +216,9 @@ def read_boundary(
         if g.geom_type in ("Polygon", "MultiPolygon") and not g.is_empty
     ]
     if not parts:
-        raise ValueError("Nothing of the region is left after clipping.")
+        raise ValueError(
+            "Nothing of the region is left" + (" after clipping." if clip is not None else ".")
+        )
     return parts[0] if len(parts) == 1 else shapely.union_all(parts)
 
 

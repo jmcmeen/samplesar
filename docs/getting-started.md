@@ -110,7 +110,9 @@ southern_appalachians = samplesar.ecoregion(
 salamanders = samplesar.Sample.from_open_data(
     parquet, boundary=southern_appalachians, taxon_id=26718
 )
-``` geoBoundaries' files carry
+```
+
+geoBoundaries' files carry
 their own licenses (CC BY 4.0 or ODbL) and need attribution when published.
 
 ## A nest

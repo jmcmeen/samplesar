@@ -106,3 +106,69 @@ def test_ecoregion_uses_the_dataset_columns(provinces, monkeypatch):
 def test_ecoregion_bad_arguments(kwargs, match):
     with pytest.raises(ValueError, match=match):
         samplesar.ecoregion(**kwargs)
+
+
+def test_a_single_value_and_numbers(provinces):
+    assert (
+        samplesar.read_boundary(provinces, "CODE", "66").symmetric_difference(box(0, 0, 1, 2)).area
+        < 1e-9
+    )
+    assert (
+        samplesar.read_boundary(provinces, "CODE", 67).symmetric_difference(box(1, 0, 2, 2)).area
+        < 1e-9
+    )
+    assert (
+        samplesar.read_boundary(provinces, "CODE", [66.0])
+        .symmetric_difference(box(0, 0, 1, 2))
+        .area
+        < 1e-9
+    )
+
+
+def test_a_float_column_matches_integer_codes(tmp_path):
+    path = tmp_path / "ids.gpkg"
+    gpd.GeoDataFrame(
+        {"ECO_ID": [66.0, 67.0]}, geometry=[box(0, 0, 1, 1), box(1, 0, 2, 1)], crs=4326
+    ).to_file(path)
+    assert (
+        samplesar.read_boundary(path, "ECO_ID", ["66"]).symmetric_difference(box(0, 0, 1, 1)).area
+        < 1e-9
+    )
+
+
+def test_no_values(provinces):
+    with pytest.raises(ValueError, match="No values given"):
+        samplesar.read_boundary(provinces, "CODE", [])
+
+
+def test_a_clip_across_the_antimeridian(tmp_path):
+    path = tmp_path / "pacific.gpkg"
+    gpd.GeoDataFrame(
+        {"N": [1, 2]}, geometry=[box(170, 0, 180, 1), box(-180, 0, -170, 1)], crs=4326
+    ).to_file(path)
+    clipped = samplesar.read_boundary(path, clip=(175, 0, -175, 1))
+    expected = box(175, 0, 180, 1).union(box(-180, 0, -175, 1))
+    assert clipped.symmetric_difference(expected).area < 1e-9
+
+
+def test_a_zip_at_a_url_with_a_query(tmp_path, monkeypatch):
+    import zipfile
+
+    shp = tmp_path / "shp"
+    shp.mkdir()
+    gpd.GeoDataFrame({"CODE": ["1"]}, geometry=[box(0, 0, 1, 1)], crs=4326).to_file(shp / "r.shp")
+    archive = tmp_path / "r.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        for f in shp.iterdir():
+            z.write(f, f.name)
+
+    monkeypatch.setattr(
+        _regions, "_fetch_to", lambda url, path: path.write_bytes(archive.read_bytes())
+    )
+    cache = tmp_path / "cache"
+    region = samplesar.read_boundary(
+        "https://example.org/download?id=3&format=shp", cache_dir=cache
+    )
+    assert region.symmetric_difference(box(0, 0, 1, 1)).area < 1e-9
+    assert [f.name.split("_", 1)[1] for f in cache.iterdir()] == ["download.zip"]
+    samplesar.read_boundary("https://example.org/download?id=3&format=shp", cache_dir=cache)
