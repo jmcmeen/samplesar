@@ -6,6 +6,7 @@ import warnings
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import sars
 
@@ -156,3 +157,115 @@ def _at_bounds(fit: Any) -> Any:
     missing value (``pd.NA``) in the table with a sars that can't tell."""
     names = getattr(fit, "at_bounds", None)
     return pd.NA if names is None else tuple(names)
+
+
+def random_baseline(
+    sample: Any,
+    model: str = "power",
+    n: int = 99,
+    seed: int = 0,
+    strategy: str = "random",
+    **options: Any,
+) -> pd.DataFrame:
+    """Fit a model to many seeded random nests of a sample: a baseline.
+
+    Steps of one nest share most of their points, so one nest's R² and AICc
+    aren't independent evidence. Compare a strategy's fit with the spread of
+    fits from random nests of the same sample instead (see
+    [`compare_to_baseline`][samplesar.compare_to_baseline]).
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    model : str
+        A sars model with one fit per dataset, such as ``"power"``.
+    n : int
+        How many random nests.
+    seed : int
+        The first seed; nest ``i`` uses ``seed + i``.
+    strategy : str
+        A random strategy: ``"random"`` (S1) or ``"hull_random"`` (S2).
+    **options
+        Passed to the strategy, such as ``min_points``.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per nest, as [`compare_nests`][samplesar.compare_nests]
+        gives, indexed by seed.
+
+    Raises
+    ------
+    ValueError
+        If ``n`` is below 1 or ``strategy`` takes no seed.
+    """
+    from samplesar._registry import nest as run
+
+    if n < 1:
+        raise ValueError(f"n must be at least 1, got {n}.")
+    if strategy not in ("random", "hull_random"):
+        raise ValueError(f"strategy must be 'random' or 'hull_random', got {strategy!r}.")
+    nests = {str(seed + i): run(sample, strategy, seed=seed + i, **options) for i in range(n)}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # bounds are reported per row instead
+        table = compare_nests(nests, model=model)
+    table.index = table.index.astype(int)
+    table.index.name = "seed"
+    return table
+
+
+def compare_to_baseline(nest: Nest, baseline: pd.DataFrame, model: str = "power") -> pd.DataFrame:
+    """Where a nest's fit falls among a baseline's.
+
+    Parameters
+    ----------
+    nest : Nest
+        The nest to place.
+    baseline : pd.DataFrame
+        From [`random_baseline`][samplesar.random_baseline], for the same
+        sample and model.
+    model : str
+        The model the baseline was fitted with.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per parameter and for ``r_squared``: the nest's ``value``,
+        the baseline's ``mean``, ``sd``, ``q025`` and ``q975``, and ``p``,
+        the two-sided rank p-value ``(1 + #as-extreme) / (n + 1)`` (as
+        extreme: at least as far from the baseline's median). Its ``attrs``
+        record ``at_bounds_share``, the share of baseline fits with a
+        parameter on a bound, whose values are bounds, not estimates.
+
+    Raises
+    ------
+    ValueError
+        If the baseline is empty or lacks the model's parameters.
+    """
+    if baseline.empty:
+        raise ValueError("The baseline is empty.")
+    fit = fit_nest(nest, model)
+    names = [*fit.params, "r_squared"]
+    missing = [p for p in names if p not in baseline.columns]
+    if missing:
+        raise ValueError(f"The baseline has no {', '.join(missing)}: fitted with another model?")
+    rows = {}
+    for name in names:
+        value = fit.params[name] if name in fit.params else fit.r_squared
+        values = baseline[name].to_numpy(dtype=float)
+        centre = np.median(values)
+        extreme = np.count_nonzero(np.abs(values - centre) >= abs(value - centre))
+        rows[name] = {
+            "value": value,
+            "mean": values.mean(),
+            "sd": values.std(ddof=1) if len(values) > 1 else np.nan,
+            "q025": np.quantile(values, 0.025),
+            "q975": np.quantile(values, 0.975),
+            "p": (1 + extreme) / (len(values) + 1),
+        }
+    table = pd.DataFrame.from_dict(rows, orient="index")
+    if "at_bounds" in baseline.columns:
+        known = baseline["at_bounds"].dropna()
+        table.attrs["at_bounds_share"] = float(known.map(bool).mean()) if len(known) else np.nan
+    return table

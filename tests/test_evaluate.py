@@ -152,3 +152,54 @@ def test_an_old_sars_leaves_at_bounds_unknown(sample, monkeypatch):
     monkeypatch.setattr(sars, "sar_power", no_attribute)
     table = samplesar.compare_nests({"a": samplesar.random_nest(sample, seed=0)})
     assert table.loc["a", "at_bounds"] is pd.NA
+
+
+class TestBaseline:
+    def test_random_baseline(self, sample):
+        baseline = samplesar.random_baseline(sample, n=5, seed=10)
+        assert list(baseline.index) == [10, 11, 12, 13, 14] and baseline.index.name == "seed"
+        assert {"c", "z", "r_squared", "at_bounds"} <= set(baseline.columns)
+        again = samplesar.random_baseline(sample, n=5, seed=10)
+        pd.testing.assert_frame_equal(baseline, again)
+
+    def test_hull_random_baseline(self, sample):
+        baseline = samplesar.random_baseline(sample, n=3, strategy="hull_random")
+        assert len(baseline) == 3
+
+    def test_compare_to_baseline(self, sample):
+        baseline = samplesar.random_baseline(sample, n=19, strategy="hull_random")
+        nest = samplesar.hull_peel_nest(sample)
+        table = samplesar.compare_to_baseline(nest, baseline)
+        assert list(table.index) == ["c", "z", "r_squared"]
+        assert table.loc["z", "value"] == pytest.approx(nest.fit().params["z"])
+        assert (table["p"] > 0).all() and (table["p"] <= 1).all()
+        assert table.loc["z", "q025"] <= table.loc["z", "q975"]
+        share = table.attrs["at_bounds_share"]
+        assert np.isnan(share) or 0 <= share <= 1  # unknown with a sars without at_bounds
+
+    def test_a_member_of_the_baseline_isnt_extreme(self, sample):
+        baseline = samplesar.random_baseline(sample, n=19, seed=0)
+        table = samplesar.compare_to_baseline(samplesar.random_nest(sample, seed=0), baseline)
+        # The nest is one of the baseline's own; p is at least 1/(n+1) by construction.
+        assert table.loc["z", "p"] >= 1 / 20
+
+    def test_rank_p_value_by_hand(self, sample, monkeypatch):
+        baseline = pd.DataFrame(
+            {"c": [1.0, 2, 3, 4], "z": [0.1, 0.2, 0.3, 0.4], "r_squared": [0.5] * 4}
+        )
+        nest = samplesar.random_nest(sample, seed=0)
+        z = nest.fit().params["z"]
+        table = samplesar.compare_to_baseline(nest, baseline)
+        centre = 0.25
+        extreme = sum(abs(v - centre) >= abs(z - centre) for v in [0.1, 0.2, 0.3, 0.4])
+        assert table.loc["z", "p"] == pytest.approx((1 + extreme) / 5)
+
+    def test_bad_arguments(self, sample):
+        with pytest.raises(ValueError, match="n must be at least 1"):
+            samplesar.random_baseline(sample, n=0)
+        with pytest.raises(ValueError, match="strategy must be"):
+            samplesar.random_baseline(sample, strategy="hull_peel")
+        with pytest.raises(ValueError, match="empty"):
+            samplesar.compare_to_baseline(samplesar.random_nest(sample), pd.DataFrame())
+        with pytest.raises(ValueError, match="another model"):
+            samplesar.compare_to_baseline(samplesar.random_nest(sample), pd.DataFrame({"a": [1.0]}))

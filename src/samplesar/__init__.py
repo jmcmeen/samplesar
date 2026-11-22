@@ -2,7 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from samplesar._evaluate import compare_nests
+from samplesar._evaluate import compare_nests, compare_to_baseline, random_baseline
 from samplesar._hull import (
     hull_area_nest,
     hull_distance_nest,
@@ -27,6 +27,7 @@ __all__ = [
     "__version__",
     "animate_nest",
     "compare_nests",
+    "compare_to_baseline",
     "download_open_data",
     "hull_area",
     "hull_area_nest",
@@ -38,6 +39,7 @@ __all__ = [
     "nest_from_order",
     "plot_nest",
     "plot_nest_curve",
+    "random_baseline",
     "random_nest",
     "register_strategy",
     "strategies",

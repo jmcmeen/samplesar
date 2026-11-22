@@ -122,6 +122,20 @@ first step, so their slopes are shallower. Nested steps share most of their
 points, so R² and AICc describe how smooth a strategy's curve is, not
 independent evidence: compare them across strategies on the same sample.
 
+## Against a random baseline
+
+Steps of one nest share most of their points, so its R² and AICc aren't
+independent evidence. Compare a strategy with the spread of fits from many
+random nests of the same sample instead:
+
+```python
+baseline = samplesar.random_baseline(sample, n=99, strategy="hull_random")
+samplesar.compare_to_baseline(samplesar.hull_peel_nest(sample), baseline)
+```
+
+Each parameter gets the nest's value, the baseline's mean, spread and 95%
+range, and a two-sided rank p-value.
+
 ## Adding a strategy
 
 A new sampling design is a function that takes a `Sample` and its options as

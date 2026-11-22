@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `random_baseline()` and `compare_to_baseline()`: fit a model to many
+  seeded random nests of a sample, and place a strategy's fit among them
+  (mean, spread, quantiles and a rank p-value per parameter), since one
+  nest's R² and AICc aren't independent evidence.
 - `Sample.merge_within(metres)`: merge points within a distance of each
   other into one, keeping every observation, so records at one spot (GPS jitter) don't
   make the last steps of a hull nest measure centimetre-wide hulls.
