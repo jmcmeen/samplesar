@@ -34,6 +34,22 @@
 
 ::: samplesar.strategies.concave_peel
 
+## strategies.radial
+
+::: samplesar.strategies.radial
+
+## strategies.sweep
+
+::: samplesar.strategies.sweep
+
+## strategies.density_peel
+
+::: samplesar.strategies.density_peel
+
+## strategies.grow
+
+::: samplesar.strategies.grow
+
 ## strategies.run
 
 ::: samplesar.strategies.run

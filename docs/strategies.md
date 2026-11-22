@@ -100,6 +100,43 @@ vertex farthest from the centroid of the hull's vertices (in km on the
 sample's projection), trimming outlying corners first. `remove="closest"` removes the vertex nearest
 the centre and leaves the outliers to last. Ties go to the lowest point index.
 
+## By a fixed ranking
+
+These strategies rank every point once and remove them in that order, one per
+step. They don't re-measure the hull at each step, so they're fast on large
+samples. Each one models a different way a study area can shrink. Ties go to
+the lowest point index. Areas are still convex hull areas.
+
+### Radial
+
+`strategies.radial(sample, centre=None, min_points=3)` removes the point
+farthest from a centre, so the sample shrinks as concentric discs: the
+point-data analogue of nested circular plots around a focal site. `centre` is
+a (longitude, latitude), by default the mean of the projected points.
+
+### Sweep
+
+`strategies.sweep(sample, bearing=90.0, min_points=3)` removes points in order
+along a bearing (degrees clockwise from grid north), like a front moving
+across the sample: a transect walked from one end, or a range edge retreating.
+With the default of 90°, the westernmost point goes first.
+
+### Density peeling
+
+`strategies.density_peel(sample, bandwidth_km=None, min_points=3)` smooths the
+density of points once with a Gaussian kernel and removes the point of lowest
+density first. Each step keeps a superlevel set of that density, so the
+boundary follows where the observations are, not the outermost few, and
+isolated records go first. The default bandwidth uses Scott's rule.
+
+### Growing from a seed
+
+`strategies.grow(sample, seed=None, min_points=3)` grows a region from the
+point nearest `seed` by adding, each time, the point nearest the region
+(Prim's algorithm), and removes points in the reverse of that order. The last
+points left are around the seed, and the region follows dense corridors of
+observations rather than convex shapes.
+
 ## Comparing strategies
 
 `Nest.fit(model="power")` fits one of [sars](https://jmcmeen.github.io/sars/)'

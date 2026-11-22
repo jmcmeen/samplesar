@@ -24,6 +24,12 @@ All notable changes to this project are documented here. The format is based on
   records without geospatial issues, optionally by coordinate uncertainty
   and boundary.
 
+- Four strategies that rank every point once, which is fast on large samples:
+  `strategies.radial` (shrinking discs around a centre), `strategies.sweep`
+  (a front moving along a bearing), `strategies.density_peel` (lowest kernel
+  density first, giving kernel-smoothed boundaries) and `strategies.grow`
+  (the reverse of a region grown from a seed by nearest neighbours).
+
 ### Changed
 
 - **Breaking: the API is grouped by job, and the old top-level names are

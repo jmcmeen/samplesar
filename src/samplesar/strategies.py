@@ -14,18 +14,23 @@ from samplesar._hull import (
     hull_species,
 )
 from samplesar._nest import from_order, random
+from samplesar._ranked import density_peel, grow, radial, sweep
 from samplesar._registry import available, register, run
 
 __all__ = [
     "available",
     "concave_peel",
+    "density_peel",
     "from_order",
+    "grow",
     "hull_area",
     "hull_distance",
     "hull_peel",
     "hull_random",
     "hull_species",
+    "radial",
     "random",
     "register",
     "run",
+    "sweep",
 ]
