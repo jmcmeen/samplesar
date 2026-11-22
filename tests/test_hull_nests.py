@@ -166,14 +166,27 @@ def test_peeling_points_all_on_the_hull_is_an_error():
 
 def brute_force_choice(sample, before, score):
     """The vertex a rule-based strategy should remove from ``before``: highest
-    score, then farthest from the vertices' centroid, then lowest index."""
+    score, then farthest from the vertices' centroid, then lowest index, with
+    scores and distances compared to 9 significant figures."""
     points = sample.points
     vertices = hull_vertices(points, before)
     centre = points[vertices].mean(axis=0)
+
+    def rounded(x):
+        return float(f"{x:.9g}")
+
     return min(
         vertices,
-        key=lambda v: (-score(before[before != v]), -np.hypot(*(points[v] - centre)), v),
+        key=lambda v: (
+            -rounded(score(before[before != v])),
+            -rounded(np.hypot(*(points[v] - centre))),
+            v,
+        ),
     )
+
+
+def shifted(points, by=(-80.1, 35.2)):
+    return np.asarray(points, dtype=float) + by
 
 
 class TestHullAreaNest:
@@ -203,6 +216,17 @@ class TestHullAreaNest:
         # The four corners of a square are interchangeable.
         square = make_sample([[0, 0], [1, 0], [1, 1], [0, 1]])
         assert list(samplesar.hull_area_nest(square).steps[1]) == [1, 2, 3]
+
+    @pytest.mark.parametrize("keep", ["largest", "smallest"])
+    def test_reproducible_wherever_the_sample_lies(self, keep):
+        # A symmetric hexagon: its tied vertices get areas that differ in the
+        # last bits at real coordinates, which must not change the choice.
+        hexagon = [[0, 0], [0.3, 0], [0.3, 0.1], [0, 0.1], [0.15, 0.3], [0.15, -0.2], [0.1, 0.05]]
+        here = samplesar.hull_area_nest(make_sample(hexagon), keep=keep)
+        again = samplesar.hull_area_nest(make_sample(hexagon), keep=keep)
+        there = samplesar.hull_area_nest(make_sample(shifted(hexagon)), keep=keep)
+        for a, b, c in zip(here.steps, again.steps, there.steps, strict=True):
+            assert np.array_equal(a, b) and np.array_equal(a, c)
 
     def test_rejects_unknown_keep(self, sample):
         with pytest.raises(ValueError, match="keep must be"):

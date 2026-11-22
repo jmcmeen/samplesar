@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Literal
 
 import numpy as np
 import shapely
@@ -133,22 +134,33 @@ def _centre_distance(points: np.ndarray, vertices: np.ndarray) -> np.ndarray:
     return np.hypot(*(corners - corners.mean(axis=0)).T)
 
 
+def _near_max(values: np.ndarray) -> np.ndarray:
+    """Which values tie for the maximum, allowing for floating-point rounding:
+    geometrically equal areas or distances differ in their last bits once the
+    points sit at real longitudes and latitudes."""
+    return values >= values.max() - 1e-9 * max(float(np.abs(values).max()), 1e-300)
+
+
 def _pick(vertices: np.ndarray, score: np.ndarray, distance: np.ndarray) -> int:
-    """The vertex with the highest score; ties go to the one farthest from the
-    centre, then to the lowest point index."""
-    order = np.lexsort((vertices, -distance, -score))
-    return int(vertices[order[0]])
+    """The vertex with the highest score; ties (to within rounding) go to the
+    one farthest from the centre, then to the lowest point index."""
+    best = _near_max(score)
+    farthest = _near_max(np.where(best, distance, -np.inf))
+    return int(vertices[best & farthest].min())
 
 
-def hull_area_nest(sample: Sample, keep: str = "largest", min_points: int = 3) -> Nest:
+def hull_area_nest(
+    sample: Sample, keep: Literal["largest", "smallest"] = "largest", min_points: int = 3
+) -> Nest:
     """Nest a sample by removing the hull vertex that changes its area least or most.
 
     At each step every vertex of the current convex hull is tried, and the
     one whose removal leaves the largest hull (``keep="largest"``, the
     smallest loss of area) or the smallest hull (``keep="smallest"``, the
-    largest loss) goes. Ties go to the vertex farthest from the centroid of
-    the hull's vertices, then to the lowest point index, so the nest is
-    deterministic.
+    largest loss) goes. Ties, to within floating-point rounding, go to the
+    vertex farthest from the centroid of the hull's vertices, then to the
+    lowest point index, so the nest is deterministic and doesn't depend on
+    where the sample lies.
 
     Parameters
     ----------

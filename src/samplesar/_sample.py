@@ -189,4 +189,4 @@ def hull_area(points: np.ndarray) -> float:
     pts = np.asarray(points, dtype=float)
     if len(pts) < 3:
         return 0.0
-    return float(MultiPoint([tuple(p) for p in pts]).convex_hull.area)
+    return float(MultiPoint(pts).convex_hull.area)
