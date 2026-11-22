@@ -1,4 +1,4 @@
-# Makefile for nestsar development tasks.
+# Makefile for samplesar development tasks.
 # Dependency resolution and environment management use uv (https://docs.astral.sh/uv/).
 
 .DEFAULT_GOAL := help

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import nestsar
+import samplesar
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def sample():
             "lat": rng.uniform(36.5, 36.6, size=n),
         }
     )
-    return nestsar.Sample.from_df(df)
+    return samplesar.Sample.from_df(df)
 
 
 def test_sample_summary(sample):
@@ -28,19 +28,19 @@ def test_sample_summary(sample):
 
 def test_sample_validation():
     with pytest.raises(KeyError, match="Missing column"):
-        nestsar.Sample.from_df(pd.DataFrame({"species": ["a"], "x": [1.0], "lat": [1.0]}))
+        samplesar.Sample.from_df(pd.DataFrame({"species": ["a"], "x": [1.0], "lat": [1.0]}))
     with pytest.raises(ValueError, match="lat"):
-        nestsar.Sample.from_df(pd.DataFrame({"species": ["a"], "lon": [0.0], "lat": [95.0]}))
+        samplesar.Sample.from_df(pd.DataFrame({"species": ["a"], "lon": [0.0], "lat": [95.0]}))
 
 
 def test_sample_column_renames():
     df = pd.DataFrame({"taxon": ["a", "b"], "x": [0.0, 1.0], "y": [0.0, 1.0]})
-    s = nestsar.Sample.from_df(df, species_col="taxon", lon_col="x", lat_col="y")
+    s = samplesar.Sample.from_df(df, species_col="taxon", lon_col="x", lat_col="y")
     assert list(s.data.columns) == ["species", "lon", "lat"]
 
 
 def test_random_nest_is_nested_and_monotone(sample):
-    nest = nestsar.random_nest(sample, seed=1)
+    nest = samplesar.random_nest(sample, seed=1)
     assert nest.n_steps == sample.n_points - 3 + 1
     for before, after in zip(nest.steps, nest.steps[1:], strict=False):
         assert set(after) < set(before)
@@ -53,9 +53,9 @@ def test_random_nest_is_nested_and_monotone(sample):
 
 
 def test_random_nest_seed_is_reproducible(sample):
-    a = nestsar.random_nest(sample, seed=7)
-    b = nestsar.random_nest(sample, seed=7)
-    c = nestsar.random_nest(sample, seed=8)
+    a = samplesar.random_nest(sample, seed=7)
+    b = samplesar.random_nest(sample, seed=7)
+    c = samplesar.random_nest(sample, seed=8)
     assert all(np.array_equal(x, y) for x, y in zip(a.steps, b.steps, strict=True))
     assert any(not np.array_equal(x, y) for x, y in zip(a.steps, c.steps, strict=True))
 
@@ -63,12 +63,12 @@ def test_random_nest_seed_is_reproducible(sample):
 def test_random_nest_rejects_small_sample():
     df = pd.DataFrame({"species": ["a", "b"], "lon": [0.0, 1.0], "lat": [0.0, 1.0]})
     with pytest.raises(ValueError, match="at least 3"):
-        nestsar.random_nest(nestsar.Sample.from_df(df))
+        samplesar.random_nest(samplesar.Sample.from_df(df))
 
 
 def test_sar_data_fits_with_sars(sample):
     sars = pytest.importorskip("sars")
-    data = nestsar.random_nest(sample, seed=3).sar_data()
+    data = samplesar.random_nest(sample, seed=3).sar_data()
     assert list(data.columns) == ["area", "species"]
     assert (data["area"] > 0).all()
     fit = sars.sar_power(data)

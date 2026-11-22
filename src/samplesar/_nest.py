@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from nestsar._sample import Sample, hull_area
+from samplesar._sample import Sample, hull_area
 
 
 @dataclass(frozen=True)

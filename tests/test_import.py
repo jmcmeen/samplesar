@@ -1,5 +1,5 @@
-import nestsar
+import samplesar
 
 
 def test_version():
-    assert isinstance(nestsar.__version__, str)
+    assert isinstance(samplesar.__version__, str)
