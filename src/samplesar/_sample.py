@@ -40,10 +40,16 @@ def _validate(df: pd.DataFrame) -> pd.DataFrame:
 class Sample:
     """A set of georeferenced species observations.
 
-    Each row of ``data`` is one observation with columns ``species``, ``lon``,
-    and ``lat`` (decimal degrees). Several observations may share a point.
+    Build one with [`from_df`][samplesar.Sample.from_df] or
+    [`from_csv`][samplesar.Sample.from_csv] rather than directly: they check
+    and normalise the columns.
 
-    Build one with :meth:`from_df` or :meth:`from_csv`.
+    Attributes
+    ----------
+    data : pd.DataFrame
+        One row per observation, with columns ``species`` (str), ``lon`` and
+        ``lat`` (float, decimal degrees). Several observations may share a
+        point.
     """
 
     data: pd.DataFrame
@@ -56,21 +62,70 @@ class Sample:
         lon_col: str = "lon",
         lat_col: str = "lat",
     ) -> Sample:
-        """Build a sample from a DataFrame, renaming columns as needed."""
+        """Build a sample from a DataFrame.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            One row per observation. Other columns are dropped.
+        species_col : str
+            The column holding the species name.
+        lon_col : str
+            The column holding the longitude, in decimal degrees.
+        lat_col : str
+            The column holding the latitude, in decimal degrees.
+
+        Returns
+        -------
+        Sample
+
+        Raises
+        ------
+        KeyError
+            If a column is missing.
+        ValueError
+            If there are no rows, a species is missing, or a coordinate is
+            missing, not numeric or out of range.
+        """
         renamed = df.rename(columns={species_col: "species", lon_col: "lon", lat_col: "lat"})
         return cls(_validate(renamed))
 
     @classmethod
     def from_csv(cls, path: str | Path, **kwargs: str) -> Sample:
-        """Build a sample from a CSV file; ``kwargs`` are the column names for :meth:`from_df`."""
+        """Build a sample from a CSV file.
+
+        Parameters
+        ----------
+        path : str or Path
+            The CSV file, one row per observation.
+        **kwargs : str
+            ``species_col``, ``lon_col`` and ``lat_col``, as in
+            [`from_df`][samplesar.Sample.from_df]. Nothing else is passed to
+            the CSV reader.
+
+        Returns
+        -------
+        Sample
+
+        Raises
+        ------
+        KeyError
+            If a column is missing.
+        ValueError
+            As in [`from_df`][samplesar.Sample.from_df].
+        TypeError
+            If a keyword other than the three column names is given.
+        """
         return cls.from_df(pd.read_csv(path), **kwargs)
 
     @property
     def n_observations(self) -> int:
+        """The number of observations."""
         return len(self.data)
 
     @property
     def n_species(self) -> int:
+        """The number of distinct species."""
         return int(self.data["species"].nunique())
 
     @property
@@ -80,6 +135,7 @@ class Sample:
 
     @property
     def n_points(self) -> int:
+        """The number of distinct points."""
         return len(self.points)
 
     @property
@@ -87,14 +143,25 @@ class Sample:
         """Area of the convex hull of the points, in square degrees.
 
         Zero when fewer than three distinct, non-collinear points remain.
-        Square degrees are not a physical area; they are fine for ordering
+        Square degrees aren't a physical area; they are fine for ordering
         nested samples and for fitting within one sample, which is what the
         nesting strategies need. A projected area is planned.
         """
         return hull_area(self.points)
 
-    def subset(self, point_indices: Sequence[int]) -> Sample:
-        """The observations at the given rows of :attr:`points`."""
+    def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
+        """The observations at some of the sample's points.
+
+        Parameters
+        ----------
+        point_indices : sequence of int or np.ndarray
+            Rows of [`points`][samplesar.Sample.points] to keep.
+
+        Returns
+        -------
+        Sample
+            Every observation at those points.
+        """
         keep = self.points[list(point_indices)]
         mask = pd.MultiIndex.from_frame(self.data[["lon", "lat"]]).isin([tuple(p) for p in keep])
         return Sample(self.data.loc[mask].reset_index(drop=True))
@@ -107,8 +174,19 @@ class Sample:
 
 
 def hull_area(points: np.ndarray) -> float:
-    """Convex hull area of an (n, 2) array of (lon, lat) points, in square degrees."""
+    """Convex hull area of a set of points, in square degrees.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        Shape (n, 2): longitude and latitude.
+
+    Returns
+    -------
+    float
+        Zero for fewer than three points or collinear points.
+    """
     pts = np.asarray(points, dtype=float)
     if len(pts) < 3:
         return 0.0
-    return float(MultiPoint([tuple(p) for p in pts]).convex_hull.area)
+    return float(MultiPoint(pts).convex_hull.area)

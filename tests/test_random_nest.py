@@ -66,6 +66,12 @@ def test_random_nest_rejects_small_sample():
         samplesar.random_nest(samplesar.Sample.from_df(df))
 
 
+@pytest.mark.parametrize("min_points", [0, -1])
+def test_random_nest_rejects_min_points_below_one(sample, min_points):
+    with pytest.raises(ValueError, match="min_points must be at least 1"):
+        samplesar.random_nest(sample, min_points=min_points)
+
+
 def test_sar_data_fits_with_sars(sample):
     sars = pytest.importorskip("sars")
     data = samplesar.random_nest(sample, seed=3).sar_data()

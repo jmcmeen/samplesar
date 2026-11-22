@@ -6,43 +6,171 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Weekly, for the newest and minimum dependency versions (see those jobs); only
+  # a push to main triggers a release.
+  schedule:
+    - cron: "23 6 * * 1"
 
 permissions:
   contents: read
 
 concurrency:
-  # PR runs supersede each other. Every other run gets its own group, so each
-  # push to main finishes CI and can be released.
+  # A new push to a PR cancels its older run. Every other run gets its own group,
+  # so each push to main finishes CI and can be released.
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    name: test (py${{ matrix.python-version }})
+  lint:
+    name: lint
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0  # full history + tags for hatch-vcs versioning
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-          enable-cache: true
 
-      - name: Install
-        run: uv sync --extra dev
+      # Ruff only, no project install, at the exact version in uv.lock so CI
+      # and local `uv sync` lint with the same release.
+      - name: Resolve locked ruff version
+        run: |
+          version=$(awk '/^name = "ruff"$/{f=1} f && /^version = /{gsub(/"/,"",$3); print $3; exit}' uv.lock)
+          test -n "$version" || { echo "ruff not found in uv.lock" >&2; exit 1; }
+          echo "RUFF_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Lint
-        run: uv run ruff check src tests
+        run: uvx "ruff@$RUFF_VERSION" check src tests
 
       - name: Format check
-        run: uv run ruff format --check src tests
+        run: uvx "ruff@$RUFF_VERSION" format --check src tests
 
-      - name: Test
-        run: uv run pytest
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags, for the hatch-vcs version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      # The locked mypy and stubs, so CI and `make typecheck` agree.
+      - name: mypy
+        run: uv run --frozen --extra dev mypy
+
+  docs:
+    name: docs
+    # The site builds with --strict, so a broken reference or docstring fails the
+    # pull request rather than the deploy after a release.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags, for the hatch-vcs version
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+      - name: mkdocs build
+        run: uv run --frozen --extra docs mkdocs build --strict
+
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    # 3.15 is a pre-release: a failure there is reported but doesn't fail the run,
+    # so a pre-release regression can't block a merge or a release.
+    continue-on-error: ${{ matrix.python-version == '3.15' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pull requests test the oldest and newest stable Pythons; pushes to main
+        # (which release) and manual runs (the top of a PR stack) test them all.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11", "3.14"]' || '["3.11", "3.12", "3.13", "3.14", "3.15"]') }}
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags, for the hatch-vcs version
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "${{ matrix.python-version }}"
+          enable-cache: true
+      # Exactly the versions in uv.lock, so a failure comes from the change under
+      # test, not from a dependency's new release (the newest job catches those).
+      - run: uv sync --frozen --extra dev
+      # Coverage (only printed) runs on 3.14, which every run tests, with
+      # coverage's sys.monitoring core, much faster than its C tracer.
+      - name: pytest
+        run: |
+          cov=
+          if [ "${{ matrix.python-version }}" = "3.14" ]; then
+            cov="--cov --cov-report=term-missing"
+            export COVERAGE_CORE=sysmon
+          fi
+          uv run --frozen --no-sync pytest $cov --durations=10
+
+  minimums:
+    name: minimum dependencies
+    # The oldest numpy, pandas, shapely and sars pyproject.toml allows, on the
+    # oldest Python: what samplesar promises to work with. Not on pull requests
+    # (the floors rarely move); on pushes to main it gates the release.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags, for the hatch-vcs version
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+      # Each runtime dependency's floor (">=") pinned exactly; the dev tools
+      # resolve around them.
+      - name: Install the minimums
+        run: |
+          uv run --no-project --with packaging python - <<'PY' > minimums.txt
+          import tomllib
+          from packaging.requirements import Requirement
+          for dep in tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]:
+              req = Requirement(dep)
+              floors = [s.version for s in req.specifier if s.operator == ">="]
+              if not floors:
+                  raise SystemExit(f"{dep}: no >= floor to test")
+              print(f"{req.name}=={floors[0]}")
+          PY
+          cat minimums.txt
+          uv venv
+          uv pip install --constraint minimums.txt -e ".[dev]"
+      - name: pytest
+        run: uv run --no-sync pytest
+
+  newest:
+    name: newest dependencies
+    # The newest releases, ignoring uv.lock, to catch an upstream release that
+    # breaks samplesar before users do. Informational: a failure shows in the job
+    # list but doesn't fail the run or block a release.
+    if: github.event_name != 'pull_request'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags, for the hatch-vcs version
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+      - run: uv sync --upgrade --extra dev
+      - name: pytest
+        run: uv run --no-sync pytest

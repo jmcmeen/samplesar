@@ -9,7 +9,8 @@ TESTS := tests
 
 .PHONY: help install dev sync lock upgrade shell \
         test test-fast cov \
-        lint fmt fmt-check check \
+        lint fmt fmt-check typecheck check \
+        docs docs-serve \
         clean
 
 help: ## Show this help
@@ -58,10 +59,21 @@ fmt: ## Auto-format and apply lint fixes
 fmt-check: ## Check formatting without modifying files
 	$(UV) run --extra dev ruff format --check $(SRC) $(TESTS)
 
-check: lint fmt-check test ## Run lint, format check, and tests
+typecheck: ## Type-check src with mypy (settings in pyproject.toml)
+	$(UV) run --extra dev mypy
+
+check: lint fmt-check typecheck test docs ## Run lint, format check, type check, tests, and the docs build
+
+## --- Documentation (mkdocs) ---
+
+docs: ## Build the documentation site (strict)
+	$(UV) run --extra docs mkdocs build --strict
+
+docs-serve: ## Serve the documentation with live reload
+	$(UV) run --extra docs mkdocs serve
 
 ## --- Housekeeping ---
 
 clean: ## Remove caches and test/coverage build artifacts
-	rm -rf .pytest_cache .ruff_cache .coverage htmlcov dist
+	rm -rf .pytest_cache .ruff_cache .mypy_cache .coverage htmlcov dist site
 	find . -name .venv -prune -o -type d -name __pycache__ -prune -exec rm -rf {} +

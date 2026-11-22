@@ -1,0 +1,68 @@
+site_name: samplesar
+site_description: Species-area relationship datasets from geometric sampling of point observations
+site_url: https://jmcmeen.github.io/samplesar/
+repo_url: https://github.com/jmcmeen/samplesar
+repo_name: jmcmeen/samplesar
+
+theme:
+  name: material
+  # Light or dark to match the reader's system setting, with a toggle in the header.
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.expand
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+  - attr_list
+  - tables
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: false
+            show_root_heading: true
+            heading_level: 3
+            docstring_style: numpy
+            members_order: source
+            group_by_category: false
+            show_signature_annotations: true
+            separate_signature: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Sampling Strategies: strategies.md
+  - API Reference:
+      - Samples: api/sample.md
+      - Nests: api/nest.md
+      - Evaluation: api/evaluate.md

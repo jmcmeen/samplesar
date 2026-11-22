@@ -6,6 +6,41 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `hull_random_nest()`: nest a sample by removing a random vertex of its
+  convex hull at each step, so it shrinks from the outside in.
+- `hull_peel_nest()`: nest a sample by peeling off its whole convex hull
+  boundary at each step (convex layers).
+- `hull_area_nest()`: nest a sample by removing, at each step, the hull
+  vertex whose loss leaves the largest (or smallest) remaining hull.
+- `hull_species_nest()`: nest a sample by removing, at each step, the hull
+  vertex whose loss leaves the most (or fewest) species.
+- `hull_distance_nest()`: nest a sample by removing, at each step, the hull
+  vertex farthest from (or closest to) the centroid of the hull's vertices.
+- `Nest.fit()` and `compare_nests()`: fit a sars model to a nest, or the same
+  model to several nests (one row each: steps, parameters, R², AICc), to
+  compare sampling strategies.
+- `make typecheck` (mypy), part of `make check`; tests run in parallel.
+- A documentation site: getting started, the sampling strategies and an API
+  reference (`make docs`, built on every pull request, deployed on each
+  release).
+- CONTRIBUTING.md and CODE_OF_CONDUCT.md.
+
+### Changed
+
+- **Python 3.11 or newer is required.** 3.10 reached end of life in October
+  2026. The dependency floors move to versions with Python 3.11 wheels:
+  numpy 1.23.2 and pandas 1.5.
+- CI lints with the locked ruff version, type-checks with mypy, tests the
+  oldest and newest Pythons on pull requests and every supported Python on
+  `main`, and checks the minimum and newest allowed dependency versions.
+
+### Fixed
+
+- `random_nest()` rejects `min_points` below 1 with a clear message; 0 gave
+  a nest ending in an empty step and a negative value failed inside numpy.
+
 ## [0.1.0] - 2026-11-22
 
 The first release as samplesar. Releases 0.1.0 to 0.1.3 were published as
