@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- `plot_nest` shows at most a handful of coordinate ticks, so long
+  longitudes no longer run into each other.
+
 - A point on a hull edge that rounding pushed a hair outward (as in a grid
   laid out in a sample's UTM CRS) no longer counts as a hull vertex, so the
   vertex strategies can't pick it and it doesn't move the vertex centroid;

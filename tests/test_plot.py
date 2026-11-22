@@ -99,3 +99,10 @@ def test_a_sample_across_the_antimeridian_draws_in_one_piece():
     ax = samplesar.plot_nest(nest)
     left, right = ax.get_xlim()
     assert right - left < 2  # about a degree wide, not the whole globe
+
+
+def test_few_enough_ticks_not_to_overlap(nest):
+    ax = samplesar.plot_nest(nest)
+    left, right = ax.get_xlim()
+    shown = [x for x in ax.get_xticks() if left <= x <= right]
+    assert len(shown) <= 5

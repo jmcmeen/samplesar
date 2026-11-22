@@ -51,6 +51,11 @@ def _frame_axes(ax: Axes, points: np.ndarray) -> None:
     ax.set_aspect(1 / np.cos(np.radians(points[:, 1].mean())))
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
+    # Long coordinates (-82.245) collide when matplotlib picks many ticks.
+    from matplotlib.ticker import MaxNLocator
+
+    ax.xaxis.set_major_locator(MaxNLocator(4))
+    ax.yaxis.set_major_locator(MaxNLocator(5))
 
 
 def plot_nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: bool = True) -> Axes:
