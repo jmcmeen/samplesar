@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-22
+
 ### Added
 
 - `concave_peel_nest()` (registered as `"concave_peel"`): peel a sample by
