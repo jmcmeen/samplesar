@@ -93,7 +93,7 @@ class Sample:
         """
         return hull_area(self.points)
 
-    def subset(self, point_indices: Sequence[int]) -> Sample:
+    def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at the given rows of :attr:`points`."""
         keep = self.points[list(point_indices)]
         mask = pd.MultiIndex.from_frame(self.data[["lon", "lat"]]).isin([tuple(p) for p in keep])

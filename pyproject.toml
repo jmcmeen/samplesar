@@ -12,14 +12,13 @@ description = "Species-area relationship datasets from geometric sampling of poi
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -28,8 +27,8 @@ classifiers = [
 ]
 
 dependencies = [
-  "numpy>=1.22",
-  "pandas>=1.4",
+  "numpy>=1.23.2",
+  "pandas>=1.5",
   "shapely>=2.0",
   "sars>=0.7.10",
 ]
@@ -38,6 +37,9 @@ dependencies = [
 dev = [
   "pytest>=7.0",
   "pytest-cov",
+  "pytest-xdist",
+  "mypy",
+  "pandas-stubs",
   "ruff>=0.17,<0.18",  # pinned: minor releases change formatting; upgrade on purpose
 ]
 
@@ -58,6 +60,8 @@ testpaths = ["tests"]
 addopts = [
   "--tb=short",
   "--strict-markers",
+  # -n logical, not auto: auto counts physical cores, 2 on CI's 4-vCPU runners.
+  "-n", "logical",
 ]
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -67,8 +71,18 @@ markers = [
 [tool.coverage.run]
 source = ["src/samplesar"]
 
+[tool.mypy]
+files = ["src"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# No type information published for these.
+module = ["shapely.*"]
+ignore_missing_imports = true
+
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
 

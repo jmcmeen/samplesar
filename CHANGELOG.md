@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- **Python 3.11 or newer is required.** 3.10 reached end of life in October
+  2026. The dependency floors move to versions with Python 3.11 wheels:
+  numpy 1.23.2 and pandas 1.5.
+- CI lints with the locked ruff version, type-checks with mypy, tests the
+  oldest and newest Pythons on pull requests and every supported Python on
+  `main`, and checks the minimum and newest allowed dependency versions.
+
+### Added
+
+- `make typecheck` (mypy), part of `make check`; tests run in parallel.
+- CONTRIBUTING.md and CODE_OF_CONDUCT.md.
+
 ## [0.1.0] - 2026-11-22
 
 The first release as samplesar. Releases 0.1.0 to 0.1.3 were published as
