@@ -275,8 +275,8 @@ def against_baseline(nest: Nest, baseline: pd.DataFrame, model: str = "power") -
         values = values[np.isfinite(values)]
         if len(values) == 0:
             raise ValueError(f"No baseline fit has a finite {name}.")
-        centre = np.median(values)
-        extreme = np.count_nonzero(np.abs(values - centre) >= abs(value - centre))
+        center = np.median(values)
+        extreme = np.count_nonzero(np.abs(values - center) >= abs(value - center))
         rows[name] = {
             "value": value,
             "mean": values.mean(),

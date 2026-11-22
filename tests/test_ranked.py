@@ -49,18 +49,18 @@ def test_nested_one_point_per_step_and_reproducible(sample, strategy):
     assert nest.strategy in samplesar.strategies.available()
 
 
-def test_radial_removes_the_farthest_from_the_centre(sample):
+def test_radial_removes_the_farthest_from_the_center(sample):
     nest = samplesar.strategies.radial(sample)
-    centre = sample.xy.mean(axis=0)
+    center = sample.xy.mean(axis=0)
     for step, point in zip(nest.steps, removed(nest), strict=False):
-        distance = np.hypot(*(sample.xy[step] - centre).T)
+        distance = np.hypot(*(sample.xy[step] - center).T)
         assert point == step[np.argmax(distance)]
 
 
-def test_radial_around_a_given_centre():
+def test_radial_around_a_given_center():
     sample = km_sample([[0, 0], [1, 0], [3, 0], [6, 0], [10, 0]])
     lon, lat = sample.points[1]  # lon and lat of the second point
-    nest = samplesar.strategies.radial(sample, centre=(lon, lat), min_points=1)
+    nest = samplesar.strategies.radial(sample, center=(lon, lat), min_points=1)
     order = removed(nest)
     assert [tuple(np.round(sample.xy[i] - sample.xy[1], 6)) for i in order][:2] == [
         (9.0, 0.0),
@@ -136,7 +136,7 @@ def test_grow_leaves_the_seed_last():
 @pytest.mark.parametrize(
     ("call", "match"),
     [
-        (lambda s: samplesar.strategies.radial(s, centre=(500.0, 0.0)), "longitude, latitude"),
+        (lambda s: samplesar.strategies.radial(s, center=(500.0, 0.0)), "longitude, latitude"),
         (lambda s: samplesar.strategies.sweep(s, bearing=float("nan")), "bearing"),
         (lambda s: samplesar.strategies.density_peel(s, bandwidth_km=0.0), "positive"),
         (lambda s: samplesar.strategies.grow(s, min_points=0), "min_points"),

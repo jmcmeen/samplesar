@@ -167,7 +167,7 @@ def download_open_data(
     [`sources.open_data`][samplesar.sources.open_data].
 
     The export holds the observations with openly licensed photos, not all
-    of iNaturalist. Obscured observations carry their public, randomised
+    of iNaturalist. Obscured observations carry their public, randomized
     coordinates and aren't marked; ``positional_accuracy`` is there to filter
     on.
 

@@ -29,7 +29,7 @@ def _tolerance(hull: Polygon) -> float:
 
 
 def _off_line(corners: np.ndarray, before: np.ndarray, after: np.ndarray) -> np.ndarray:
-    """Each corner's distance from the line through its two neighbours."""
+    """Each corner's distance from the line through its two neighbors."""
     edge = after - before
     cross = np.abs(edge[:, 0] * (corners - before)[:, 1] - edge[:, 1] * (corners - before)[:, 0])
     return cross / np.maximum(np.hypot(edge[:, 0], edge[:, 1]), 1e-300)
@@ -37,14 +37,14 @@ def _off_line(corners: np.ndarray, before: np.ndarray, after: np.ndarray) -> np.
 
 def _true_corners(ring: np.ndarray, tolerance: float) -> np.ndarray:
     """The ring's corners without those within ``tolerance`` of the line
-    through their neighbours: edge points that rounding pushed outward. If
+    through their neighbors: edge points that rounding pushed outward. If
     what's left is a sliver (points collinear but for rounding), its two far
     ends."""
     corners = ring
     while len(corners) > 3:
         off = _off_line(corners, np.roll(corners, 1, axis=0), np.roll(corners, -1, axis=0))
         # One corner per pass, the flattest, so each later decision is made
-        # against the corner's current neighbours, not ones already dropped.
+        # against the corner's current neighbors, not ones already dropped.
         flattest = int(np.argmin(off))
         if off[flattest] > tolerance:
             break
@@ -132,7 +132,7 @@ def hull_random(sample: Sample, min_points: int = 3, seed: int | None = None) ->
 
 class _Isolation:
     """Each hull vertex's distance to its nearest other remaining point (km),
-    from one KD-tree of all the points: the nearest few neighbours are looked
+    from one KD-tree of all the points: the nearest few neighbors are looked
     up and the first still remaining is taken, falling back to a tree of the
     remaining points only when all of those are gone."""
 
@@ -316,14 +316,14 @@ def grid_peel(sample: Sample, cell_km: float, min_points: int = 3) -> Nest:
     xy = np.asarray(sample.xy)
     cell = grid_cells(xy, cell_km)
     n_cells = int(cell.max()) + 1
-    centres = np.zeros((n_cells, 2))
-    np.add.at(centres, cell, xy)  # each cell's centre: the mean of its points
-    centres /= np.bincount(cell, minlength=n_cells)[:, None]
+    centers = np.zeros((n_cells, 2))
+    np.add.at(centers, cell, xy)  # each cell's center: the mean of its points
+    centers /= np.bincount(cell, minlength=n_cells)[:, None]
     cells_left = np.arange(n_cells)
     remaining = np.arange(sample.n_points)
     steps = [remaining.copy()]
     while True:
-        cells_left = cells_left[~np.isin(cells_left, _on_boundary(centres, cells_left))]
+        cells_left = cells_left[~np.isin(cells_left, _on_boundary(centers, cells_left))]
         inside = remaining[np.isin(cell[remaining], cells_left)]
         if len(inside) < min_points:
             break
@@ -337,7 +337,7 @@ def grid_peel(sample: Sample, cell_km: float, min_points: int = 3) -> Nest:
     return Nest(sample=sample, steps=tuple(steps))
 
 
-def _centre_distance(points: np.ndarray, vertices: np.ndarray) -> np.ndarray:
+def _center_distance(points: np.ndarray, vertices: np.ndarray) -> np.ndarray:
     """Each vertex's distance from the centroid of the vertices (km)."""
     corners = points[vertices]
     return np.hypot(*(corners - corners.mean(axis=0)).T)
@@ -353,7 +353,7 @@ def _near_max(values: np.ndarray) -> np.ndarray:
 
 def _pick(vertices: np.ndarray, score: np.ndarray, distance: np.ndarray) -> int:
     """The vertex with the highest score; ties (to within rounding) go to the
-    one farthest from the centre, then to the lowest point index."""
+    one farthest from the center, then to the lowest point index."""
     tied = np.flatnonzero(_near_max(score))
     farthest = tied[_near_max(distance[tied])]
     return int(vertices[farthest].min())
@@ -402,7 +402,7 @@ def hull_area(
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
         areas = np.array([convex_area(points[remaining[remaining != v]]) for v in vertices])
-        return _pick(vertices, sign * areas, _centre_distance(points, vertices))
+        return _pick(vertices, sign * areas, _center_distance(points, vertices))
 
     return _remove_one(sample, min_points, choose)
 
@@ -453,7 +453,7 @@ def hull_species(
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
         lost = np.array([np.count_nonzero(holders[species[v]] == 1) for v in vertices])
-        drop = _pick(vertices, -sign * lost, _centre_distance(points, vertices))
+        drop = _pick(vertices, -sign * lost, _center_distance(points, vertices))
         holders[species[drop]] -= 1
         return drop
 
@@ -464,13 +464,13 @@ def hull_species(
 def hull_distance(
     sample: Sample, remove: Literal["farthest", "closest"] = "farthest", min_points: int = 3
 ) -> Nest:
-    """Nest a sample by removing the hull vertex farthest from, or closest to, its centre.
+    """Nest a sample by removing the hull vertex farthest from, or closest to, its center.
 
-    The centre is the centroid of the current hull's vertices, and distances
+    The center is the centroid of the current hull's vertices, and distances
     are in km on the sample's projection (see
     [`Sample.xy`][samplesar.Sample.xy]). ``remove="farthest"`` trims the
     outlying corners first; ``remove="closest"`` removes the vertex nearest
-    the centre, leaving the outliers to last. Ties, to within floating-point
+    the center, leaving the outliers to last. Ties, to within floating-point
     rounding, go to the lowest point index.
 
     Parameters
@@ -498,7 +498,7 @@ def hull_distance(
     points = sample.xy
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
-        distance = _centre_distance(points, vertices)
+        distance = _center_distance(points, vertices)
         return _pick(vertices, sign * distance, np.zeros(len(vertices)))
 
     return _remove_one(sample, min_points, choose)

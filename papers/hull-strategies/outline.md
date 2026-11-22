@@ -30,7 +30,7 @@ choice changes the fitted relationship.
 - **Strategies.** The nine strategies, S1 to S9, defined formally in
   [strategies.md](strategies.md): random removal (the baseline), a random
   hull vertex, hull peeling, and greedy choices of the hull vertex by area,
-  species and distance from the centre.
+  species and distance from the center.
 - **Area.** Convex hull areas on an equal-area projection (km²), so
   parameters compare across latitudes.
 - **Fitting.** The power model and multi-model averaging with sars, on each
@@ -72,12 +72,12 @@ choice changes the fitted relationship.
 On the Steele Creek Park sample (all nine strategies):
 
 - **Strategies split into two groups.** Random removal (S1) and removing the
-  vertex closest to the centre (S9) keep nearly the full extent until the
+  vertex closest to the center (S9) keep nearly the full extent until the
   end, giving near-vertical curves that drive the power model's $z$ to its
   bound. The other hull strategies give $z \approx 0.07$.
 - **Co-located records dominate the end of every hull nest.** Many records
   share a spot to within GPS jitter, so the last few hundred steps measure
-  centimetre-scale hulls. Merging points within a distance, or a minimum
+  centimeter-scale hulls. Merging points within a distance, or a minimum
   area, is needed before fitting (samplesar #46), and is itself a methods
   result.
 

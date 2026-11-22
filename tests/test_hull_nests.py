@@ -40,7 +40,7 @@ UTM_17N = "EPSG:32617"
 
 
 def grid(k, spacing=100.0):
-    """A k-by-k grid of points laid out in UTM zone 17N, in metres."""
+    """A k-by-k grid of points laid out in UTM zone 17N, in meters."""
     xs, ys = np.meshgrid(np.arange(k), np.arange(k))
     return np.column_stack([xs.ravel(), ys.ravel()]) * spacing + [500_000.0, 4_000_000.0]
 
@@ -85,7 +85,7 @@ def test_a_row_collinear_but_for_rounding_has_two_ends():
 
 
 def test_a_real_bend_is_kept():
-    # A corner well off the line through its neighbours stays a vertex.
+    # A corner well off the line through its neighbors stays a vertex.
     points = np.array([[0, 0], [1, -1e-3], [2, 0], [2, 2], [0, 2]], dtype=float)
     assert list(hull_vertices(points, np.arange(5))) == [0, 1, 2, 3, 4]
 
@@ -118,7 +118,7 @@ class TestHullRandomNest:
         assert any(not np.array_equal(x, y) for x, y in zip(a.steps, c.steps, strict=True))
 
     def test_interior_point_outlasts_the_corners(self):
-        # A centre point is never a vertex while three or more corners remain.
+        # A center point is never a vertex while three or more corners remain.
         corners = [[0, 0], [1, 0], [1, 1], [0, 1]]
         nest = samplesar.strategies.hull_random(make_sample([*corners, [0.5, 0.5]]), seed=0)
         assert 4 in nest.steps[-1]
@@ -201,7 +201,7 @@ def brute_force_choice(sample, before, score):
     scores and distances compared to 9 significant figures."""
     points = sample.xy
     vertices = hull_vertices(points, before)
-    centre = points[vertices].mean(axis=0)
+    center = points[vertices].mean(axis=0)
 
     def rounded(x):
         return float(f"{x:.9g}")
@@ -210,17 +210,17 @@ def brute_force_choice(sample, before, score):
         vertices,
         key=lambda v: (
             -rounded(score(before[before != v])),
-            -rounded(np.hypot(*(points[v] - centre))),
+            -rounded(np.hypot(*(points[v] - center))),
             v,
         ),
     )
 
 
-def at_real_coordinates(offsets, centre=(-80.1, 35.2)):
+def at_real_coordinates(offsets, center=(-80.1, 35.2)):
     """Offsets (in degrees) placed around a real location. A shape mirrored
-    east-west about its centre stays mirrored once projected, so mirror pairs
+    east-west about its center stays mirrored once projected, so mirror pairs
     tie exactly in theory but differ in their last bits in floating point."""
-    return np.asarray(offsets, dtype=float) + centre
+    return np.asarray(offsets, dtype=float) + center
 
 
 class TestHullAreaNest:
@@ -247,7 +247,7 @@ class TestHullAreaNest:
         assert smallest["area"][1] / smallest["area"][0] < 0.6
 
     def test_ties_go_to_the_lowest_index(self):
-        # The four corners of a square centred on (0, 0), where the projection
+        # The four corners of a square centered on (0, 0), where the projection
         # is symmetric, are interchangeable.
         square = make_sample(np.array([[-1, -1], [1, -1], [1, 1], [-1, 1]]) * 0.01)
         assert list(samplesar.strategies.hull_area(square).steps[1]) == [1, 2, 3]
@@ -329,7 +329,7 @@ class TestHullSpeciesNest:
         sample = samplesar.sources.dataframe(df)
         # Points: (0,0) holds a and b, (1,0) a, (1,1) c, (0,1) c, (0.5,0.5) d.
         # Dropping (1,0) or (1,1) or (0,1) loses nothing; (0,0) loses b.
-        # Points 1, 2 and 3 tie on species and on distance from the centre, so
+        # Points 1, 2 and 3 tie on species and on distance from the center, so
         # the lowest index goes.
         most = samplesar.strategies.hull_species(sample, keep="most")
         assert list(most.steps[1]) == [0, 2, 3, 4]
@@ -357,10 +357,10 @@ class TestHullDistanceNest:
         assert_nested(nest)
         for before, gone in removed(nest):
             vertices = hull_vertices(points, before)
-            centre = points[vertices].mean(axis=0)
+            center = points[vertices].mean(axis=0)
             expected = min(
                 vertices,
-                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - centre)):.9g}"), v),
+                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - center)):.9g}"), v),
             )
             assert gone[0] == expected
 
@@ -387,11 +387,11 @@ class TestHullDistanceNest:
         points = nest.sample.xy
         for before, gone in removed(nest):
             vertices = hull_vertices(points, before)
-            centre = points[vertices].mean(axis=0)
+            center = points[vertices].mean(axis=0)
             sign = 1 if remove == "farthest" else -1
             expected = min(
                 vertices,
-                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - centre)):.9g}"), v),
+                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - center)):.9g}"), v),
             )
             assert gone[0] == expected
 

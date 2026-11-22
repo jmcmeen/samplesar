@@ -132,7 +132,7 @@ def test_given_axes_keep_their_ticks(nest):
     assert ax.xaxis.get_major_locator() is locator
 
 
-def test_antimeridian_ticks_are_labelled_within_180():
+def test_antimeridian_ticks_are_labeled_within_180():
     df = pd.DataFrame(
         {
             "species": list("abcde"),

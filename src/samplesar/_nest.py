@@ -147,7 +147,7 @@ class Nest:
                 "lon": data["lon"].tolist(),
                 "lat": data["lat"].tolist(),
             },
-            "centre": list(self.sample.centre) if self.sample.centre is not None else None,
+            "center": list(self.sample.center) if self.sample.center is not None else None,
             "crs": self.sample.crs.to_wkt() if self.sample.crs is not None else None,
             "first": np.asarray(self.steps[0]).tolist(),
             "removed": removed,
@@ -185,17 +185,19 @@ class Nest:
                 f"{FORMAT_VERSION}. Upgrade samplesar to load it."
             )
         sample = Sample(_validate(pd.DataFrame(data["observations"])))
-        centre = data.get("centre")
+        center = data.get("center")
+        if center is None and version < 3:
+            center = data.get("centre")  # its key before version 3
         crs = data.get("crs")
-        if centre is not None or crs is not None:
+        if center is not None or crs is not None:
             try:
                 sample = dataclasses.replace(
                     sample,
-                    centre=tuple(centre) if centre is not None else None,
+                    center=tuple(center) if center is not None else None,
                     crs=CRS.from_wkt(crs) if crs is not None else None,
                 )
             except (TypeError, ValueError, CRSError) as err:
-                raise ValueError(f"The saved centre or crs is unusable: {err}") from err
+                raise ValueError(f"The saved center or crs is unusable: {err}") from err
         remaining = _indices(data["first"])
         if remaining.size and (remaining.min() < 0 or remaining.max() >= sample.n_points):
             raise ValueError("The saved steps name points outside the saved sample.")
@@ -208,11 +210,14 @@ class Nest:
                 raise ValueError("A saved step removes a point that isn't there.")
             remaining = remaining[~np.isin(remaining, gone)]
             steps.append(remaining)
+        options = dict(data.get("options", {}))
+        if version < 3 and "centre" in options:  # radial's keyword before version 3
+            options["center"] = options.pop("centre")
         return cls(
             sample=sample,
             steps=tuple(steps),
             strategy=data.get("strategy", ""),
-            options=Options(data.get("options", {})),
+            options=Options(options),
         )
 
     def to_json(self, path: str | Path) -> None:
@@ -297,7 +302,7 @@ def check_size(sample: Sample, min_points: int) -> None:
 
 
 FORMAT = "samplesar.nest"
-FORMAT_VERSION = 2  # 2 adds the sample's centre and crs
+FORMAT_VERSION = 3  # 2 adds the sample's center and crs; 3 spells the key "center"
 
 
 def _package_version() -> str:
@@ -373,7 +378,7 @@ def random(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest
 def from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_points: int = 3) -> Nest:
     """Nest a sample by removing its points in a given order.
 
-    Any ordering, from a heuristic, an optimiser or an experiment's design,
+    Any ordering, from a heuristic, an optimizer or an experiment's design,
     becomes a [`Nest`][samplesar.Nest] that the rest of the package can
     evaluate. One point goes per step, in ``order``, until ``min_points``
     remain or the order runs out; the order needn't name every point.

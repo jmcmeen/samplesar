@@ -21,16 +21,16 @@ def _to_xy(sample: Sample, lon: float, lat: float) -> np.ndarray:
     """A longitude and latitude in the sample's projected km."""
     projection = sample.projection
     x, y = Transformer.from_crs(WGS84, projection, always_xy=True).transform(lon, lat)
-    metres = projection.axis_info[0].unit_conversion_factor
-    return np.array([x, y]) * metres / 1000.0
+    meters = projection.axis_info[0].unit_conversion_factor
+    return np.array([x, y]) * meters / 1000.0
 
 
-def _centre_xy(sample: Sample, centre: tuple[float, float] | None) -> np.ndarray:
-    if centre is None:
+def _center_xy(sample: Sample, center: tuple[float, float] | None) -> np.ndarray:
+    if center is None:
         return np.asarray(sample.xy.mean(axis=0))
-    lon, lat = centre
+    lon, lat = center
     if not (-180 <= lon <= 180 and -90 <= lat <= 90):
-        raise ValueError(f"centre must be (longitude, latitude) in degrees, got {centre}.")
+        raise ValueError(f"center must be (longitude, latitude) in degrees, got {center}.")
     return _to_xy(sample, lon, lat)
 
 
@@ -52,17 +52,17 @@ def _by_rank(sample: Sample, key: np.ndarray, min_points: int) -> Nest:
 
 
 @register("radial")
-def radial(sample: Sample, centre: tuple[float, float] | None = None, min_points: int = 3) -> Nest:
-    """Nest a sample by removing the point farthest from a centre at each step.
+def radial(sample: Sample, center: tuple[float, float] | None = None, min_points: int = 3) -> Nest:
+    """Nest a sample by removing the point farthest from a center at each step.
 
-    The sample shrinks as concentric discs around the centre, the point-data
+    The sample shrinks as concentric discs around the center, the point-data
     analogue of nested circular plots around a focal site.
 
     Parameters
     ----------
     sample : Sample
         The sample to nest.
-    centre : tuple of float, optional
+    center : tuple of float, optional
         The (longitude, latitude) to shrink towards; by default the mean of
         the projected points.
     min_points : int
@@ -75,11 +75,11 @@ def radial(sample: Sample, centre: tuple[float, float] | None = None, min_points
     Raises
     ------
     ValueError
-        If ``centre`` isn't a longitude and latitude, or ``min_points`` is
+        If ``center`` isn't a longitude and latitude, or ``min_points`` is
         below 1 or above the sample's size.
     """
     check_size(sample, min_points)
-    distance = np.hypot(*(sample.xy - _centre_xy(sample, centre)).T)
+    distance = np.hypot(*(sample.xy - _center_xy(sample, center)).T)
     return _by_rank(sample, -distance, min_points)
 
 
@@ -128,12 +128,12 @@ def scott_bandwidth(xy: np.ndarray) -> float:
     return spread * len(xy) ** (-1.0 / 6.0) if spread > 0 else 1.0
 
 
-BLOCK = 1024  # points whose neighbours are summed at once, to bound memory
+BLOCK = 1024  # points whose neighbors are summed at once, to bound memory
 
 
 def kernel_density(xy: np.ndarray, bandwidth: float) -> np.ndarray:
-    """Each point's Gaussian kernel density from all the points (unnormalised,
-    its own kernel included), summed over neighbours within five bandwidths,
+    """Each point's Gaussian kernel density from all the points (unnormalized,
+    its own kernel included), summed over neighbors within five bandwidths,
     a block of points at a time so memory stays bounded."""
     from scipy.spatial import cKDTree
 
@@ -185,7 +185,7 @@ def density_peel(sample: Sample, bandwidth_km: float | None = None, min_points: 
 
 
 def _spanning_edges(xy: np.ndarray) -> list[list[tuple[float, int]]]:
-    """Each point's neighbours on the Euclidean minimum spanning tree of
+    """Each point's neighbors on the Euclidean minimum spanning tree of
     distinct points, with distances: from the Delaunay triangulation; along
     the line for collinear points; from all pairs for fewer than four."""
     from scipy.sparse import coo_matrix
@@ -200,10 +200,10 @@ def _spanning_edges(xy: np.ndarray) -> list[list[tuple[float, int]]]:
         try:
             simplices = Delaunay(xy).simplices
             pairs = np.vstack([simplices[:, [0, 1]], simplices[:, [1, 2]], simplices[:, [0, 2]]])
-        except QhullError:  # collinear: the tree joins neighbours along the line
-            centred = xy - xy.mean(axis=0)
-            direction = np.linalg.svd(centred, full_matrices=False)[2][0]
-            along = np.argsort(centred @ direction, kind="stable")
+        except QhullError:  # collinear: the tree joins neighbors along the line
+            centered = xy - xy.mean(axis=0)
+            direction = np.linalg.svd(centered, full_matrices=False)[2][0]
+            along = np.argsort(centered @ direction, kind="stable")
             pairs = np.column_stack([along[:-1], along[1:]])
     edges: list[list[tuple[float, int]]] = [[] for _ in range(n)]
     if n < 2:
@@ -282,6 +282,6 @@ def grow(sample: Sample, seed: tuple[float, float] | None = None, min_points: in
     """
     check_size(sample, min_points)
     xy = np.asarray(sample.xy)
-    distance = np.hypot(*(xy - _centre_xy(sample, seed)).T)
+    distance = np.hypot(*(xy - _center_xy(sample, seed)).T)
     start = int(np.lexsort((np.arange(len(xy)), distance))[0])
     return from_order(sample, growth_order(xy, start)[::-1], min_points=min_points)

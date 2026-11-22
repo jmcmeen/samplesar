@@ -199,8 +199,8 @@ class TestBaseline:
         nest = samplesar.strategies.random(sample, seed=0)
         z = nest.fit().params["z"]
         table = samplesar.evaluate.against_baseline(nest, baseline)
-        centre = 0.25
-        extreme = sum(abs(v - centre) >= abs(z - centre) for v in [0.1, 0.2, 0.3, 0.4])
+        center = 0.25
+        extreme = sum(abs(v - center) >= abs(z - center) for v in [0.1, 0.2, 0.3, 0.4])
         assert table.loc["z", "p"] == pytest.approx((1 + extreme) / 5)
 
     def test_bad_arguments(self, sample):

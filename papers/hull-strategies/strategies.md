@@ -8,8 +8,8 @@ and a disagreement between the two is a bug in one of them.
 
 **Sample.** A sample is a set of observations, each a species at a location.
 Locations are projected to the plane (km): by default a Lambert azimuthal
-equal-area projection of the WGS84 ellipsoid centred on the points' mean
-direction (or on a given `centre`), or the sample's own projected coordinate
+equal-area projection of the WGS84 ellipsoid centered on the points' mean
+direction (or on a given `center`), or the sample's own projected coordinate
 system (`Sample.xy`). Let
 
 - $P = \{p_1, \dots, p_n\} \subset \mathbb{R}^2$ be the projections of the
@@ -20,19 +20,19 @@ For any subset $Q \subseteq P$:
 
 - **Richness** $R(Q) = \left|\bigcup_{p \in Q} S(p)\right|$.
 - **Hull** $H(Q) = \operatorname{conv}(Q)$, and **area** $A(Q)$ its area in
-  km² (divided by the coordinate system's areal scale at the sample's centre
+  km² (divided by the coordinate system's areal scale at the sample's center
   when that system isn't equal-area).
 - **Vertices** $V(Q) = \{p \in Q : p \notin \operatorname{conv}(Q \setminus
   \{p\})\}$: the points where the hull bends. A point on an edge between two
   vertices is not a vertex; in floating point, "on" means within
   $\delta(Q) = 10^{-9} \cdot \operatorname{diag}(H(Q))$ of the line through
-  its neighbours on the hull, where $\operatorname{diag}$ is the diagonal of
+  its neighbors on the hull, where $\operatorname{diag}$ is the diagonal of
   the hull's bounding box. If the points of $Q$ are collinear, $V(Q)$ is the
   two ends of the segment.
 - **Boundary** $B(Q) = \{p \in Q : \operatorname{dist}(p, \partial H(Q)) \le
   \delta(Q)\}$: the vertices and any points on the hull's edges. If $H(Q)$
   isn't a polygon (fewer than three points, or collinear), $B(Q) = Q$.
-- **Centre** $c(Q) = \frac{1}{|V(Q)|} \sum_{v \in V(Q)} v$, the centroid of
+- **Center** $c(Q) = \frac{1}{|V(Q)|} \sum_{v \in V(Q)} v$, the centroid of
   the vertices, and $d_Q(p) = \lVert p - c(Q) \rVert$.
 - **Holders** $h_Q(s) = |\{p \in Q : s \in S(p)\}|$, the number of points in
   $Q$ where species $s$ was observed, and the **loss** of removing $p$,
@@ -60,7 +60,7 @@ $$
 Unless a strategy says otherwise, its choice is
 $\operatorname{top}_\varepsilon(f, V(Q_t))$, then among those
 $\operatorname{top}_\varepsilon(d_{Q_t}, \cdot)$ (the vertex farthest from
-the centre), then the lowest index. So the nest is a function of the sample
+the center), then the lowest index. So the nest is a function of the sample
 alone.
 
 ## One point at a time
@@ -72,12 +72,12 @@ $r_t$:
 | --- | --- | --- | --- |
 | S1 | Random | uniform on $Q_t$ | `strategies.random` |
 | S2 | Random hull vertex | uniform on $V(Q_t)$ | `strategies.hull_random` |
-| S4 | Largest remaining area | maximises $A(Q_t \setminus \{v\})$ over $v \in V(Q_t)$ | `strategies.hull_area(keep="largest")` |
-| S5 | Smallest remaining area | minimises $A(Q_t \setminus \{v\})$ | `strategies.hull_area(keep="smallest")` |
-| S6 | Most remaining species | minimises $L_{Q_t}(v)$ | `strategies.hull_species(keep="most")` |
-| S7 | Fewest remaining species | maximises $L_{Q_t}(v)$ | `strategies.hull_species(keep="fewest")` |
-| S8 | Farthest from the centre | maximises $d_{Q_t}(v)$; ties by index only | `strategies.hull_distance(remove="farthest")` |
-| S9 | Closest to the centre | minimises $d_{Q_t}(v)$; ties by index only | `strategies.hull_distance(remove="closest")` |
+| S4 | Largest remaining area | maximizes $A(Q_t \setminus \{v\})$ over $v \in V(Q_t)$ | `strategies.hull_area(keep="largest")` |
+| S5 | Smallest remaining area | minimizes $A(Q_t \setminus \{v\})$ | `strategies.hull_area(keep="smallest")` |
+| S6 | Most remaining species | minimizes $L_{Q_t}(v)$ | `strategies.hull_species(keep="most")` |
+| S7 | Fewest remaining species | maximizes $L_{Q_t}(v)$ | `strategies.hull_species(keep="fewest")` |
+| S8 | Farthest from the center | maximizes $d_{Q_t}(v)$; ties by index only | `strategies.hull_distance(remove="farthest")` |
+| S9 | Closest to the center | minimizes $d_{Q_t}(v)$; ties by index only | `strategies.hull_distance(remove="closest")` |
 
 S1 and S2 are random (a seed makes them reproducible); S4 to S9 are
 deterministic.
@@ -106,7 +106,7 @@ error rather than return a nest with nothing to fit.
    and its species-area curve is close to vertical.
 3. **Greedy, not optimal.** S4 to S7 choose the best single step; they don't
    find the order that keeps the most area (or species) over the whole
-   nest. Optimising whole orders is a separate problem; any order can be
+   nest. Optimizing whole orders is a separate problem; any order can be
    evaluated as a nest with `strategies.from_order`.
 4. **Exactness of S6 and S7.** Because $R(Q \setminus \{v\}) = R(Q) -
    L_Q(v)$, keeping $h_Q$ up to date gives each step's choice exactly,
@@ -131,7 +131,7 @@ every other strategy under 0.2 s.
 ## Open questions for the Methods
 
 - **Co-located records.** Records at one spot differ by GPS jitter, so the
-  last steps of S2 to S9 measure centimetre-scale hulls that aren't area.
+  last steps of S2 to S9 measure centimeter-scale hulls that aren't area.
   Merging points within a distance, or a minimum area, needs choosing and
   justifying (samplesar #46).
 - **Pseudo-replication.** Steps share most of their points, so R², AICc and
@@ -140,6 +140,6 @@ every other strategy under 0.2 s.
   (bootstrapped samples, or many seeds for S1 and S2).
 - **Model bounds.** Near-vertical curves (S1, S9) drive the power model's $z$
   to its bound (samplesar #48).
-- **Which vertex centre.** $c(Q)$ is the centroid of the vertices, which
+- **Which vertex center.** $c(Q)$ is the centroid of the vertices, which
   weights a densely sampled stretch of the hull more; the area centroid of
   $H(Q)$ is the alternative.

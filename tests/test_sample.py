@@ -34,13 +34,13 @@ def test_a_sample_across_the_antimeridian():
     across = samplesar.sources.dataframe(frame([179.5, -179.5, -179.5, 179.5], [10, 10, 11, 11]))
     here = samplesar.sources.dataframe(frame([0, 1, 1, 0], [10, 10, 11, 11]))
     assert across.area == pytest.approx(here.area, rel=1e-9)
-    assert abs(across.projection_centre[0]) == pytest.approx(180)
+    assert abs(across.projection_center[0]) == pytest.approx(180)
 
 
 def test_a_subset_keeps_the_projection():
     sample = samplesar.sources.dataframe(frame([0, 1, 1, 0, 0.2], [0, 0, 1, 1, 0.3]))
     part = sample.subset([0, 1, 4])
-    assert part.projection_centre == sample.projection_centre
+    assert part.projection_center == sample.projection_center
     np.testing.assert_allclose(part.xy, sample.xy[[0, 1, 4]])
 
 
@@ -53,7 +53,7 @@ def test_xy_and_points_are_read_only():
 
 class TestCRS:
     def test_projected_coordinates_are_measured_in_their_crs(self):
-        # A square 1 km a side in UTM zone 17N metres. UTM shrinks distances by
+        # A square 1 km a side in UTM zone 17N meters. UTM shrinks distances by
         # 0.9996 near its central meridian, so on the ground it's 1.0008 km².
         x, y = [500_000, 501_000, 501_000, 500_000], [4_000_000, 4_000_000, 4_001_000, 4_001_000]
         sample = samplesar.sources.dataframe(frame(x, y), crs="EPSG:32617")
@@ -113,16 +113,16 @@ class TestCRS:
         with pytest.raises(ValueError, match="neither geographic nor projected"):
             samplesar.sources.dataframe(frame([0, 1, 1], [0, 0, 1]), crs="EPSG:5703")
 
-    def test_a_numpy_centre(self):
+    def test_a_numpy_center(self):
         sample = samplesar.sources.dataframe(frame([0, 1, 1], [35, 35, 36]))
-        moved = samplesar.Sample(sample.data, centre=(np.float64(0.5), np.float64(35.5)))
-        assert moved.centre == (0.5, 35.5) and type(moved.centre[0]) is float
+        moved = samplesar.Sample(sample.data, center=(np.float64(0.5), np.float64(35.5)))
+        assert moved.center == (0.5, 35.5) and type(moved.center[0]) is float
         assert moved.area == pytest.approx(sample.area, rel=1e-3)
 
-    def test_a_bad_centre(self):
+    def test_a_bad_center(self):
         sample = samplesar.sources.dataframe(frame([0, 1, 1], [35, 35, 36]))
-        with pytest.raises(ValueError, match="centre must be"):
-            samplesar.Sample(sample.data, centre=(0.0, 95.0))
+        with pytest.raises(ValueError, match="center must be"):
+            samplesar.Sample(sample.data, center=(0.0, 95.0))
 
 
 class TestFromGeoDataFrame:
@@ -198,7 +198,7 @@ class TestValidation:
         with pytest.raises(ValueError, match="no observations"):
             samplesar.sources.dataframe(self.good().iloc[:0])
 
-    def test_normalises(self):
+    def test_normalizes(self):
         df = self.good(species=[1, 2, 3], lon=["0", "1", "1"], extra=["x", "y", "z"])
         sample = samplesar.sources.dataframe(df)
         assert list(sample.data.columns) == ["species", "lon", "lat"]
@@ -266,7 +266,7 @@ class TestDegenerateHulls:
 
 class TestMergeWithin:
     def near(self):
-        # Points 0-2 within a few metres (GPS jitter at one spot); 3 is 1 km away.
+        # Points 0-2 within a few meters (GPS jitter at one spot); 3 is 1 km away.
         lons = [-82.0, -82.00001, -82.00002, -81.99]
         lats = [36.5, 36.50001, 36.5, 36.5]
         return samplesar.sources.dataframe(frame(lons, lats, species=["a", "b", "c", "d"]))
@@ -277,7 +277,7 @@ class TestMergeWithin:
         assert merged.n_points == 2 and merged.n_observations == 4 and merged.n_species == 4
         # The group sits at its first-seen member's coordinates.
         np.testing.assert_array_equal(merged.points, [[-82.0, 36.5], [-81.99, 36.5]])
-        assert merged.projection_centre == sample.projection_centre
+        assert merged.projection_center == sample.projection_center
 
     def test_a_small_distance_merges_nothing(self):
         assert self.near().merge_within(0.1).n_points == 4
@@ -287,7 +287,7 @@ class TestMergeWithin:
         sample = samplesar.sources.dataframe(frame(x, [4_000_000] * 4), crs="EPSG:32617")
         assert sample.merge_within(1).n_points == 2
 
-    def test_no_more_centimetre_hulls(self):
+    def test_no_more_centimeter_hulls(self):
         rng = np.random.default_rng(0)
         spread = rng.uniform(-0.01, 0.01, size=(60, 2))
         jitter = rng.normal(0, 1e-7, size=(40, 2))  # 40 records at one spot
@@ -301,7 +301,7 @@ class TestMergeWithin:
             .sar_data()["area"]
             .min()
         )
-        assert smallest < 1e-6 < merged  # km²: below a square metre, then not
+        assert smallest < 1e-6 < merged  # km²: below a square meter, then not
 
     def test_numpy_distances(self):
         assert self.near().merge_within(np.int64(10)).n_points == 2
@@ -326,7 +326,7 @@ class TestMergeWithin:
 
     @pytest.mark.parametrize("bad", [0, -1, float("nan"), "5", True])
     def test_bad_distance(self, bad):
-        with pytest.raises(ValueError, match="metres must be a positive number"):
+        with pytest.raises(ValueError, match="meters must be a positive number"):
             self.near().merge_within(bad)
 
 
@@ -370,9 +370,9 @@ class TestWithin:
             self.sample().within(box(10, 10, 11, 11))
 
 
-def test_within_keeps_an_explicit_centre():
+def test_within_keeps_an_explicit_center():
     from shapely.geometry import box
 
     sample = samplesar.sources.dataframe(frame([0.1, 0.5, 0.9, 1.5], [0.1, 0.5, 0.9, 0.5]))
-    pinned = samplesar.Sample(sample.data, centre=(0.0, 0.0))
-    assert pinned.within(box(0, 0, 1, 1)).centre == (0.0, 0.0)
+    pinned = samplesar.Sample(sample.data, center=(0.0, 0.0))
+    assert pinned.within(box(0, 0, 1, 1)).center == (0.0, 0.0)

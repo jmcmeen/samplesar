@@ -15,10 +15,10 @@ if TYPE_CHECKING:
 
 
 def _lonlat(nest: Nest) -> np.ndarray:
-    """The sample's points with longitudes unwrapped around its centre, so a
+    """The sample's points with longitudes unwrapped around its center, so a
     sample across the antimeridian draws as one piece."""
     points = np.array(nest.sample.points, dtype=float)
-    lon0 = nest.sample.projection_centre[0]
+    lon0 = nest.sample.projection_center[0]
     points[:, 0] = (points[:, 0] - lon0 + 180.0) % 360.0 - 180.0 + lon0
     return points
 

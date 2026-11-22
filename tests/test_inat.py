@@ -79,7 +79,7 @@ def test_records_and_a_query_together():
 @pytest.fixture
 def fake_pyinaturalist(monkeypatch):
     """A pyinaturalist whose get_observations serves 450 records, 200 a page,
-    honouring id_above, and logs each call's parameters."""
+    honoring id_above, and logs each call's parameters."""
     pool = [record(i) for i in range(1, 451)]
     calls = []
 

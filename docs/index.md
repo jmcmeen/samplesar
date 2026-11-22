@@ -23,5 +23,5 @@ fit = sars.sar_power(nest.sar_data())
 
 !!! note "Areas are in km²"
     Areas are convex hull areas in km², measured on an equal-area projection
-    of the WGS84 ellipsoid centred on each sample, or in the sample's own
+    of the WGS84 ellipsoid centered on each sample, or in the sample's own
     projected coordinate system when it has one. Distances are in km.

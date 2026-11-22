@@ -25,10 +25,10 @@ All notable changes to this project are documented here. The format is based on
   and boundary.
 
 - Four strategies that rank every point once, which is fast on large samples:
-  `strategies.radial` (shrinking discs around a centre), `strategies.sweep`
+  `strategies.radial` (shrinking discs around a center), `strategies.sweep`
   (a front moving along a bearing), `strategies.density_peel` (lowest kernel
   density first, giving kernel-smoothed boundaries) and `strategies.grow`
-  (the reverse of a region grown from a seed by nearest neighbours).
+  (the reverse of a region grown from a seed by nearest neighbors).
 
 - `strategies.hull_weighted`: a random hull vertex, picked with probability
   proportional to its isolation (distance to the nearest other point) raised
@@ -60,8 +60,15 @@ All notable changes to this project are documented here. The format is based on
     `plot_nest_curve` and `animate_nest`.
 
   `Sample`, `Nest` and `hull_area` stay at the top level, as do methods such
-  as `Sample.within` and `Nest.fit`. Registered strategy names, nest labels
-  and saved nests are unchanged.
+  as `Sample.within` and `Nest.fit`. Registered strategy names and nest
+  labels are unchanged by the regrouping.
+
+- **Breaking: US English spellings.** `Sample(centre=...)` is now
+  `Sample(center=...)`, `Sample.projection_centre` is
+  `Sample.projection_center`, and `Sample.merge_within(metres)` is
+  `merge_within(meters)`; the docs use US spellings throughout. Saved nests
+  store the sample's `center` (format version 3); files saved with `centre`
+  still load, as do nests saved with a `centre` option, read as `center`.
 
 ## [0.1.3] - 2026-11-22
 

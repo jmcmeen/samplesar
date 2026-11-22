@@ -129,13 +129,13 @@ def load_datasets(parquet: Path | None, local: Path | None, ecoregions: Path | s
 
 
 def simulated_community(rng: np.random.Generator, cluster_share: float) -> samplesar.Sample:
-    """A 2 km square (in UTM zone 17N metres) with 400 records of 80
+    """A 2 km square (in UTM zone 17N meters) with 400 records of 80
     species. Each species occurs within a circular range of radius 200 to
     1,000 m; a record takes one of the species whose range covers its point,
     or any species at random where none does. ``cluster_share`` of the
     records are made at one spot, with 2 m of GPS error, as at a trailhead."""
     n, n_species, side = 400, 80, 2000.0
-    centres = rng.uniform(0, side, size=(n_species, 2))
+    centers = rng.uniform(0, side, size=(n_species, 2))
     radii = rng.uniform(200, 1000, size=n_species)
     clustered = int(n * cluster_share)
     spot = np.array([side / 2, side / 2])
@@ -144,7 +144,7 @@ def simulated_community(rng: np.random.Generator, cluster_share: float) -> sampl
     )
     species = []
     for p in points:
-        present = np.flatnonzero(np.hypot(*(centres - p).T) <= radii)
+        present = np.flatnonzero(np.hypot(*(centers - p).T) <= radii)
         species.append(f"sp{rng.choice(present) if len(present) else rng.integers(n_species)}")
     origin = np.array([500_000.0, 4_040_000.0])
     df = pd.DataFrame({"species": species, "x": points[:, 0] + origin[0], "y": points[:, 1] + origin[1]})
@@ -201,18 +201,18 @@ def run_strategies(sample: samplesar.Sample, baseline_n: int) -> tuple[pd.DataFr
 
 def merge_sensitivity(sample: samplesar.Sample, distances: list[float]) -> pd.DataFrame:
     rows = []
-    for metres in distances:
-        merged = sample if metres == 0 else sample.merge_within(metres)
+    for meters in distances:
+        merged = sample if meters == 0 else sample.merge_within(meters)
         merged = thin(merged, MAX_POINTS)
         for code, name, options in STRATEGIES:
             try:
                 nest = samplesar.strategies.run(merged, name, **options)
                 fit = nest.fit()
-                rows.append({"merge_m": metres, "n_points": merged.n_points, "strategy": code,
+                rows.append({"merge_m": meters, "n_points": merged.n_points, "strategy": code,
                              "z": fit.params["z"], "at_bounds": at_bounds(fit),
                              "min_area_km2": nest.sar_data()["area"].min()})
             except ValueError:
-                rows.append({"merge_m": metres, "n_points": merged.n_points, "strategy": code})
+                rows.append({"merge_m": meters, "n_points": merged.n_points, "strategy": code})
     return pd.DataFrame(rows)
 
 
@@ -247,7 +247,7 @@ def figure_schematic(path: Path) -> None:
         ax.set_ylabel("")
         ax.set_xticklabels([])
         ax.set_yticklabels([])
-    fig.suptitle("The strategies on a simulated sample, at about half its points (removed points grey)")
+    fig.suptitle("The strategies on a simulated sample, at about half its points (removed points gray)")
     fig.tight_layout()
     fig.savefig(path, dpi=110)
     plt.close(fig)

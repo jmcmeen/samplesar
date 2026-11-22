@@ -23,7 +23,7 @@ full extent until its last points and gives near-vertical curves whose
 power-model slope is meaningless. Strategies that shrink the hull from the
 outside in agree with one another and give slopes of 0.15 to 0.34, the range
 of classic SARs, while greedy rules bias the slope. Records made at one spot
-dominate the end of every nest unless points within a few metres are merged,
+dominate the end of every nest unless points within a few meters are merged,
 which in simulations largely restores the slope that clustering destroys.
 Hull peeling is also by far the fastest hull strategy. We recommend hull
 peeling of merged points, compared against a random-vertex baseline, as the
@@ -33,7 +33,7 @@ default, and provide the strategies in the Python package samplesar.
 
 The species-area relationship is among the most general patterns in ecology
 (Arrhenius 1921; Preston 1962; Rosenzweig 1995). Its shape, usually
-summarised by the slope *z* of a power law *S = cA^z*, depends on how areas
+summarized by the slope *z* of a power law *S = cA^z*, depends on how areas
 and their species are sampled: islands, nested plots and independent plots
 each give a different kind of curve (Scheiner 2003; Dengler 2009).
 
@@ -50,7 +50,7 @@ falls while its richness does. Removing them from the outside in, peeling the
 convex hull, shrinks the area from the first step, as a nested-plot design
 does. Between these lie many rules: remove the hull vertex that costs least
 area, or most; that loses fewest species, or most; that lies farthest from
-the centre, or closest. Each makes a different curve from the same points.
+the center, or closest. Each makes a different curve from the same points.
 Observation data add a further problem: records cluster where people go, at
 trailheads and feeders, and many records from one spot differ only by GPS
 error.
@@ -65,7 +65,7 @@ effect of clustered records and a remedy for it, and (iv) recommend a default.
 
 A sample is a set of species observations at points. Points are projected to
 the plane in km, by default with a Lambert azimuthal equal-area projection of
-the WGS84 ellipsoid centred on the sample, so areas are true areas wherever
+the WGS84 ellipsoid centered on the sample, so areas are true areas wherever
 the sample lies. A nest is a sequence of point sets, each a subset of the one
 before; its SAR data are each step's convex hull area (km²) and species
 richness, for the steps with a positive area.
@@ -79,7 +79,7 @@ hull; S3 peels the whole hull boundary at each step, giving the sample's
 convex layers (Chazelle 1985); S4 to S9 remove the hull vertex chosen by a
 greedy rule on the remaining hull's area (S4 largest, S5 smallest), the
 remaining richness (S6 most, S7 fewest) or the distance from the hull's
-centre (S8 farthest, S9 closest); and S10 peels the boundary of a concave
+center (S8 farthest, S9 closest); and S10 peels the boundary of a concave
 hull, which follows the outline of an irregular sample instead of spanning
 its gaps. All are implemented in samplesar.
 
@@ -94,8 +94,8 @@ its gaps. All are implemented in samplesar.
 | S5 | Smallest remaining area | the vertex whose loss costs most area |
 | S6 | Most remaining species | the vertex whose loss costs fewest species |
 | S7 | Fewest remaining species | the vertex whose loss costs most species |
-| S8 | Farthest from the centre | the vertex farthest from the vertices' centroid |
-| S9 | Closest to the centre | the vertex closest to it |
+| S8 | Farthest from the center | the vertex farthest from the vertices' centroid |
+| S9 | Closest to the center | the vertex closest to it |
 | S10 | Concave peeling | every point on a concave hull's boundary (ratio 0.3) |
 
 ### 2.3 Merging co-located records
@@ -159,7 +159,7 @@ at random (seeded), to keep the area-based strategies tractable.
 ### 2.7 Simulations
 
 Simulated communities of 400 records of 80 species in a 2 km square (laid out
-in UTM metres), each species occurring within a circular range of radius 200
+in UTM meters), each species occurring within a circular range of radius 200
 to 1,000 m, were nested by every strategy with and without merging within
 10 m (20 replicates each). A record took one of the species whose range
 covered its point, or any species at random where none did. In each
@@ -170,7 +170,7 @@ GPS error.
 
 Each strategy's run time was measured on simulated samples of 250, 500,
 1,000, 2,000 and 4,000 points (uniform in a 2 km square, 80 species), taking
-the best of three runs (one for runs over 20 s), and summarised by the
+the best of three runs (one for runs over 20 s), and summarized by the
 exponent *b* of a power law, time ∝ *n*^*b*, fitted to the sizes that took
 at least a millisecond. The machine and library versions are recorded with
 the results.
@@ -188,7 +188,7 @@ on every sample, with *z* between 0.15 and 0.34, the range reported for
 classic SARs. Greedy rules shifted *z*: keeping species (S6) gave the lowest
 slope on five of eight samples (0.05 to 0.22), and keeping area (S4) the
 highest of the hull strategies on seven of eight (0.21 to 0.97, and 3.4 on
-the single-observer sample), where removing the vertex closest to the centre
+the single-observer sample), where removing the vertex closest to the center
 (S9) also reached the bound. At Monteverde, where every strategy but S1, S4
 and S9 gave *z* between 0.14 and 0.17, and for Southern Appalachian
 salamanders (0.22 to 0.27 for all but S1 and S4), the greedy rules made
@@ -200,7 +200,7 @@ On the single-observer park sample, merging within 5 m removed 72% of the
 points (across Table 2 the share ranged from 4%, for Southern Appalachian
 salamanders, to 72%).
 Without merging, the last few hundred steps of every hull nest measured hulls
-under a square metre across, and every hull strategy but S4 and S9 gave
+under a square meter across, and every hull strategy but S4 and S9 gave
 *z* ≈ 0.06 to 0.07.
 Merging within 5 to 10 m raised hull peeling's *z* to 0.26 to 0.34, after
 which it changed little up to 50 m (Fig. 4). The simulations isolate the
@@ -216,7 +216,7 @@ of eight samples (rank p 0.07 to 0.89 against 99 baseline nests), and just
 outside it for all of Costa Rica (p = 0.04); concave peeling fell inside on
 four (and on a fifth at exactly p = 0.05). The greedy strategies mostly fell outside it: keeping area (S4) at
 p = 0.01, the smallest possible, on every sample, and keeping species (S6),
-removing the vertex farthest from the centre (S8) or closest to it (S9) on
+removing the vertex farthest from the center (S8) or closest to it (S9) on
 six or seven of eight. Greedy rules bias the slope rather than adding
 noise. A random-vertex nest with a different seed itself fell anywhere from
 p = 0.03 to 0.90, a reminder of how much one random nest varies.
@@ -233,7 +233,7 @@ substantially.
 ### 3.5 Hull shapes
 
 Strategies differ in the shapes they leave (Fig. 1, Fig. 6): hull peeling,
-S2 and S8 keep the hull compact and centred; S4 and S9 leave elongated hulls
+S2 and S8 keep the hull compact and centered; S4 and S9 leave elongated hulls
 that span the sample, which is why their areas stay large and their slopes
 steep.
 
@@ -275,8 +275,8 @@ an unbiased SAR.
 
 Clustered records are the largest practical hazard. Without merging, the
 end of every nest measures GPS error, and the fitted slope collapses toward
-zero. Merging within a few metres removes the artefact with little sign of
-over-merging up to tens of metres; the distance should be chosen relative to
+zero. Merging within a few meters removes the artifact with little sign of
+over-merging up to tens of meters; the distance should be chosen relative to
 positional accuracy and reported.
 
 **Limitations.** Areas are convex hull areas even for concave peeling, and
@@ -286,7 +286,7 @@ the peeling steps and to zero by three quarters, so the large end of the curve
 is stretched and *z* underestimated. Coasts, inlets, lakes and concave
 islands need areas measured within a land or study-area mask. The
 open-data export holds only observations with openly licensed photos, and
-obscured observations carry randomised coordinates without a flag. Samples
+obscured observations carry randomized coordinates without a flag. Samples
 larger than 1,500 points after merging were thinned for the comparison
 (which the slower greedy strategies need, not hull peeling). Only the power
 model was compared, and the baseline

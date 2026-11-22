@@ -29,7 +29,7 @@ against.
 ## A given order
 
 `strategies.from_order(sample, order, min_points=3)` removes points in the order
-given, one per step: any ordering, from a heuristic, an optimiser or an
+given, one per step: any ordering, from a heuristic, an optimizer or an
 experiment's design, becomes a nest to evaluate like the others. The order
 needn't name every point; the nest stops when it runs out or `min_points`
 remain.
@@ -110,12 +110,12 @@ remaining points costs nothing, so species richness falls as late as
 possible. `keep="fewest"` removes first the vertices holding species found
 nowhere else, so richness falls as fast as possible.
 
-### By distance from the centre
+### By distance from the center
 
 `strategies.hull_distance(sample, remove="farthest", min_points=3)` removes the
 vertex farthest from the centroid of the hull's vertices (in km on the
 sample's projection), trimming outlying corners first. `remove="closest"` removes the vertex nearest
-the centre and leaves the outliers to last. Ties go to the lowest point index.
+the center and leaves the outliers to last. Ties go to the lowest point index.
 
 ## By a fixed ranking
 
@@ -126,9 +126,9 @@ the lowest point index. Areas are still convex hull areas.
 
 ### Radial
 
-`strategies.radial(sample, centre=None, min_points=3)` removes the point
-farthest from a centre, so the sample shrinks as concentric discs: the
-point-data analogue of nested circular plots around a focal site. `centre` is
+`strategies.radial(sample, center=None, min_points=3)` removes the point
+farthest from a center, so the sample shrinks as concentric discs: the
+point-data analogue of nested circular plots around a focal site. `center` is
 a (longitude, latitude), by default the mean of the projected points.
 
 ### Sweep

@@ -25,7 +25,7 @@ sample.n_points, sample.n_species, sample.area   # area in km²
 
 ## Coordinate systems
 
-Areas are measured in km² on an equal-area projection centred on the sample.
+Areas are measured in km² on an equal-area projection centered on the sample.
 If your coordinates are already projected, say a grid laid out in UTM, give
 the CRS, and areas and distances are measured in it, so the grid stays
 exactly straight:
@@ -55,7 +55,7 @@ sample = samplesar.sources.inaturalist(
 
 Only identifications at species level or below are kept (a subspecies
 counts as its species), and obscured coordinates
-(randomised by iNaturalist within about 0.2°) are dropped, unless you ask
+(randomized by iNaturalist within about 0.2°) are dropped, unless you ask
 otherwise (`ranks=None`, `skip_obscured=False`).
 
 ## From GBIF
@@ -69,7 +69,7 @@ frogs = samplesar.sources.gbif(taxonKey=952, country="CR")   # Anura in Costa Ri
 ```
 
 It keeps present, georeferenced records identified at species level or
-below, without geospatial issues; `max_uncertainty` (metres) and `boundary`
+below, without geospatial issues; `max_uncertainty` (meters) and `boundary`
 narrow it further. The search API serves up to 100,000 records per query;
 for more, use GBIF's download service. (`taxonKey` takes GBIF Backbone keys,
 which pygbif warns are being replaced by Catalogue of Life keys.)
@@ -93,7 +93,7 @@ frogs = samplesar.sources.open_data(
 `taxon_id` takes any taxon and everything under it. By default only research
 grade observations at species level or below are kept. The export holds only
 observations with openly licensed photos, and obscured observations carry
-their public, randomised coordinates without a flag; `max_accuracy` (metres)
+their public, randomized coordinates without a flag; `max_accuracy` (meters)
 is the filter available for that.
 
 ## Within a boundary

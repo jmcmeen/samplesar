@@ -33,7 +33,7 @@ design turns a `Sample` of points into an area and richness table, and
 3. **sars is a required dependency.** Evaluating a sampling design means fitting its SAR
    data, so `samplesar` uses sars directly rather than as an optional extra.
 4. **Geometry happens on `Sample.xy`, in km.** Hulls, areas (km²) and distances use the
-   points projected by pyproj: an equal-area projection of the WGS84 ellipsoid centred on
+   points projected by pyproj: an equal-area projection of the WGS84 ellipsoid centered on
    the sample, or the sample's own projected CRS. Never measure in degrees; say km² wherever
    an area is reported.
 5. **Errors are exceptions** (`ValueError`, `KeyError`) with messages that name the

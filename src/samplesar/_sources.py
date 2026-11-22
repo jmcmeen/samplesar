@@ -158,7 +158,7 @@ def inaturalist(
         variety or form counts as its species. ``None`` keeps every rank.
     skip_obscured : bool
         Drop observations whose coordinates iNaturalist has obscured
-        (randomised within a cell about 0.2° across), which would distort
+        (randomized within a cell about 0.2° across), which would distort
         any hull.
     max_results : int, optional
         Stop fetching after this many records (only with a query).
@@ -236,8 +236,8 @@ def open_data(
         Observed on or after, and on or before, these dates (ISO).
     max_accuracy : float, optional
         Keep observations whose positional accuracy is given and at most
-        this many metres. The export doesn't mark obscured observations,
-        whose public coordinates are randomised; this is the filter
+        this many meters. The export doesn't mark obscured observations,
+        whose public coordinates are randomized; this is the filter
         available.
     boundary : polygon, optional
         Keep only observations inside this region (or on its edge): a
@@ -320,7 +320,7 @@ def gbif(
         keeps every rank.
     max_uncertainty : float, optional
         Keep records whose coordinate uncertainty is given and at most this
-        many metres.
+        many meters.
     boundary : polygon, optional
         Keep only records inside this region (as [`Sample.within`][samplesar.Sample.within]
         takes); a query is narrowed to its bounding box (only by latitude if

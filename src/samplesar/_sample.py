@@ -22,7 +22,7 @@ WGS84 = CRS.from_epsg(4326)
 
 
 def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
-    """Check and normalise the columns; with a CRS, convert its coordinates
+    """Check and normalize the columns; with a CRS, convert its coordinates
     (in the ``lon`` and ``lat`` columns) to WGS84 longitude and latitude."""
     missing = [c for c in COLUMNS if c not in df.columns]
     if missing:
@@ -67,7 +67,7 @@ class Sample:
 
     Build one with [`sources.dataframe`][samplesar.sources.dataframe] or
     [`sources.csv`][samplesar.sources.csv] rather than directly: they check
-    and normalise the columns.
+    and normalize the columns.
 
     Attributes
     ----------
@@ -76,10 +76,10 @@ class Sample:
         ``lat`` (float, decimal degrees). Several observations may share a
         point. Treat it as read-only: the points and other derived values
         are computed once, so build a new sample rather than editing it.
-    centre : tuple of float, optional
+    center : tuple of float, optional
         The (lon, lat) the points are projected about for areas and
         distances (see [`xy`][samplesar.Sample.xy]), when there's no
-        ``crs``. By default the centre of the sample's points; a
+        ``crs``. By default the center of the sample's points; a
         [`subset`][samplesar.Sample.subset] keeps its parent's, so their
         areas are comparable.
     crs : pyproj.CRS, optional
@@ -90,15 +90,15 @@ class Sample:
     """
 
     data: pd.DataFrame
-    centre: tuple[float, float] | None = None
+    center: tuple[float, float] | None = None
     crs: CRS | None = None
 
     def __post_init__(self) -> None:
-        if self.centre is not None:
-            lon, lat = (float(v) for v in self.centre)
+        if self.center is not None:
+            lon, lat = (float(v) for v in self.center)
             if not (np.isfinite(lon) and np.isfinite(lat) and -90 <= lat <= 90):
-                raise ValueError(f"centre must be a (lon, lat) in degrees, got {self.centre!r}.")
-            object.__setattr__(self, "centre", (lon, lat))
+                raise ValueError(f"center must be a (lon, lat) in degrees, got {self.center!r}.")
+            object.__setattr__(self, "center", (lon, lat))
 
     @property
     def n_observations(self) -> int:
@@ -126,24 +126,24 @@ class Sample:
         return len(self.points)
 
     @property
-    def projection_centre(self) -> tuple[float, float]:
+    def projection_center(self) -> tuple[float, float]:
         """The (lon, lat) the points are projected about when there's no
-        ``crs``: ``centre`` if given, else the centre of the points (their
-        mean direction, so a sample across the antimeridian is centred
+        ``crs``: ``center`` if given, else the center of the points (their
+        mean direction, so a sample across the antimeridian is centered
         correctly)."""
-        if self.centre is not None:
-            return self.centre
-        return centre_of(self.points)
+        if self.center is not None:
+            return self.center
+        return center_of(self.points)
 
     @property
     def projection(self) -> CRS:
         """The projected CRS areas and distances are measured in: ``crs`` if
         set, else a Lambert azimuthal equal-area projection on the WGS84
-        ellipsoid, centred on
-        [`projection_centre`][samplesar.Sample.projection_centre]."""
+        ellipsoid, centered on
+        [`projection_center`][samplesar.Sample.projection_center]."""
         if self.crs is not None:
             return self.crs
-        lon, lat = self.projection_centre
+        lon, lat = self.projection_center
         return CRS.from_proj4(
             f"+proj=laea +lat_0={lat:.12f} +lon_0={lon:.12f} +ellps=WGS84 +units=m"
         )
@@ -151,7 +151,7 @@ class Sample:
     @cached_property
     def area_scale(self) -> float:
         """How much [`projection`][samplesar.Sample.projection] enlarges areas
-        at [`projection_centre`][samplesar.Sample.projection_centre]; areas
+        at [`projection_center`][samplesar.Sample.projection_center]; areas
         are divided by it.
 
         1 for the default equal-area projection, about 1 for UTM within its
@@ -164,7 +164,7 @@ class Sample:
         if self.crs is None:
             return 1.0
         proj = Proj(self.crs)
-        lon, lat = self.projection_centre
+        lon, lat = self.projection_center
         scale = float(proj.get_factors(lon, lat).areal_scale)
         across = np.asarray(proj.get_factors(self.points[:, 0], self.points[:, 1]).areal_scale)
         if across.size and (across.max() / across.min() > 1.01):
@@ -188,8 +188,8 @@ class Sample:
         projection = self.projection
         to_plane = Transformer.from_crs(WGS84, projection, always_xy=True)
         x, y = to_plane.transform(self.points[:, 0], self.points[:, 1])
-        metres = projection.axis_info[0].unit_conversion_factor
-        xy = np.column_stack([x, y]) * metres / 1000.0
+        meters = projection.axis_info[0].unit_conversion_factor
+        xy = np.column_stack([x, y]) * meters / 1000.0
         xy.flags.writeable = False
         return xy
 
@@ -205,23 +205,23 @@ class Sample:
         """
         return hull_area(self.xy) / self.area_scale
 
-    def merge_within(self, metres: float) -> Sample:
+    def merge_within(self, meters: float) -> Sample:
         """Merge points within a distance of each other into one, keeping every observation.
 
         Records made at one spot (a trailhead, a feeder, a car park) differ
         only by GPS jitter. Left apart, they make the last steps of a hull
-        nest measure hulls centimetres across, which aren't area but dominate
-        the species-area curve. Points at most ``metres`` apart are linked
+        nest measure hulls centimeters across, which aren't area but dominate
+        the species-area curve. Points at most ``meters`` apart are linked
         (on [`xy`][samplesar.Sample.xy], with a distorting ``crs`` corrected
-        by its scale at the sample's centre), and each linked group becomes
+        by its scale at the sample's center), and each linked group becomes
         one point at its first-seen member's coordinates, holding all the
         group's observations. Linking chains: three points 0.8 apart with
-        ``metres=1`` become one, and a warning says when a chain spans more
-        than ten times ``metres``, since its observations then move far.
+        ``meters=1`` become one, and a warning says when a chain spans more
+        than ten times ``meters``, since its observations then move far.
 
         Parameters
         ----------
-        metres : float
+        meters : float
             Merge points at most this far apart (positive).
 
         Returns
@@ -232,13 +232,13 @@ class Sample:
         Raises
         ------
         ValueError
-            If ``metres`` isn't a positive number.
+            If ``meters`` isn't a positive number.
         """
-        if isinstance(metres, bool) or not isinstance(metres, numbers.Real):
-            raise ValueError(f"metres must be a positive number, got {metres!r}.")
-        metres = float(metres)
-        if not (np.isfinite(metres) and metres > 0):
-            raise ValueError(f"metres must be a positive number, got {metres!r}.")
+        if isinstance(meters, bool) or not isinstance(meters, numbers.Real):
+            raise ValueError(f"meters must be a positive number, got {meters!r}.")
+        meters = float(meters)
+        if not (np.isfinite(meters) and meters > 0):
+            raise ValueError(f"meters must be a positive number, got {meters!r}.")
         from scipy.sparse import coo_matrix
         from scipy.sparse.csgraph import connected_components
         from scipy.spatial import cKDTree
@@ -246,7 +246,7 @@ class Sample:
         n = self.n_points
         # xy is in the projection's km; a distorting crs stretches lengths by
         # about the square root of its areal scale.
-        radius = metres / 1000.0 * np.sqrt(self.area_scale)
+        radius = meters / 1000.0 * np.sqrt(self.area_scale)
         pairs = cKDTree(self.xy).query_pairs(radius, output_type="ndarray")
         graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(n, n))
         _, group = connected_components(graph, directed=False)
@@ -259,7 +259,7 @@ class Sample:
         if spans and max(spans) > 10 * radius:
             warnings.warn(
                 f"Linked points chain over {max(spans) * 1000 / np.sqrt(self.area_scale):.0f} m, "
-                f"more than ten times {metres:g} m, so some observations move far; a "
+                f"more than ten times {meters:g} m, so some observations move far; a "
                 "smaller distance keeps them nearer.",
                 stacklevel=2,
             )
@@ -267,7 +267,7 @@ class Sample:
         rows = pd.MultiIndex.from_arrays([self.points[:, 0], self.points[:, 1]]).get_indexer(keys)
         data = self.data.copy()
         data["lon"], data["lat"] = target[rows, 0], target[rows, 1]
-        return Sample(data, centre=self.projection_centre, crs=self.crs)
+        return Sample(data, center=self.projection_center, crs=self.crs)
 
     def within(self, boundary: Any) -> Sample:
         """The observations inside a region (or on its edge).
@@ -283,8 +283,8 @@ class Sample:
         Returns
         -------
         Sample
-            With the same ``crs`` and ``centre``; without an explicit
-            ``centre``, its projection is centred on the points kept, as for
+            With the same ``crs`` and ``center``; without an explicit
+            ``center``, its projection is centered on the points kept, as for
             a new sample.
 
         Raises
@@ -297,7 +297,7 @@ class Sample:
         keep = inside(as_geometry(boundary), self.data["lon"], self.data["lat"])
         if not keep.any():
             raise ValueError("No observations lie inside the boundary.")
-        return Sample(self.data[keep].reset_index(drop=True), centre=self.centre, crs=self.crs)
+        return Sample(self.data[keep].reset_index(drop=True), center=self.center, crs=self.crs)
 
     def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at some of the sample's points.
@@ -315,7 +315,7 @@ class Sample:
         keep = self.points[list(point_indices)]
         mask = pd.MultiIndex.from_frame(self.data[["lon", "lat"]]).isin([tuple(p) for p in keep])
         data = self.data.loc[mask].reset_index(drop=True)
-        return Sample(data, centre=self.projection_centre, crs=self.crs)
+        return Sample(data, center=self.projection_center, crs=self.crs)
 
     def __repr__(self) -> str:
         return (
@@ -338,9 +338,9 @@ def _parse_crs(crs: Any) -> CRS | None:
     return parsed
 
 
-def centre_of(points: np.ndarray) -> tuple[float, float]:
-    """The centre of (lon, lat) points, as the mean of their directions from
-    the Earth's centre."""
+def center_of(points: np.ndarray) -> tuple[float, float]:
+    """The center of (lon, lat) points, as the mean of their directions from
+    the Earth's center."""
     lon, lat = np.radians(np.asarray(points, dtype=float)).T
     x, y, z = (
         (np.cos(lat) * np.cos(lon)).mean(),
