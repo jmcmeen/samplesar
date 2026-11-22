@@ -2,6 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from samplesar._evaluate import compare_nests
 from samplesar._hull import (
     hull_area_nest,
     hull_distance_nest,
@@ -21,6 +22,7 @@ __all__ = [
     "Nest",
     "Sample",
     "__version__",
+    "compare_nests",
     "hull_area",
     "hull_area_nest",
     "hull_distance_nest",

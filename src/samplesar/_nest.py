@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -76,6 +77,31 @@ class Nest:
         """
         frame = self.to_frame()
         return frame.loc[frame["area"] > 0, ["area", "species"]].reset_index(drop=True)
+
+    def fit(self, model: str = "power", **kwargs: Any) -> Any:
+        """Fit one of sars' models to the nest's species-area data.
+
+        Parameters
+        ----------
+        model : str
+            A sars model: ``"power"`` calls ``sars.sar_power``, ``"loga"``
+            ``sars.sar_loga``, and so on.
+        **kwargs
+            Passed to the sars function.
+
+        Returns
+        -------
+        object
+            sars' fit (``SARFit`` for a single model).
+
+        Raises
+        ------
+        ValueError
+            If sars has no such model.
+        """
+        from samplesar._evaluate import fit_nest
+
+        return fit_nest(self, model, **kwargs)
 
 
 def check_size(sample: Sample, min_points: int) -> None:

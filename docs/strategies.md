@@ -65,3 +65,29 @@ vertex farthest from the centroid of the hull's vertices (Euclidean, in
 degrees, so a degree of longitude counts as much as one of latitude),
 trimming outlying corners first. `remove="closest"` removes the vertex nearest
 the centre and leaves the outliers to last. Ties go to the lowest point index.
+
+## Comparing strategies
+
+`Nest.fit(model="power")` fits one of [sars](https://jmcmeen.github.io/sars/)'
+models to a nest, and `compare_nests` fits the same model to several nests,
+one row each, so strategies can be compared on one sample:
+
+```python
+import samplesar
+
+nests = {
+    "random": samplesar.random_nest(sample, seed=0),
+    "hull random": samplesar.hull_random_nest(sample, seed=0),
+    "peel": samplesar.hull_peel_nest(sample),
+    "largest area": samplesar.hull_area_nest(sample, keep="largest"),
+    "most species": samplesar.hull_species_nest(sample, keep="most"),
+    "farthest": samplesar.hull_distance_nest(sample, remove="farthest"),
+}
+samplesar.compare_nests(nests)          # n_steps, c, z, r_squared, aicc, converged
+```
+
+Random removal keeps the sample's whole extent until its last few points, so
+it gives a steep curve; the outside-in strategies shrink the area from the
+first step, so their slopes are shallower. Nested steps share most of their
+points, so R² and AICc describe how smooth a strategy's curve is, not
+independent evidence: compare them across strategies on the same sample.

@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format is based on
   vertex whose loss leaves the most (or fewest) species.
 - `hull_distance_nest()`: nest a sample by removing, at each step, the hull
   vertex farthest from (or closest to) the centroid of the hull's vertices.
+- `Nest.fit()` and `compare_nests()`: fit a sars model to a nest, or the same
+  model to several nests (one row each: steps, parameters, R², AICc), to
+  compare sampling strategies.
 - `make typecheck` (mypy), part of `make check`; tests run in parallel.
 - A documentation site: getting started, the sampling strategies and an API
   reference (`make docs`, built on every pull request, deployed on each

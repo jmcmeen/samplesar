@@ -65,3 +65,4 @@ nav:
   - API Reference:
       - Samples: api/sample.md
       - Nests: api/nest.md
+      - Evaluation: api/evaluate.md

@@ -82,7 +82,7 @@ warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
 # No type information published for these.
-module = ["shapely.*"]
+module = ["shapely.*", "sars.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
