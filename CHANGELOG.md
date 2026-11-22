@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-22
+
 The first release as samplesar. Releases 0.1.0 to 0.1.3 were published as
 nestsar, a project that no longer exists; samplesar starts its version numbers
 again at 0.1.0.
@@ -27,3 +29,4 @@ again at 0.1.0.
   with nesting as one of them. Apart from the import name the API is
   unchanged, so `nestsar.random_nest(...)` becomes
   `samplesar.random_nest(...)`.
+
