@@ -83,8 +83,8 @@ def compare_nests(
         parameters (``c`` and ``z`` for the power model), ``r_squared``,
         ``aicc``, ``converged`` and ``at_bounds``: the parameters that
         stopped on a bound of sars' search, whose values are the bound's and
-        not estimates (empty when none; missing values with a sars too old
-        to tell).
+        not estimates (empty when none; missing, ``pd.NA``, with a sars too
+        old to tell).
 
     Warns
     -----
@@ -137,7 +137,11 @@ def compare_nests(
             }
         )
     table = pd.DataFrame(rows).set_index("nest")
-    bounded = [f"{name} ({', '.join(b)})" for name, b in table["at_bounds"].items() if b]
+    bounded = [
+        f"{name} ({', '.join(b)})"
+        for name, b in table["at_bounds"].items()
+        if isinstance(b, tuple) and b
+    ]
     if bounded:
         warnings.warn(
             f"Parameters stopped on a bound of the fit, so their values are the bound's, "
@@ -147,8 +151,8 @@ def compare_nests(
     return table
 
 
-def _at_bounds(fit: Any) -> tuple[str, ...] | None:
-    """The fit's parameters on a bound (sars' ``SARFit.at_bounds``), or None
-    with a sars that can't tell."""
+def _at_bounds(fit: Any) -> Any:
+    """The fit's parameters on a bound (sars' ``SARFit.at_bounds``), or a
+    missing value (``pd.NA``) in the table with a sars that can't tell."""
     names = getattr(fit, "at_bounds", None)
-    return None if names is None else tuple(names)
+    return pd.NA if names is None else tuple(names)

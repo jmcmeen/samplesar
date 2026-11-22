@@ -151,4 +151,4 @@ def test_an_old_sars_leaves_at_bounds_unknown(sample, monkeypatch):
 
     monkeypatch.setattr(sars, "sar_power", no_attribute)
     table = samplesar.compare_nests({"a": samplesar.random_nest(sample, seed=0)})
-    assert table.loc["a", "at_bounds"] is None
+    assert table.loc["a", "at_bounds"] is pd.NA
