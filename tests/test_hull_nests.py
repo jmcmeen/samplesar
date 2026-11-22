@@ -420,12 +420,31 @@ class TestConcavePeelNest:
         assert [len(s) for s in concave.steps] == [len(s) for s in convex.steps]
 
     def test_follows_the_outline(self):
-        # On the L, the first concave layer takes the whole outline (every
-        # point but the three inside), the convex one only part of it.
+        # On the L, a tight concave hull's first layer is the whole outline:
+        # only the three points inside it (indices 36 to 38) remain. The
+        # convex hull's first layer leaves far more.
         sample = self.l_shape()
         concave = samplesar.concave_peel_nest(sample, ratio=0.05, min_points=1)
+        assert list(concave.steps[1]) == [36, 37, 38]
         convex = samplesar.hull_peel_nest(sample, min_points=1)
-        assert len(concave.steps[1]) < len(convex.steps[1])
+        assert len(convex.steps[1]) > 3
+
+    def test_each_layer_is_the_concave_hull_boundary(self):
+        # Brute force: each removed set is the points on shapely's concave
+        # hull of the step before, within the shared tolerance.
+        import shapely
+        from shapely.geometry import MultiPoint
+
+        sample = self.l_shape()
+        nest = samplesar.concave_peel_nest(sample, ratio=0.5, min_points=1)
+        xy = sample.xy
+        for before, gone in removed(nest):
+            hull = shapely.concave_hull(MultiPoint(xy[before]), ratio=0.5)
+            x0, y0, x1, y1 = hull.bounds
+            near = shapely.distance(hull.exterior, shapely.points(xy[before])) <= 1e-9 * np.hypot(
+                x1 - x0, y1 - y0
+            )
+            assert set(gone) == set(before[near])
 
     @pytest.mark.parametrize("ratio", [-0.1, 1.5])
     def test_bad_ratio(self, sample, ratio):

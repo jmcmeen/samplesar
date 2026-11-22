@@ -369,9 +369,17 @@ def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -
     ValueError
         If ``ratio`` is outside 0 to 1, ``min_points`` is below 1, the sample
         has fewer points, or no layer can be peeled.
+    RuntimeError
+        If shapely is built on a GEOS older than 3.11 (the PyPI wheels of
+        shapely 2.0 and later aren't).
     """
     if not 0 <= ratio <= 1:
         raise ValueError(f"ratio must be between 0 and 1, got {ratio!r}.")
+    if shapely.geos_version < (3, 11):
+        raise RuntimeError(
+            f"concave_peel_nest needs GEOS 3.11 or newer for shapely's concave_hull; this "
+            f"shapely uses GEOS {'.'.join(map(str, shapely.geos_version))}."
+        )
     check_size(sample, min_points)
     points = sample.xy
     remaining = np.arange(sample.n_points)
@@ -379,10 +387,8 @@ def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -
     while True:
         hull = shapely.concave_hull(MultiPoint(points[remaining]), ratio=ratio)
         if isinstance(hull, Polygon):
-            x0, y0, x1, y1 = hull.bounds
-            tolerance = 1e-9 * float(np.hypot(x1 - x0, y1 - y0))
             distance = shapely.distance(hull.exterior, shapely.points(points[remaining]))
-            on = remaining[distance <= tolerance]
+            on = remaining[distance <= _tolerance(hull)]
         else:
             on = remaining
         inside = remaining[~np.isin(remaining, on)]
