@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-22
+
 ### Added
 
 - `hull_random_nest()`: nest a sample by removing a random vertex of its
