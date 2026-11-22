@@ -61,7 +61,7 @@ class Dataset:
     merge_m: float  # the merge distance used for the main results
 
 
-def regional(parquet: Path) -> list[tuple[str, str, dict, float]]:
+def regional() -> list[tuple[str, str, dict, float]]:
     """Regional pulls from the open data: key, label, query, merge distance."""
     return [
         ("steele_creek_all", "Steele Creek Park area, all taxa", {"bbox": (-82.26, 36.55, -82.21, 36.59)}, 10),
@@ -86,30 +86,45 @@ def load_datasets(parquet: Path | None, local: Path | None) -> list[Dataset]:
         sample = samplesar.Sample.from_csv(local, lon_col="longitude", lat_col="latitude")
         datasets.append(Dataset("local", "Steele Creek Park, one observer", sample, 10))
     if parquet is not None:
-        for key, label, query, merge in regional(parquet):
+        for key, label, query, merge in regional():
             sample = samplesar.Sample.from_open_data(parquet, **query)
             datasets.append(Dataset(key, label, sample, merge))
     return datasets
 
 
 def simulated_community(rng: np.random.Generator, cluster_share: float) -> samplesar.Sample:
-    """A 2 km square with 400 records of 80 species, each species found
-    within a circular range; ``cluster_share`` of the records are made at one
-    spot (GPS jitter of a few metres), as at a trailhead."""
-    n, n_species, side = 400, 80, 0.02  # degrees, about 2 km
+    """A 2 km square (in UTM zone 17N metres) with 400 records of 80
+    species. Each species occurs within a circular range of radius 200 to
+    1,000 m; a record takes one of the species whose range covers its point,
+    or any species at random where none does. ``cluster_share`` of the
+    records are made at one spot, with 2 m of GPS error, as at a trailhead."""
+    n, n_species, side = 400, 80, 2000.0
     centres = rng.uniform(0, side, size=(n_species, 2))
-    radii = rng.uniform(0.002, 0.01, size=n_species)
+    radii = rng.uniform(200, 1000, size=n_species)
     clustered = int(n * cluster_share)
     spot = np.array([side / 2, side / 2])
     points = np.vstack(
-        [rng.uniform(0, side, size=(n - clustered, 2)), spot + rng.normal(0, 2e-5, size=(clustered, 2))]
+        [rng.uniform(0, side, size=(n - clustered, 2)), spot + rng.normal(0, 2.0, size=(clustered, 2))]
     )
     species = []
     for p in points:
         present = np.flatnonzero(np.hypot(*(centres - p).T) <= radii)
         species.append(f"sp{rng.choice(present) if len(present) else rng.integers(n_species)}")
-    df = pd.DataFrame({"species": species, "lon": points[:, 0] - 82.0, "lat": points[:, 1] + 36.5})
-    return samplesar.Sample.from_df(df)
+    origin = np.array([500_000.0, 4_040_000.0])
+    df = pd.DataFrame({"species": species, "x": points[:, 0] + origin[0], "y": points[:, 1] + origin[1]})
+    return samplesar.Sample.from_df(df, lon_col="x", lat_col="y", crs="EPSG:32617")
+
+
+POWER_Z_BOUND = 5.0  # sars searches the power model's z within ±5
+
+
+def at_bounds(fit) -> str:
+    """The parameters stopped on a bound: sars' SARFit.at_bounds where the
+    installed sars has it, else z at the power model's bound."""
+    names = getattr(fit, "at_bounds", None)
+    if names is None:
+        names = ("z",) if abs(fit.params["z"]) >= POWER_Z_BOUND * (1 - 1e-6) else ()
+    return ",".join(names)
 
 
 def fit_row(nest: samplesar.Nest) -> dict:
@@ -121,7 +136,7 @@ def fit_row(nest: samplesar.Nest) -> dict:
         "c": fit.params["c"],
         "z": fit.params["z"],
         "r_squared": fit.r_squared,
-        "at_bounds": ",".join(getattr(fit, "at_bounds", ()) or ()),
+        "at_bounds": at_bounds(fit),
         "lag1": auto["lag1"],
         "durbin_watson": auto["durbin_watson"],
     }
@@ -158,7 +173,8 @@ def merge_sensitivity(sample: samplesar.Sample, distances: list[float]) -> pd.Da
                 nest = samplesar.nest(merged, name, **options)
                 fit = nest.fit()
                 rows.append({"merge_m": metres, "n_points": merged.n_points, "strategy": code,
-                             "z": fit.params["z"], "min_area_km2": nest.sar_data()["area"].min()})
+                             "z": fit.params["z"], "at_bounds": at_bounds(fit),
+                             "min_area_km2": nest.sar_data()["area"].min()})
             except ValueError:
                 rows.append({"merge_m": metres, "n_points": merged.n_points, "strategy": code})
     return pd.DataFrame(rows)
@@ -302,14 +318,18 @@ def main() -> None:
     baseline_n = 19 if args.quick else 99
     replicates = 3 if args.quick else 20
 
+    if args.opendata is None and args.local_sample is None:
+        parser.error("give --opendata, --local-sample or both")
     datasets = load_datasets(args.opendata.expanduser() if args.opendata else None,
                              args.local_sample.expanduser() if args.local_sample else None)
     summary, results, nests_by_dataset, labels = [], [], {}, {}
     for ds in datasets:
         raw = ds.sample
         used = thin(raw.merge_within(ds.merge_m), MAX_POINTS)
+        within_5m = 1 - raw.merge_within(5).n_points / raw.n_points
         summary.append({"dataset": ds.key, "label": ds.label, "observations": raw.n_observations,
                         "points": raw.n_points, "species": raw.n_species, "area_km2": raw.area,
+                        "share_merged_at_5m": within_5m,
                         "merge_m": ds.merge_m, "points_merged": raw.merge_within(ds.merge_m).n_points,
                         "points_used": used.n_points})
         print(f"{ds.label}: {raw.n_observations} obs, {raw.n_points} points -> {used.n_points} used")
@@ -324,7 +344,10 @@ def main() -> None:
     figure_schematic(figures / "fig1_strategies.png")
     figure_curves(nests_by_dataset, labels, figures / "fig2_curves.png")
     figure_z(strategies, labels, figures / "fig3_z_by_strategy.png")
-    first = datasets[0]
+    # The sensitivity analysis and the compactness figure use the local
+    # sample when given (as the draft describes), else the first region.
+    first = next((d for d in datasets if d.key == "local"), datasets[0])
+    print(f"Merge sensitivity and compactness: {first.label}")
     sens = merge_sensitivity(first.sample, [0, 2, 5, 10, 25, 50])
     sens.insert(0, "dataset", first.key)
     sens.to_csv(tables / "merge_sensitivity.csv", index=False)

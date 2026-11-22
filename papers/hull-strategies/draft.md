@@ -21,11 +21,10 @@ iNaturalist samples spanning a park, a mountain range, a state and a tropical
 cloud forest, and on simulated communities. Random removal keeps the sample's
 full extent until its last points and gives near-vertical curves whose
 power-model slope is meaningless. Strategies that shrink the hull from the
-outside in agree with one another and give slopes of 0.15 to 0.35, the range
-of classic SARs, while greedy rules bias the slope in predictable directions.
-Records made at one spot dominate the end of every nest unless points within
-a few metres are merged, which in simulations restores the slope that
-clustering destroys. We recommend hull peeling of merged points, compared
+outside in agree with one another and give slopes of 0.15 to 0.34, the range
+of classic SARs, while greedy rules bias the slope. Records made at one spot
+dominate the end of every nest unless points within a few metres are merged,
+which in simulations largely restores the slope that clustering destroys. We recommend hull peeling of merged points, compared
 against a random-vertex baseline, as the default, and provide the strategies
 in the Python package samplesar.
 
@@ -116,7 +115,8 @@ AICc and standard errors aren't independent evidence. We therefore compared
 each strategy with a baseline of 99 random-vertex (S2) nests of the same
 sample, reporting where its *z* falls in the baseline's distribution as a
 two-sided rank p-value. Fits whose parameters stopped on a bound of the
-search were flagged rather than read as estimates.
+search (the power model's *z* at 5) were flagged rather than read as
+estimates.
 
 ### 2.5 Diagnostics
 
@@ -147,10 +147,13 @@ at random (seeded), to keep the area-based strategies tractable.
 
 ### 2.7 Simulations
 
-Simulated communities of 400 records of 80 species in a 2 km square, each
-species occurring within a circular range of random size, with 0, 25% or 50%
-of the records placed at one spot with a few metres of GPS error, were nested
-by every strategy with and without merging within 10 m (20 replicates each).
+Simulated communities of 400 records of 80 species in a 2 km square (laid out
+in UTM metres), each species occurring within a circular range of radius 200
+to 1,000 m, were nested by every strategy with and without merging within
+10 m (20 replicates each). A record took one of the species whose range
+covered its point, or any species at random where none did. In each
+community 0, 25% or 50% of the records were placed at one spot with 2 m of
+GPS error.
 
 ## 3. Results
 
@@ -162,22 +165,26 @@ until its last points, so area hardly changes while richness falls (Fig. 3).
 The outside-in strategies without a greedy rule, random hull vertex (S2),
 hull peeling (S3) and concave peeling (S10), agreed closely with one another
 on every sample, with *z* between 0.15 and 0.34, the range reported for
-classic SARs. Greedy rules shifted *z* consistently: keeping species (S6)
-gave the lowest slopes on every sample (0.05 to 0.17), and keeping area (S4)
-or removing the vertex closest to the centre (S9) the highest, S9 reaching
-the bound on the single-observer sample.
+classic SARs. Greedy rules shifted *z*: keeping species (S6) gave the lowest
+slope on three of five samples (0.05 to 0.09), and keeping area (S4) or
+removing the vertex closest to the centre (S9) the highest, both reaching or
+nearing the bound on the single-observer sample. At Monteverde, where every
+strategy but S1, S4 and S9 gave *z* between 0.14 and 0.17, the greedy rules
+made little difference.
 
 ### 3.2 Clustered records, and merging them
 
-On the single-observer park sample, 72% of points lay within 5 m of another.
+On the single-observer park sample, merging within 5 m removed 72% of the
+points (Table 2's samples ranged from 9% for East Tennessee frogs to 72%).
 Without merging, the last few hundred steps of every hull nest measured hulls
-under a square metre across, and every hull strategy gave *z* ≈ 0.07.
+under a square metre across, and every hull strategy but S4 and S9 gave
+*z* ≈ 0.06 to 0.07.
 Merging within 5 to 10 m raised hull peeling's *z* to 0.26 to 0.34, after
 which it changed little up to 50 m (Fig. 4). The simulations isolate the
-effect (Fig. 5): with no clustering, the outside-in strategies gave a median
-*z* of 0.42 to 0.47; with half the records at one spot, *z* fell to 0.07 to
-0.08 for the raw records, but stayed at 0.26 to 0.45 after merging within
-10 m.
+effect (Fig. 5): with no clustering, the outside-in strategies (S2, S3, S5,
+S7, S8, S10) gave a median *z* of 0.42 to 0.48; with half the records at one
+spot, *z* fell to 0.07 to 0.08 for the raw records, but stayed at 0.26 to
+0.44 after merging within 10 m.
 
 ### 3.3 Against the random-vertex baseline
 
@@ -192,10 +199,12 @@ reminder of how much one random nest varies.
 
 ### 3.4 Steps are far from independent
 
-Residuals of one-at-a-time nests were strongly autocorrelated (lag-1 0.94 to
-0.99). Peeling strategies, with far fewer steps, had lower autocorrelation
-(hull peeling 0.6 to 0.96, concave peeling 0.12 to 0.88), so their R² and
-AICc overstate the evidence less, though still substantially.
+Residuals of one-at-a-time nests were strongly autocorrelated, with lag-1
+autocorrelation above 0.94 in all but two cases (S6 at 0.84 and S8 at 0.46,
+both on the single-observer sample). Peeling strategies, with far fewer
+steps, were usually lower (hull peeling 0.60 to 0.96, concave peeling 0.12
+to 0.88), so their R² and AICc overstate the evidence less, though still
+substantially.
 
 ### 3.5 Hull shapes
 
@@ -212,12 +221,14 @@ against an area that barely changes. Shrinking the hull from the outside in
 gives curves whose slopes are stable across strategies and samples, and
 comparable with classic SARs. Among those, hull peeling is the natural
 default: it needs no random seed or greedy rule, removes each convex layer
-whole, and has the least autocorrelated residuals of the convex strategies.
+whole, and its residuals are among the least autocorrelated of the convex
+strategies.
 Concave peeling suits irregular samples, such as valleys and trail networks,
 whose convex hull spans unsampled ground.
 
 The greedy rules are biased by construction. Keeping species (S6) removes
-redundant points first, so richness falls late and the slope is shallow;
+redundant points first, so richness falls late and the slope is usually
+shallow;
 keeping area (S4) removes interior-adjacent vertices, so area falls late and
 the slope is steep. They answer different questions, such as how robust
 richness is to losing the least or most valuable ground, rather than giving
