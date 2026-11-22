@@ -44,5 +44,5 @@ the end:
 import sars
 
 fit = sars.sar_power(nest.sar_data())
-fit.z, fit.r_squared
+fit.params["z"], fit.r_squared
 ```
