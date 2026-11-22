@@ -101,8 +101,44 @@ def test_a_sample_across_the_antimeridian_draws_in_one_piece():
     assert right - left < 2  # about a degree wide, not the whole globe
 
 
-def test_few_enough_ticks_not_to_overlap(nest):
+def test_few_enough_ticks_not_to_overlap():
+    # A wide, long-coordinate sample: matplotlib's default picks 7 or more
+    # longitude ticks here.
+    rng = np.random.default_rng(1)
+    df = pd.DataFrame(
+        {
+            "species": rng.choice(list("abcdef"), 40),
+            "lon": rng.uniform(-82.30, -82.18, 40),
+            "lat": rng.uniform(36.55, 36.57, 40),
+        }
+    )
+    nest = samplesar.hull_peel_nest(samplesar.Sample.from_df(df), min_points=1)
     ax = samplesar.plot_nest(nest)
-    left, right = ax.get_xlim()
-    shown = [x for x in ax.get_xticks() if left <= x <= right]
-    assert len(shown) <= 5
+    ax.figure.set_size_inches(10, 4)
+    for axis, lim in ((ax.xaxis, ax.get_xlim()), (ax.yaxis, ax.get_ylim())):
+        shown = [v for v in axis.get_ticklocs() if lim[0] <= v <= lim[1]]
+        assert len(shown) <= 6
+
+
+def test_given_axes_keep_their_ticks(nest):
+    from matplotlib.ticker import MultipleLocator
+
+    _, ax = plt.subplots()
+    locator = MultipleLocator(0.01)
+    ax.xaxis.set_major_locator(locator)
+    samplesar.plot_nest(nest, ax=ax)
+    assert ax.xaxis.get_major_locator() is locator
+
+
+def test_antimeridian_ticks_are_labelled_within_180():
+    df = pd.DataFrame(
+        {
+            "species": list("abcde"),
+            "lon": [179.5, -179.5, -179.5, 179.5, 179.9],
+            "lat": [10, 10, 11, 11, 10.5],
+        }
+    )
+    nest = samplesar.hull_peel_nest(samplesar.Sample.from_df(df), min_points=1)
+    ax = samplesar.plot_nest(nest)
+    labels = [ax.xaxis.get_major_formatter()(v, i) for i, v in enumerate(ax.get_xticks())]
+    assert all(-180 <= float(label) < 180 for label in labels)
