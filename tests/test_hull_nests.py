@@ -7,6 +7,12 @@ import pytest
 import samplesar
 from samplesar._hull import hull_vertices
 
+STRATEGIES = [
+    samplesar.hull_random_nest,
+    samplesar.hull_peel_nest,
+    samplesar.hull_area_nest,
+]
+
 
 def make_sample(points, species=None):
     points = np.asarray(points, dtype=float)
@@ -122,7 +128,7 @@ class TestHullPeelNest:
         assert [len(s) for s in nest.steps] == [7, 3]
 
 
-@pytest.mark.parametrize("strategy", [samplesar.hull_random_nest, samplesar.hull_peel_nest])
+@pytest.mark.parametrize("strategy", STRATEGIES)
 def test_rejects_bad_sizes(strategy, sample):
     with pytest.raises(ValueError, match="at least 3"):
         strategy(make_sample([[0, 0], [1, 1]]))
@@ -130,7 +136,7 @@ def test_rejects_bad_sizes(strategy, sample):
         strategy(sample, min_points=0)
 
 
-@pytest.mark.parametrize("strategy", [samplesar.hull_random_nest, samplesar.hull_peel_nest])
+@pytest.mark.parametrize("strategy", STRATEGIES)
 def test_sar_data_fits_with_sars(strategy, sample):
     import sars
 
@@ -156,3 +162,48 @@ def test_peeling_points_all_on_the_hull_is_an_error():
     circle = make_sample(np.column_stack([np.cos(angles), np.sin(angles)]))
     with pytest.raises(ValueError, match="No layer can be peeled"):
         samplesar.hull_peel_nest(circle)
+
+
+def brute_force_choice(sample, before, score):
+    """The vertex a rule-based strategy should remove from ``before``: highest
+    score, then farthest from the vertices' centroid, then lowest index."""
+    points = sample.points
+    vertices = hull_vertices(points, before)
+    centre = points[vertices].mean(axis=0)
+    return min(
+        vertices,
+        key=lambda v: (-score(before[before != v]), -np.hypot(*(points[v] - centre)), v),
+    )
+
+
+class TestHullAreaNest:
+    @pytest.mark.parametrize("keep", ["largest", "smallest"])
+    def test_matches_brute_force(self, sample, keep):
+        sign = 1 if keep == "largest" else -1
+        nest = samplesar.hull_area_nest(sample, keep=keep)
+        assert nest.n_steps == sample.n_points - 3 + 1
+        assert_nested(nest)
+        for before, gone in removed(nest):
+            expected = brute_force_choice(
+                sample, before, lambda rest: sign * samplesar.hull_area(sample.points[rest])
+            )
+            assert gone[0] == expected
+
+    def test_known_answer(self):
+        # A unit square with a point just inside corner 0: dropping corner 0
+        # loses almost nothing, so "largest" takes it first; "smallest" takes a
+        # corner whose loss halves the square.
+        points = [[0, 0], [1, 0], [1, 1], [0, 1], [0.05, 0.05]]
+        largest = samplesar.hull_area_nest(make_sample(points), keep="largest")
+        assert 0 not in largest.steps[1]
+        smallest = samplesar.hull_area_nest(make_sample(points), keep="smallest")
+        assert samplesar.hull_area(np.asarray(points, float)[smallest.steps[1]]) < 0.6
+
+    def test_ties_go_to_the_lowest_index(self):
+        # The four corners of a square are interchangeable.
+        square = make_sample([[0, 0], [1, 0], [1, 1], [0, 1]])
+        assert list(samplesar.hull_area_nest(square).steps[1]) == [1, 2, 3]
+
+    def test_rejects_unknown_keep(self, sample):
+        with pytest.raises(ValueError, match="keep must be"):
+            samplesar.hull_area_nest(sample, keep="biggest")

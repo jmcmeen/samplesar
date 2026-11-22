@@ -12,6 +12,8 @@ All notable changes to this project are documented here. The format is based on
   convex hull at each step, so it shrinks from the outside in.
 - `hull_peel_nest()`: nest a sample by peeling off its whole convex hull
   boundary at each step (convex layers).
+- `hull_area_nest()`: nest a sample by removing, at each step, the hull
+  vertex whose loss leaves the largest (or smallest) remaining hull.
 - `make typecheck` (mypy), part of `make check`; tests run in parallel.
 - A documentation site: getting started, the sampling strategies and an API
   reference (`make docs`, built on every pull request, deployed on each

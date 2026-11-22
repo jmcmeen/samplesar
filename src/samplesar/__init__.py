@@ -2,7 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from samplesar._hull import hull_peel_nest, hull_random_nest
+from samplesar._hull import hull_area_nest, hull_peel_nest, hull_random_nest
 from samplesar._nest import Nest, random_nest
 from samplesar._sample import Sample, hull_area
 
@@ -16,6 +16,7 @@ __all__ = [
     "Sample",
     "__version__",
     "hull_area",
+    "hull_area_nest",
     "hull_peel_nest",
     "hull_random_nest",
     "random_nest",

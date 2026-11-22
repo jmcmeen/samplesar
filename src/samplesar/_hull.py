@@ -9,7 +9,7 @@ import shapely
 from shapely.geometry import MultiPoint, Polygon
 
 from samplesar._nest import Nest, check_size
-from samplesar._sample import Sample
+from samplesar._sample import Sample, hull_area
 
 
 def _hull(points: np.ndarray, idx: np.ndarray) -> shapely.Geometry:
@@ -125,3 +125,57 @@ def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
             "sample's convex hull."
         )
     return Nest(sample=sample, steps=tuple(steps))
+
+
+def _centre_distance(points: np.ndarray, vertices: np.ndarray) -> np.ndarray:
+    """Each vertex's distance from the centroid of the vertices (degrees)."""
+    corners = points[vertices]
+    return np.hypot(*(corners - corners.mean(axis=0)).T)
+
+
+def _pick(vertices: np.ndarray, score: np.ndarray, distance: np.ndarray) -> int:
+    """The vertex with the highest score; ties go to the one farthest from the
+    centre, then to the lowest point index."""
+    order = np.lexsort((vertices, -distance, -score))
+    return int(vertices[order[0]])
+
+
+def hull_area_nest(sample: Sample, keep: str = "largest", min_points: int = 3) -> Nest:
+    """Nest a sample by removing the hull vertex that changes its area least or most.
+
+    At each step every vertex of the current convex hull is tried, and the
+    one whose removal leaves the largest hull (``keep="largest"``, the
+    smallest loss of area) or the smallest hull (``keep="smallest"``, the
+    largest loss) goes. Ties go to the vertex farthest from the centroid of
+    the hull's vertices, then to the lowest point index, so the nest is
+    deterministic.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    keep : {"largest", "smallest"}
+        Which remaining hull to keep at each step.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``keep`` is unknown, ``min_points`` is below 1 or the sample has
+        fewer points.
+    """
+    if keep not in ("largest", "smallest"):
+        raise ValueError(f"keep must be 'largest' or 'smallest', got {keep!r}")
+    sign = 1.0 if keep == "largest" else -1.0
+    points = sample.points
+
+    def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
+        areas = np.array([hull_area(points[remaining[remaining != v]]) for v in vertices])
+        return _pick(vertices, sign * areas, _centre_distance(points, vertices))
+
+    return _remove_one(sample, min_points, choose)

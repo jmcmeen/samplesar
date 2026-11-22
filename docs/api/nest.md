@@ -15,3 +15,7 @@
 ## hull_peel_nest
 
 ::: samplesar.hull_peel_nest
+
+## hull_area_nest
+
+::: samplesar.hull_area_nest

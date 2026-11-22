@@ -35,3 +35,17 @@ strictly inside. These are the sample's convex layers (onion peeling). A step
 can remove many points, so the nest has few steps; on a regular grid each step
 takes off the outer ring. It stops before a layer would leave fewer than
 `min_points` points.
+
+## Choosing a vertex
+
+The next strategies each remove one hull vertex per step, chosen by a rule
+rather than at random. Every vertex of the current hull is a candidate; ties
+go to the vertex farthest from the centroid of the hull's vertices, then to
+the lowest point index, so the nest is always the same for the same sample.
+
+### By area change
+
+`hull_area_nest(sample, keep="largest", min_points=3)` tries removing each
+vertex and keeps the largest remaining hull: the vertex whose loss costs the
+least area goes first, so the area falls as slowly as the points allow.
+`keep="smallest"` does the opposite, cutting the area as fast as possible.
