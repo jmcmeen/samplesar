@@ -46,3 +46,15 @@ import sars
 fit = sars.sar_power(nest.sar_data())
 fit.params["z"], fit.r_squared
 ```
+
+## Saving a nest
+
+A nest can be saved and loaded, so an expensive one is built once:
+
+```python
+nest.to_json("nest.json")
+again = samplesar.Nest.from_json("nest.json")
+```
+
+The file holds the observations, the strategy and its options, and the
+points each step removes.

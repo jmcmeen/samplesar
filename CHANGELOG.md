@@ -17,6 +17,8 @@ All notable changes to this project are documented here. The format is based on
   (repeated labels are numbered).
 - `nest_from_order(sample, order)`: nest a sample by removing its points in
   a given order, so any ordering can be evaluated.
+- `Nest.to_dict()` / `Nest.from_dict()` and `Nest.to_json()` /
+  `Nest.from_json()`: save and load a nest, with its strategy and options.
 
 ### Changed
 

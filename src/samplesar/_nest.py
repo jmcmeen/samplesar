@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -107,6 +109,117 @@ class Nest:
         frame = self.to_frame()
         return frame.loc[frame["area"] > 0, ["area", "species"]].reset_index(drop=True)
 
+    def to_dict(self) -> dict[str, Any]:
+        """The nest as plain data, ready for JSON.
+
+        Holds the observations, the strategy and its options, and the steps,
+        stored as the points each step removes rather than in full.
+
+        Returns
+        -------
+        dict
+
+        Raises
+        ------
+        ValueError
+            If the steps aren't nested (only a nest built by hand can be
+            like that).
+        """
+        removed = []
+        for before, after in zip(self.steps, self.steps[1:], strict=False):
+            if not np.isin(after, before).all():
+                raise ValueError("Only a nest whose steps are nested can be saved.")
+            removed.append(np.setdiff1d(before, after).tolist())
+        data = self.sample.data
+        return {
+            "format": FORMAT,
+            "version": FORMAT_VERSION,
+            "samplesar": _package_version(),
+            "strategy": self.strategy,
+            "options": {k: _plain(v) for k, v in self.options.items()},
+            "observations": {
+                "species": data["species"].tolist(),
+                "lon": data["lon"].tolist(),
+                "lat": data["lat"].tolist(),
+            },
+            "first": np.asarray(self.steps[0]).tolist(),
+            "removed": removed,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Nest:
+        """Rebuild a nest from [`to_dict`][samplesar.Nest.to_dict]'s output.
+
+        Parameters
+        ----------
+        data : mapping
+            As written by ``to_dict`` (or read back from its JSON).
+
+        Returns
+        -------
+        Nest
+
+        Raises
+        ------
+        ValueError
+            If the data isn't a saved nest, is from a newer format version,
+            or its steps don't fit its sample.
+        """
+        if data.get("format") != FORMAT:
+            raise ValueError("Not a saved samplesar nest.")
+        if data.get("version", 0) > FORMAT_VERSION:
+            raise ValueError(
+                f"Saved with nest format {data['version']}; this samplesar reads up to "
+                f"{FORMAT_VERSION}. Upgrade samplesar to load it."
+            )
+        sample = Sample.from_df(pd.DataFrame(data["observations"]))
+        remaining = np.asarray(data["first"], dtype=int)
+        if remaining.size and (remaining.min() < 0 or remaining.max() >= sample.n_points):
+            raise ValueError("The saved steps name points outside the saved sample.")
+        steps = [remaining]
+        for gone in data["removed"]:
+            gone = np.asarray(gone, dtype=int)
+            if not np.isin(gone, remaining).all():
+                raise ValueError("A saved step removes a point that isn't there.")
+            remaining = remaining[~np.isin(remaining, gone)]
+            steps.append(remaining)
+        return cls(
+            sample=sample,
+            steps=tuple(steps),
+            strategy=data.get("strategy", ""),
+            options=Options(data.get("options", {})),
+        )
+
+    def to_json(self, path: str | Path) -> None:
+        """Save the nest to a JSON file (see [`to_dict`][samplesar.Nest.to_dict]).
+
+        Parameters
+        ----------
+        path : str or Path
+            The file to write.
+        """
+        Path(path).write_text(json.dumps(self.to_dict()))
+
+    @classmethod
+    def from_json(cls, path: str | Path) -> Nest:
+        """Load a nest saved with [`to_json`][samplesar.Nest.to_json].
+
+        Parameters
+        ----------
+        path : str or Path
+            The file to read.
+
+        Returns
+        -------
+        Nest
+
+        Raises
+        ------
+        ValueError
+            As [`from_dict`][samplesar.Nest.from_dict].
+        """
+        return cls.from_dict(json.loads(Path(path).read_text()))
+
     def fit(self, model: str = "power", **kwargs: Any) -> Any:
         """Fit one of sars' models to the nest's species-area data.
 
@@ -157,6 +270,25 @@ def check_size(sample: Sample, min_points: int) -> None:
         raise ValueError(f"min_points must be at least 1, got {min_points}")
     if sample.n_points < min_points:
         raise ValueError(f"Sample has {sample.n_points} points; need at least {min_points}")
+
+
+FORMAT = "samplesar.nest"
+FORMAT_VERSION = 1
+
+
+def _package_version() -> str:
+    from samplesar import __version__
+
+    return __version__
+
+
+def _plain(value: Any) -> Any:
+    """An option value as plain JSON data."""
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray | tuple | list):
+        return [_plain(v) for v in value]
+    return value
 
 
 @register_strategy("random")
