@@ -149,7 +149,7 @@ range, and a two-sided rank p-value.
 A new sampling design is a function that takes a `Sample` and its options as
 keywords and returns a `Nest` whose `steps` are index arrays into
 `sample.points`, each a subset of the one before. Register it, and it runs by
-name, is listed by `strategies()` and labels its nests like the built-in ones:
+name, is listed by `strategies.available()` and labels its nests like the built-in ones:
 
 ```python
 import numpy as np

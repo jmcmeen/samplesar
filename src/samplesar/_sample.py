@@ -353,6 +353,10 @@ def centre_of(points: np.ndarray) -> tuple[float, float]:
 def hull_area(points: np.ndarray) -> float:
     """Convex hull area of a set of points, in their own units.
 
+    Not to be confused with the strategy
+    [`strategies.hull_area`][samplesar.strategies.hull_area], which nests a
+    sample.
+
     For a sample's area in km², pass its projected points,
     [`Sample.xy`][samplesar.Sample.xy] (as [`Sample.area`][samplesar.Sample.area]
     does).

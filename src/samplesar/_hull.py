@@ -204,6 +204,9 @@ def hull_area(
 ) -> Nest:
     """Nest a sample by removing the hull vertex that changes its area least or most.
 
+    Not to be confused with [`samplesar.hull_area`][samplesar.hull_area],
+    which measures a set of points.
+
     At each step every vertex of the current convex hull is tried, and the
     one whose removal leaves the largest hull (``keep="largest"``, the
     smallest loss of area) or the smallest hull (``keep="smallest"``, the

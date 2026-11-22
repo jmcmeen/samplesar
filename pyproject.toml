@@ -42,7 +42,7 @@ dev = [
   "pytest-xdist[psutil]",
   "mypy",
   "pandas-stubs",
-  "geopandas>=0.14",  # Sample.from_geodataframe tests; not a runtime dependency
+  "geopandas>=0.14",  # sources.geodataframe and regions tests; the geo extra at run time
   "duckdb>=1.1",  # open-data tests; the opendata extra at run time
   "ruff>=0.17,<0.18",  # pinned: minor releases change formatting; upgrade on purpose
 ]
