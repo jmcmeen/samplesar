@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `papers/`: manuscripts built on samplesar. The first, on the hull
+  strategies, has an outline and a formal specification of strategies S1 to
+  S9 that the code is checked against.
+
 ## [0.1.2] - 2026-11-22
 
 ### Added
