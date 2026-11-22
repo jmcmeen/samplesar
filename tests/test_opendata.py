@@ -287,3 +287,16 @@ def test_a_partial_file_of_unknown_version_starts_again(server, tmp_path, export
         export / "observations.csv.gz"
     ).read_bytes()
     assert ("/observations.csv.gz", None) in seen
+
+
+def test_a_boundary(parquet):
+    from shapely.geometry import box
+
+    # Around u1 and u2 only: the bbox would also hold u3, but it's outside.
+    region = box(-82.215, 36.495, -82.195, 36.515)
+    sample = samplesar.Sample.from_open_data(parquet, boundary=region)
+    assert sample.n_observations == 2
+    narrower = samplesar.Sample.from_open_data(
+        parquet, boundary=region, bbox=(-82.205, 36.5, -82.2, 36.52)
+    )
+    assert narrower.n_observations == 1

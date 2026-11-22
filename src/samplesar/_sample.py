@@ -302,6 +302,7 @@ class Sample:
         since: date | str | None = None,
         until: date | str | None = None,
         max_accuracy: float | None = None,
+        boundary: Any = None,
     ) -> Sample:
         """Build a sample from a local copy of iNaturalist's open data.
 
@@ -331,6 +332,12 @@ class Sample:
             this many metres. The export doesn't mark obscured observations,
             whose public coordinates are randomised; this is the filter
             available.
+        boundary : polygon, optional
+            Keep only observations inside this region (or on its edge): a
+            shapely polygon or multipolygon in WGS84, or a GeoDataFrame or
+            GeoSeries in any CRS, such as
+            [`samplesar.boundary`][samplesar.boundary] returns. Its bounding
+            box narrows what's read, and ``bbox`` narrows it further.
 
         Returns
         -------
@@ -340,7 +347,8 @@ class Sample:
         ------
         ValueError
             If no observations match, ``bbox`` isn't (west, south, east,
-            north), or ``quality_grade`` or ``ranks`` is empty.
+            north), ``quality_grade`` or ``ranks`` is empty, or ``boundary``
+            isn't polygonal.
         ImportError
             If DuckDB isn't installed.
 
@@ -350,8 +358,12 @@ class Sample:
         ...     "observations.parquet", bbox=(-85.0, 35.0, -81.5, 37.0), taxon_id=20979
         ... )
         """
+        from samplesar._boundary import as_geometry, clip_bbox, inside
         from samplesar._opendata import open_data_frame
 
+        region = None if boundary is None else as_geometry(boundary)
+        if region is not None:
+            bbox = clip_bbox(region, bbox)
         frame = open_data_frame(
             path,
             bbox=bbox,
@@ -362,6 +374,8 @@ class Sample:
             until=until,
             max_accuracy=max_accuracy,
         )
+        if region is not None and not frame.empty:
+            frame = frame[inside(region, frame["lon"], frame["lat"])].reset_index(drop=True)
         if frame.empty:
             raise ValueError("No observations in the open data match these filters.")
         return cls.from_df(frame)
@@ -534,6 +548,35 @@ class Sample:
         data = self.data.copy()
         data["lon"], data["lat"] = target[rows, 0], target[rows, 1]
         return Sample(data, centre=self.projection_centre, crs=self.crs)
+
+    def within(self, boundary: Any) -> Sample:
+        """The observations inside a region (or on its edge).
+
+        Parameters
+        ----------
+        boundary : polygon
+            A shapely polygon or multipolygon in WGS84 longitude and
+            latitude, or a GeoDataFrame or GeoSeries of them in any CRS (it
+            is converted and dissolved), such as
+            [`samplesar.boundary`][samplesar.boundary] returns.
+
+        Returns
+        -------
+        Sample
+            With the same ``crs``; its projection is centred on the points
+            kept, as for a new sample.
+
+        Raises
+        ------
+        ValueError
+            If ``boundary`` isn't polygonal, or no observation lies inside it.
+        """
+        from samplesar._boundary import as_geometry, inside
+
+        keep = inside(as_geometry(boundary), self.data["lon"], self.data["lat"])
+        if not keep.any():
+            raise ValueError("No observations lie inside the boundary.")
+        return Sample(self.data[keep].reset_index(drop=True), crs=self.crs)
 
     def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at some of the sample's points.

@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `Sample.within(boundary)` and `Sample.from_open_data(..., boundary=...)`:
+  keep only the observations inside a region's outline, from a shapely
+  polygon in WGS84 or a GeoDataFrame or GeoSeries in any CRS.
+- `samplesar.boundary(country, level=0, name=None)`: a country's, state's or
+  county's boundary from geoBoundaries' open release, cached, for
+  `within` and `boundary=`.
+
 ## [0.1.3] - 2026-11-22
 
 ### Added

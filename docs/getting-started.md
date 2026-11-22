@@ -80,6 +80,26 @@ observations with openly licensed photos, and obscured observations carry
 their public, randomised coordinates without a flag; `max_accuracy` (metres)
 is the filter available for that.
 
+## Within a boundary
+
+`Sample.within` keeps the observations inside a region's outline, and
+`from_open_data(boundary=...)` reads only those. `samplesar.boundary` fetches
+countries, states and counties from geoBoundaries (cached after the first
+download); any shapely polygon, or a GeoDataFrame in any CRS, works too:
+
+```python
+costa_rica = samplesar.boundary("CRI")
+frogs = samplesar.Sample.from_open_data(parquet, boundary=costa_rica, taxon_id=20979)
+
+tennessee = samplesar.boundary("USA", level=1, name="Tennessee")
+sullivan = samplesar.boundary("USA", 2, "Sullivan", inside=tennessee)
+```
+
+Regions that cross political lines (ecoregions, physiographic provinces,
+watersheds) come as shapefiles or GeoJSON; read them with geopandas and pass
+the frame, or the rows you want, as the boundary. geoBoundaries' files carry
+their own licenses (CC BY 4.0 or ODbL) and need attribution when published.
+
 ## A nest
 
 A nesting strategy shrinks the sample one step at a time. Each step keeps a

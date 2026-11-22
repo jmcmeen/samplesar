@@ -4,6 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from samplesar._diagnostics import nest_diagnostics, residual_autocorrelation
 from samplesar._evaluate import compare_nests, compare_to_baseline, random_baseline
+from samplesar._geoboundaries import boundary
 from samplesar._hull import (
     concave_peel_nest,
     hull_area_nest,
@@ -28,6 +29,7 @@ __all__ = [
     "Sample",
     "__version__",
     "animate_nest",
+    "boundary",
     "compare_nests",
     "compare_to_baseline",
     "concave_peel_nest",

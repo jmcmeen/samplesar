@@ -326,3 +326,43 @@ class TestMergeWithin:
     def test_bad_distance(self, bad):
         with pytest.raises(ValueError, match="metres must be a positive number"):
             self.near().merge_within(bad)
+
+
+class TestWithin:
+    def sample(self):
+        lons = [0.1, 0.5, 0.9, 1.5, 1.0]
+        lats = [0.1, 0.5, 0.9, 0.5, 0.5]  # the last sits on the square's edge
+        return samplesar.Sample.from_df(frame(lons, lats, species=list("abcde")))
+
+    def test_a_polygon(self):
+        from shapely.geometry import box
+
+        inside = self.sample().within(box(0, 0, 1, 1))
+        assert sorted(inside.data["species"]) == ["a", "b", "c", "e"]
+
+    def test_a_geodataframe_in_another_crs(self):
+        gpd = pytest.importorskip("geopandas")
+        from shapely.geometry import box
+
+        region = gpd.GeoDataFrame(geometry=[box(0, 0, 1, 1)], crs=4326).to_crs(3857)
+        kept = set(self.sample().within(region).data["species"])
+        # The edge point (e) may fall either side after the CRS round trip.
+        assert {"a", "b", "c"} <= kept and "d" not in kept
+
+    def test_a_multipolygon(self):
+        from shapely.geometry import MultiPolygon, box
+
+        two = MultiPolygon([box(0, 0, 0.3, 0.3), box(1.4, 0.4, 1.6, 0.6)])
+        assert sorted(self.sample().within(two).data["species"]) == ["a", "d"]
+
+    def test_not_a_polygon(self):
+        from shapely.geometry import Point
+
+        with pytest.raises(ValueError, match="polygon"):
+            self.sample().within(Point(0, 0))
+
+    def test_nothing_inside(self):
+        from shapely.geometry import box
+
+        with pytest.raises(ValueError, match="No observations"):
+            self.sample().within(box(10, 10, 11, 11))
