@@ -73,6 +73,29 @@ def test_animate_and_save_a_gif(nest, tmp_path):
 
 
 def test_animate_in_reverse(nest):
-    animation = samplesar.animate_nest(nest, reverse=True)
-    animation._func(0)
-    assert animation._fig.axes[0].get_title().startswith(f"step {nest.n_steps - 1} of")
+    forward = samplesar.animate_nest(nest)
+    backward = samplesar.animate_nest(nest, reverse=True)
+    assert list(forward.new_frame_seq()) == list(range(nest.n_steps))
+    assert list(backward.new_frame_seq()) == list(range(nest.n_steps))[::-1]
+
+
+def test_animation_computes_the_table_once(nest, monkeypatch, tmp_path):
+    calls = []
+    original = samplesar.Nest.to_frame
+    monkeypatch.setattr(samplesar.Nest, "to_frame", lambda self: calls.append(1) or original(self))
+    samplesar.animate_nest(nest).save(tmp_path / "n.gif", writer="pillow", fps=10)
+    assert len(calls) == 1
+
+
+def test_a_sample_across_the_antimeridian_draws_in_one_piece():
+    df = pd.DataFrame(
+        {
+            "species": list("abcde"),
+            "lon": [179.5, -179.5, -179.5, 179.5, 179.9],
+            "lat": [10, 10, 11, 11, 10.5],
+        }
+    )
+    nest = samplesar.hull_peel_nest(samplesar.Sample.from_df(df), min_points=1)
+    ax = samplesar.plot_nest(nest)
+    left, right = ax.get_xlim()
+    assert right - left < 2  # about a degree wide, not the whole globe

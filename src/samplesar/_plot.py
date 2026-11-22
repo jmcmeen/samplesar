@@ -14,11 +14,20 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
 
 
-def _hull_ring(nest: Nest, step: int) -> np.ndarray | None:
+def _lonlat(nest: Nest) -> np.ndarray:
+    """The sample's points with longitudes unwrapped around its centre, so a
+    sample across the antimeridian draws as one piece."""
+    points = np.array(nest.sample.points, dtype=float)
+    lon0 = nest.sample.projection_centre[0]
+    points[:, 0] = (points[:, 0] - lon0 + 180.0) % 360.0 - 180.0 + lon0
+    return points
+
+
+def _hull_ring(nest: Nest, step: int, lonlat_all: np.ndarray) -> np.ndarray | None:
     """The step's convex hull, as a closed ring of (lon, lat) points, or
     None when its points don't make a polygon."""
     idx = nest.steps[step]
-    xy, lonlat = nest.sample.xy[idx], nest.sample.points[idx]
+    xy, lonlat = nest.sample.xy[idx], lonlat_all[idx]
     hull = MultiPoint(xy).convex_hull
     if not isinstance(hull, Polygon):
         return None
@@ -26,16 +35,15 @@ def _hull_ring(nest: Nest, step: int) -> np.ndarray | None:
     return np.array([lonlat[where[tuple(c)]] for c in hull.exterior.coords])
 
 
-def _caption(nest: Nest, step: int) -> str:
-    frame = nest.to_frame().iloc[step]
+def _caption(nest: Nest, step: int, table: Any) -> str:
+    row = table.iloc[step]
     return (
-        f"step {step} of {nest.n_steps - 1}: {int(frame['n_points'])} points, "
-        f"{int(frame['species'])} species, {frame['area']:.4g} km²"
+        f"step {step} of {nest.n_steps - 1}: {int(row['n_points'])} points, "
+        f"{int(row['species'])} species, {row['area']:.4g} km²"
     )
 
 
-def _frame_axes(ax: Axes, nest: Nest) -> None:
-    points = nest.sample.points
+def _frame_axes(ax: Axes, points: np.ndarray) -> None:
     pad = 0.05 * np.ptp(points, axis=0).max()
     ax.set_xlim(points[:, 0].min() - pad, points[:, 0].max() + pad)
     ax.set_ylim(points[:, 1].min() - pad, points[:, 1].max() + pad)
@@ -72,22 +80,28 @@ def plot_nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: b
 
     if not -nest.n_steps <= step < nest.n_steps:
         raise IndexError(f"The nest has steps 0 to {nest.n_steps - 1}, not {step}.")
-    step %= nest.n_steps
     if ax is None:
         _, ax = plt.subplots()
-    points = nest.sample.points
+    _draw(nest, step % nest.n_steps, ax, show_removed, nest.to_frame(), _lonlat(nest))
+    return ax
+
+
+def _draw(
+    nest: Nest, step: int, ax: Axes, show_removed: bool, table: Any, points: np.ndarray
+) -> None:
+    """Draw a step, given the nest's table and unwrapped points (computed once
+    for an animation rather than per frame)."""
     kept = nest.steps[step]
     if show_removed:
         gone = np.setdiff1d(np.arange(len(points)), kept)
         ax.scatter(points[gone, 0], points[gone, 1], s=12, color="0.75", label="removed")
     ax.scatter(points[kept, 0], points[kept, 1], s=16, color="C0", label="remaining", zorder=3)
-    ring = _hull_ring(nest, step)
+    ring = _hull_ring(nest, step, points)
     if ring is not None:
         ax.fill(ring[:, 0], ring[:, 1], color="C1", alpha=0.2, zorder=1)
         ax.plot(ring[:, 0], ring[:, 1], color="C1", linewidth=1.5, zorder=2)
-    _frame_axes(ax, nest)
-    ax.set_title(_caption(nest, step))
-    return ax
+    _frame_axes(ax, points)
+    ax.set_title(_caption(nest, step, table))
 
 
 def plot_nest_curve(nest: Nest, ax: Axes | None = None, fit: bool = True) -> Axes:
@@ -117,14 +131,14 @@ def plot_nest_curve(nest: Nest, ax: Axes | None = None, fit: bool = True) -> Axe
         areas = np.geomspace(data["area"].min(), data["area"].max(), 100)
         c, z = model.params["c"], model.params["z"]
         ax.plot(areas, c * areas**z, color="C1", label=f"power fit, z = {z:.3g}")
-    from matplotlib.ticker import ScalarFormatter
+    from matplotlib.ticker import LogFormatter
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    # Species counts read better as plain numbers than as powers of ten.
-    for axis in (ax.yaxis,):
-        axis.set_major_formatter(ScalarFormatter())
-        axis.set_minor_formatter(ScalarFormatter())
+    # Species counts read better as plain numbers than as powers of ten; this
+    # labels minor ticks only when the axis spans too little to need them.
+    ax.yaxis.set_major_formatter(LogFormatter(labelOnlyBase=False))
+    ax.yaxis.set_minor_formatter(LogFormatter(labelOnlyBase=False, minor_thresholds=(1, 0.4)))
     ax.set_xlabel("Area (km²)")
     ax.set_ylabel("Species")
     ax.legend()
@@ -166,10 +180,12 @@ def animate_nest(
 
     fig, ax = plt.subplots(**subplots)
     order = list(range(nest.n_steps))[::-1] if reverse else list(range(nest.n_steps))
+    table, points = nest.to_frame(), _lonlat(nest)
 
-    def draw(frame: int) -> list[Any]:
+    def draw(step: int) -> list[Any]:
         ax.clear()
-        plot_nest(nest, order[frame], ax=ax, show_removed=show_removed)
+        _draw(nest, step, ax, show_removed, table, points)
         return list(ax.get_children())
 
-    return FuncAnimation(fig, draw, frames=len(order), interval=interval, blit=False)
+    # The frames are the steps themselves, in the order they're shown.
+    return FuncAnimation(fig, draw, frames=order, interval=interval, blit=False)
