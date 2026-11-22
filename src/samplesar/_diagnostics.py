@@ -23,7 +23,8 @@ def nest_diagnostics(nest: Nest) -> pd.DataFrame:
     -------
     pd.DataFrame
         One row per step: ``step``, ``n_points``, ``area`` (km²),
-        ``perimeter`` (km), ``compactness`` (Polsby-Popper, 4πA/P²: 1 for a
+        ``perimeter`` (km; with a distorting ``crs``, corrected by its scale
+        at the sample's centre, as areas are), ``compactness`` (Polsby-Popper, 4πA/P²: 1 for a
         circle, near 0 for a sliver), ``area_share`` (of the first step's
         area), ``density`` (points per km²) and ``centroid_shift`` (km from
         the first hull's centroid). Shape columns are missing where the
@@ -31,6 +32,8 @@ def nest_diagnostics(nest: Nest) -> pd.DataFrame:
     """
     xy = nest.sample.xy
     scale = nest.sample.area_scale
+    # A distorting crs stretches lengths by about the root of its areal scale.
+    length = float(np.sqrt(scale))
     first = MultiPoint(xy[nest.steps[0]]).convex_hull
     origin = np.asarray(first.centroid.coords[0])
     area0 = first.area / scale if isinstance(first, Polygon) else np.nan
@@ -39,7 +42,7 @@ def nest_diagnostics(nest: Nest) -> pd.DataFrame:
         hull = MultiPoint(xy[idx]).convex_hull
         polygon = isinstance(hull, Polygon)
         area = hull.area / scale if polygon else 0.0
-        perimeter = hull.length if polygon else np.nan
+        perimeter = hull.length / length if polygon else np.nan
         rows.append(
             {
                 "step": i,
@@ -50,6 +53,7 @@ def nest_diagnostics(nest: Nest) -> pd.DataFrame:
                 "area_share": area / area0 if polygon and area0 > 0 else np.nan,
                 "density": len(idx) / area if polygon and area > 0 else np.nan,
                 "centroid_shift": float(np.hypot(*(np.asarray(hull.centroid.coords[0]) - origin)))
+                / length
                 if len(idx)
                 else np.nan,
             }

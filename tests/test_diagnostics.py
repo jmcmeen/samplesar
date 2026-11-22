@@ -24,7 +24,8 @@ def test_nest_diagnostics_on_a_known_shape():
     assert first["compactness"] == pytest.approx(np.pi / 4, rel=1e-3)  # a square
     assert first["area_share"] == pytest.approx(1.0)
     assert second["area_share"] == pytest.approx(0.5, rel=1e-6)  # half the square
-    assert first["perimeter"] == pytest.approx(4 * 0.9996, rel=1e-3)
+    # A square 1 km a side in UTM metres is 1/0.9996 km a side on the ground.
+    assert first["perimeter"] == pytest.approx(4 / 0.9996, rel=1e-4)
     assert first["density"] == pytest.approx(5 / first["area"])
     assert first["centroid_shift"] == pytest.approx(0.0, abs=1e-9)
     assert second["centroid_shift"] > 0
