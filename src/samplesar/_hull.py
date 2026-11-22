@@ -268,6 +268,75 @@ def hull_peel(sample: Sample, min_points: int = 3) -> Nest:
     return Nest(sample=sample, steps=tuple(steps))
 
 
+def grid_cells(xy: np.ndarray, cell_km: float) -> np.ndarray:
+    """Each point's grid cell, as an index into the occupied cells: square
+    cells of ``cell_km`` anchored at the points' south-west corner. A point
+    on a cell edge, to within rounding, is in the cell above or to its right."""
+    corner = xy.min(axis=0)
+    ij = np.floor((xy - corner) / cell_km + 1e-9).astype(np.int64)
+    _, cell = np.unique(ij, axis=0, return_inverse=True)
+    return np.asarray(cell).ravel()
+
+
+@register("grid_peel")
+def grid_peel(sample: Sample, cell_km: float, min_points: int = 3) -> Nest:
+    """Nest a sample by peeling the convex layers of its occupied grid cells.
+
+    Points are snapped to square cells of ``cell_km``, anchored at the
+    sample's south-west corner in its projected km. Each cell is represented
+    by the mean of its points, and each step peels the cells on the convex
+    hull of the remaining cells, removing every point in them together. Small cells behave like
+    `strategies.hull_peel`; large cells give a few coarse steps that ignore
+    detail within a cell, so a range of sizes shows how much the curve
+    depends on the scale of removal. It stops before a layer would leave
+    fewer than ``min_points`` points.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    cell_km : float
+        The side of a grid cell, in km.
+    min_points : int
+        Stop rather than leave fewer than this many points.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``cell_km`` isn't positive, ``min_points`` is below 1 or the
+        sample has fewer points, or no layer of cells can be peeled.
+    """
+    check_size(sample, min_points)
+    if not (np.isfinite(cell_km) and cell_km > 0):
+        raise ValueError(f"cell_km must be positive, got {cell_km}.")
+    xy = np.asarray(sample.xy)
+    cell = grid_cells(xy, cell_km)
+    n_cells = int(cell.max()) + 1
+    centres = np.zeros((n_cells, 2))
+    np.add.at(centres, cell, xy)  # each cell's centre: the mean of its points
+    centres /= np.bincount(cell, minlength=n_cells)[:, None]
+    cells_left = np.arange(n_cells)
+    remaining = np.arange(sample.n_points)
+    steps = [remaining.copy()]
+    while True:
+        cells_left = cells_left[~np.isin(cells_left, _on_boundary(centres, cells_left))]
+        inside = remaining[np.isin(cell[remaining], cells_left)]
+        if len(inside) < min_points:
+            break
+        remaining = inside
+        steps.append(remaining.copy())
+    if len(steps) == 1:
+        raise ValueError(
+            f"No layer of {cell_km} km cells can be peeled: fewer than {min_points} points "
+            "lie in cells strictly inside the hull of the occupied cells."
+        )
+    return Nest(sample=sample, steps=tuple(steps))
+
+
 def _centre_distance(points: np.ndarray, vertices: np.ndarray) -> np.ndarray:
     """Each vertex's distance from the centroid of the vertices (km)."""
     corners = points[vertices]

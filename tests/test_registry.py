@@ -40,6 +40,7 @@ def test_built_in_strategies_are_listed():
         "hull_random",
         "hull_weighted",
         "hull_peel",
+        "grid_peel",
         "hull_area",
         "hull_species",
         "hull_distance",

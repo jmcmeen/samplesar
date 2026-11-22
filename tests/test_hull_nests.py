@@ -547,3 +547,37 @@ def test_isolation_matches_brute_force(sample, monkeypatch, look):
     d = cdist(xy[vertices], xy[remaining])
     d[d == 0] = np.inf
     assert isolation(remaining, vertices) == pytest.approx(d.min(axis=1))
+
+
+def test_grid_peel_with_small_cells_is_hull_peel():
+    sample = make_sample(grid(6), crs=UTM_17N)
+    cells = samplesar.strategies.grid_peel(sample, cell_km=0.01)
+    points = samplesar.strategies.hull_peel(sample)
+    assert all(np.array_equal(a, b) for a, b in zip(cells.steps, points.steps, strict=True))
+
+
+def test_grid_peel_known_layers():
+    """A 6x6 grid at 100 m in 200 m cells is 3x3 cells of 4 points: one
+    layer of 8 cells comes off, leaving the 4 points of the middle cell."""
+    sample = make_sample(grid(6), crs=UTM_17N)
+    nest = samplesar.strategies.grid_peel(sample, cell_km=0.2)
+    assert [len(s) for s in nest.steps] == [36, 4]
+    middle = sample.xy[nest.steps[-1]] - sample.xy.min(axis=0)
+    assert np.all((middle > 0.19) & (middle < 0.31))
+
+
+def test_grid_peel_removes_whole_cells(sample):
+    from samplesar._hull import grid_cells
+
+    nest = samplesar.strategies.grid_peel(sample, cell_km=1.0, min_points=1)
+    cell = grid_cells(np.asarray(sample.xy), 1.0)
+    assert_nested(nest)
+    for before, after in zip(nest.steps, nest.steps[1:], strict=False):
+        gone = set(cell[np.setdiff1d(before, after)])
+        assert not gone & set(cell[after])
+
+
+@pytest.mark.parametrize(("cell_km", "match"), [(0.0, "positive"), (1e6, "No layer")])
+def test_grid_peel_errors(sample, cell_km, match):
+    with pytest.raises(ValueError, match=match):
+        samplesar.strategies.grid_peel(sample, cell_km=cell_km)

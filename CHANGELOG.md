@@ -34,6 +34,10 @@ All notable changes to this project are documented here. The format is based on
   proportional to its isolation (distance to the nearest other point) raised
   to `power`, so isolated outliers tend to go first.
 
+- `strategies.grid_peel(sample, cell_km)`: hull peeling of the occupied grid
+  cells at a chosen scale, removing whole cells together, for multi-scale
+  removal.
+
 ### Changed
 
 - **Breaking: the API is grouped by job, and the old top-level names are

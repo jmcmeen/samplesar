@@ -22,6 +22,10 @@
 
 ::: samplesar.strategies.hull_peel
 
+## strategies.grid_peel
+
+::: samplesar.strategies.grid_peel
+
 ## strategies.hull_area
 
 ::: samplesar.strategies.hull_area

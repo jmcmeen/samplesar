@@ -7,6 +7,7 @@ See the strategies page of the documentation for what each removes, and
 
 from samplesar._hull import (
     concave_peel,
+    grid_peel,
     hull_area,
     hull_distance,
     hull_peel,
@@ -23,6 +24,7 @@ __all__ = [
     "concave_peel",
     "density_peel",
     "from_order",
+    "grid_peel",
     "grow",
     "hull_area",
     "hull_distance",

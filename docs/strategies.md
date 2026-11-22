@@ -71,6 +71,15 @@ can remove many points, so the nest has few steps; on a regular grid each step
 takes off the outer ring. It stops before a layer would leave fewer than
 `min_points` points.
 
+### Grid peeling
+
+`strategies.grid_peel(sample, cell_km, min_points=3)` peels at a chosen scale.
+Points are snapped to square cells of `cell_km`, and each step peels the
+outer layer of occupied cells, removing all their points together. Small
+cells behave like `hull_peel`. Large cells give a few coarse steps that
+ignore GPS jitter and detail within a cell, so running a range of sizes shows
+how much the curve depends on the scale of removal.
+
 ### Concave hull peeling
 
 `strategies.concave_peel(sample, ratio=0.3, min_points=3)` peels the boundary of a
