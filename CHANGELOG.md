@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 
 - `make typecheck` (mypy), part of `make check`; tests run in parallel.
+- A documentation site: getting started, the sampling strategies and an API
+  reference (`make docs`, built on every pull request, deployed on each
+  release).
 - CONTRIBUTING.md and CODE_OF_CONDUCT.md.
 
 ## [0.1.0] - 2026-11-22

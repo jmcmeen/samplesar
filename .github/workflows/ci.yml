@@ -59,6 +59,20 @@ jobs:
       - name: mypy
         run: uv run --frozen --extra dev mypy
 
+  docs:
+    name: docs
+    # The site builds with --strict, so a broken reference or docstring fails the
+    # pull request rather than the deploy after a release.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags, for the hatch-vcs version
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+      - name: mkdocs build
+        run: uv run --frozen --extra docs mkdocs build --strict
+
   test:
     name: test (py${{ matrix.python-version }})
     runs-on: ubuntu-latest

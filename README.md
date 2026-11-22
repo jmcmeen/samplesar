@@ -13,9 +13,12 @@ nest = samplesar.random_nest(sample, seed=0)
 fit = sars.sar_power(nest.sar_data())
 ```
 
+Documentation: <https://jmcmeen.github.io/samplesar/>
+
 ## Development
 
 ```sh
 make install   # create .venv with dev tooling
-make check     # lint, format check, tests
+make check     # lint, format check, type check, tests
+make docs      # build the documentation site
 ```
