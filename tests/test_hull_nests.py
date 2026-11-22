@@ -581,3 +581,34 @@ def test_grid_peel_removes_whole_cells(sample):
 def test_grid_peel_errors(sample, cell_km, match):
     with pytest.raises(ValueError, match=match):
         samplesar.strategies.grid_peel(sample, cell_km=cell_km)
+
+
+def test_grid_peel_is_reproducible_and_respects_min_points(sample):
+    one = samplesar.strategies.grid_peel(sample, cell_km=0.5, min_points=5)
+    two = samplesar.strategies.grid_peel(sample, cell_km=0.5, min_points=5)
+    assert all(np.array_equal(a, b) for a, b in zip(one.steps, two.steps, strict=True))
+    assert len(one.steps[-1]) >= 5
+    with pytest.raises(ValueError, match="min_points"):
+        samplesar.strategies.grid_peel(sample, cell_km=0.5, min_points=0)
+
+
+def test_grid_peel_layers_by_brute_force(sample):
+    """Each step removes exactly the cells whose point-mean lies on the
+    convex hull of the remaining cells' means (checked with shapely)."""
+    import shapely
+
+    from samplesar._hull import grid_cells
+
+    xy = np.asarray(sample.xy)
+    cell = grid_cells(xy, 0.8)
+    means = np.array([xy[cell == c].mean(axis=0) for c in range(cell.max() + 1)])
+    nest = samplesar.strategies.grid_peel(sample, cell_km=0.8, min_points=1)
+    for before, after in zip(nest.steps, nest.steps[1:], strict=False):
+        cells = np.unique(cell[before])
+        hull = shapely.convex_hull(shapely.multipoints(means[cells]))
+        on_hull = {
+            int(c)
+            for c in cells
+            if hull.boundary.distance(shapely.Point(means[c])) <= 1e-9 * max(1.0, hull.length)
+        }
+        assert set(np.unique(cell[np.setdiff1d(before, after)]).tolist()) == on_hull
