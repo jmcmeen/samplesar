@@ -487,3 +487,63 @@ def test_hull_weighted_only_removes_hull_vertices(sample):
 def test_hull_weighted_bad_power(sample, power):
     with pytest.raises(ValueError, match="power"):
         samplesar.strategies.hull_weighted(sample, power=power)
+
+
+def test_hull_weighted_is_reproducible_with_a_power(sample):
+    one = samplesar.strategies.hull_weighted(sample, power=2, seed=11)
+    two = samplesar.strategies.hull_weighted(sample, power=2, seed=11)
+    assert all(np.array_equal(a, b) for a, b in zip(one.steps, two.steps, strict=True))
+
+
+def test_hull_weighted_first_choice_follows_the_weights():
+    """Brute force on a small sample: over many seeds, the first vertex
+    removed is drawn in proportion to its isolation squared."""
+    from scipy.spatial.distance import cdist
+
+    rng = np.random.default_rng(5)
+    points = np.vstack([rng.uniform(0, 1000, (8, 2)), [[3000.0, 0.0], [0.0, 2500.0]]])
+    sample = make_sample(points + [500_000.0, 4_000_000.0], crs=UTM_17N)
+    xy = np.asarray(sample.xy)
+    vertices = hull_vertices(xy, np.arange(sample.n_points))
+    d = cdist(xy[vertices], xy)
+    d[d == 0] = np.inf
+    expected = d.min(axis=1) ** 2 / (d.min(axis=1) ** 2).sum()
+    n = 3000
+    firsts = [
+        int(
+            np.setdiff1d(
+                *samplesar.strategies.hull_weighted(sample, power=2, seed=s, min_points=9).steps[:2]
+            )[0]
+        )
+        for s in range(n)
+    ]
+    observed = np.array([firsts.count(int(v)) for v in vertices]) / n
+    assert observed == pytest.approx(expected, abs=0.03)
+
+
+def test_hull_weighted_with_a_huge_power_takes_the_most_isolated():
+    """Isolation below 1 km raised to a power of 400 underflows unless it's
+    scaled first; scaled, the most isolated vertex always goes."""
+    pts = grid(4, spacing=100.0)
+    pts = np.vstack([pts, pts[:1] + [-250.0, -250.0]])
+    sample = make_sample(pts, crs=UTM_17N)
+    corner = int(np.argmin(sample.xy.sum(axis=1)))
+    for s in range(10):
+        nest = samplesar.strategies.hull_weighted(sample, power=400, seed=s)
+        assert int(np.setdiff1d(*nest.steps[:2])[0]) == corner
+
+
+@pytest.mark.parametrize("look", [16, 1])
+def test_isolation_matches_brute_force(sample, monkeypatch, look):
+    from scipy.spatial.distance import cdist
+
+    from samplesar._hull import _Isolation
+
+    monkeypatch.setattr(_Isolation, "LOOK", look)  # 1 forces the fallback
+    xy = np.asarray(sample.xy)
+    isolation = _Isolation(xy)
+    remaining = np.arange(0, sample.n_points, 3)  # most points gone: forces the fallback too
+    vertices = hull_vertices(xy, remaining)
+    d = cdist(xy[vertices], xy[remaining])
+    d[d == 0] = np.inf
+    assert isolation(remaining, vertices) == pytest.approx(d.min(axis=1))

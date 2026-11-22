@@ -130,12 +130,48 @@ def hull_random(sample: Sample, min_points: int = 3, seed: int | None = None) ->
     return _remove_one(sample, min_points, lambda _, vertices: int(rng.choice(vertices)))
 
 
-def isolation(points: np.ndarray, remaining: np.ndarray, vertices: np.ndarray) -> np.ndarray:
-    """Each vertex's distance to its nearest other remaining point (km)."""
-    from scipy.spatial import cKDTree
+class _Isolation:
+    """Each hull vertex's distance to its nearest other remaining point (km),
+    from one KD-tree of all the points: the nearest few neighbours are looked
+    up and the first still remaining is taken, falling back to a tree of the
+    remaining points only when all of those are gone."""
 
-    distance, _ = cKDTree(points[remaining]).query(points[vertices], k=2)
-    return np.asarray(distance[:, 1])
+    LOOK = 16
+
+    def __init__(self, points: np.ndarray) -> None:
+        from scipy.spatial import cKDTree
+
+        self.points = points
+        self.tree = cKDTree(points)
+        self.alive = np.ones(len(points), dtype=bool)
+
+    def __call__(self, remaining: np.ndarray, vertices: np.ndarray) -> np.ndarray:
+        from scipy.spatial import cKDTree
+
+        self.alive[:] = False
+        self.alive[remaining] = True
+        k = min(self.LOOK + 1, len(self.points))
+        distance, index = self.tree.query(self.points[vertices], k=k)
+        distance, index = distance.reshape(len(vertices), k), index.reshape(len(vertices), k)
+        usable = self.alive[index] & (index != vertices[:, None])
+        found = usable.any(axis=1)
+        out = np.empty(len(vertices))
+        out[found] = distance[found, usable[found].argmax(axis=1)]
+        if not found.all():
+            near, _ = cKDTree(self.points[remaining]).query(self.points[vertices[~found]], k=2)
+            out[~found] = near[:, 1]
+        return out
+
+
+def isolation_weights(isolation: np.ndarray, power: float) -> np.ndarray:
+    """Probabilities proportional to ``isolation ** power``, computed on
+    isolation scaled to its maximum so a large power neither underflows nor
+    overflows; equal when every vertex shares its position with another."""
+    top = float(isolation.max())
+    if top <= 0:
+        return np.full(len(isolation), 1.0 / len(isolation))
+    weight = (isolation / top) ** power
+    return weight / weight.sum()
 
 
 @register("hull_weighted")
@@ -175,17 +211,13 @@ def hull_weighted(
     if not (np.isfinite(power) and power >= 0):
         raise ValueError(f"power must be a finite number of at least 0, got {power}.")
     rng = np.random.default_rng(seed)
-    points = sample.xy
+    isolation = _Isolation(np.asarray(sample.xy))
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
         if power == 0 or len(remaining) < 2:
             return int(rng.choice(vertices))
-        weight = isolation(points, remaining, vertices) ** power
-        total = weight.sum()
-        if not np.isfinite(total) or total <= 0:  # overflow, or every vertex shared
-            weight = (weight == weight.max()).astype(float)
-            total = weight.sum()
-        return int(rng.choice(vertices, p=weight / total))
+        weight = isolation_weights(isolation(remaining, vertices), power)
+        return int(rng.choice(vertices, p=weight))
 
     return _remove_one(sample, min_points, choose)
 
