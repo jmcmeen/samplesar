@@ -22,7 +22,8 @@ design turns a `Sample` of points into an area and richness table, and
    `steps[i]` are row indices into `sample.points`, each step a subset of the one before.
    Don't copy observation data per step.
 2. **One public function per strategy family**, named for what it removes
-   (`random_nest`, `hull_*_nest`), with `min_points` and, if random, `seed`. Choices that
+   (`random_nest`, `hull_*_nest`) or what it takes (`nest_from_order`), registered with
+   `register_strategy`, with `min_points` and, if random, `seed`. Choices that
    pick one candidate are deterministic: ties are broken by a stated rule, never by set
    or dict order.
 3. **sars is a required dependency.** Evaluating a sampling design means fitting its SAR

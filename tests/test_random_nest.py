@@ -121,7 +121,27 @@ class TestNestFromOrder:
         assert nest.n_steps == 5
         for before, after, point in zip(nest.steps, nest.steps[1:], order, strict=False):
             assert set(before) - set(after) == {point}
-        assert nest.label == "order"
+        assert nest.label == "order(order=[5, 0, 17, 3])"
+        by_name = samplesar.nest(sample, "order", order=order)
+        assert all(np.array_equal(a, b) for a, b in zip(nest.steps, by_name.steps, strict=True))
+
+    def test_known_answer(self):
+        df = pd.DataFrame(
+            {"species": list("abcde"), "lon": [0.0, 1, 2, 3, 4], "lat": [0.0, 1, 0, 1, 0]}
+        )
+        nest = samplesar.nest_from_order(samplesar.Sample.from_df(df), [4, 0], min_points=1)
+        assert [list(s) for s in nest.steps] == [[0, 1, 2, 3, 4], [0, 1, 2, 3], [1, 2, 3]]
+        assert list(nest.to_frame()["species"]) == [5, 4, 3]
+
+    def test_long_orders_are_abbreviated_in_labels(self, sample):
+        order = np.random.default_rng(0).permutation(sample.n_points)
+        label = samplesar.nest_from_order(sample, order).label
+        assert label.startswith("order(order=[") and label.endswith(f", ... ({sample.n_points})])")
+
+    def test_whole_number_floats_are_accepted(self, sample):
+        a = samplesar.nest_from_order(sample, np.array([3.0, 1.0]))
+        b = samplesar.nest_from_order(sample, [3, 1])
+        assert all(np.array_equal(x, y) for x, y in zip(a.steps, b.steps, strict=True))
 
     def test_stops_at_min_points(self, sample):
         order = np.random.default_rng(0).permutation(sample.n_points)
@@ -146,7 +166,7 @@ class TestNestFromOrder:
             ([1, 1], "repeats"),
             ([0, 40], "outside"),
             ([-1], "outside"),
-            ([0.5], "whole numbers|point indices"),
+            ([0.5], "whole numbers"),
             ([[0, 1]], "one-dimensional"),
         ],
     )

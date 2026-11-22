@@ -36,6 +36,7 @@ def test_built_in_strategies_are_listed():
     listed = samplesar.strategies()
     assert list(listed) == [
         "random",
+        "order",
         "hull_random",
         "hull_peel",
         "hull_area",
@@ -83,7 +84,7 @@ def test_options_are_read_only(sample):
 
 
 def test_unknown_strategy_lists_the_known_ones(sample):
-    with pytest.raises(ValueError, match=r"No strategy 'hull'; known: random, hull_random"):
+    with pytest.raises(ValueError, match=r"No strategy 'hull'; known: random, order, hull_random"):
         samplesar.nest(sample, "hull")
 
 

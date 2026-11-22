@@ -50,10 +50,7 @@ class Nest:
         name = self.strategy or "nest"
         if not self.options:
             return name
-        shown = (
-            f"{k}={v.item() if isinstance(v, np.generic) else v!r}" for k, v in self.options.items()
-        )
-        return f"{name}({', '.join(shown)})"
+        return f"{name}({', '.join(f'{k}={_short(v)}' for k, v in self.options.items())})"
 
     @property
     def n_steps(self) -> int:
@@ -141,6 +138,19 @@ class Nest:
         return fit_nest(self, model, **kwargs)
 
 
+def _short(value: Any) -> str:
+    """An option value for a label: numpy scalars as plain numbers, and long
+    sequences (a removal order, say) abbreviated with their length."""
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, np.ndarray | list | tuple) and len(value) > 6:
+        head = ", ".join(
+            repr(v.item() if isinstance(v, np.generic) else v) for v in list(value)[:3]
+        )
+        return f"[{head}, ... ({len(value)})]"
+    return repr(value)
+
+
 def check_size(sample: Sample, min_points: int) -> None:
     """Raise ValueError unless ``1 <= min_points <= sample.n_points``."""
     if min_points < 1:
@@ -185,6 +195,7 @@ def random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) ->
     return Nest(sample=sample, steps=tuple(steps))
 
 
+@register_strategy("order")
 def nest_from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_points: int = 3) -> Nest:
     """Nest a sample by removing its points in a given order.
 
@@ -198,14 +209,16 @@ def nest_from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_point
     sample : Sample
         The sample to nest.
     order : sequence of int or np.ndarray
-        Rows of ``sample.points``, in the order to remove them.
+        Rows of ``sample.points``, in the order to remove them. Floats are
+        accepted if they're whole numbers.
     min_points : int
         Stop when this many points remain, even if the order goes on.
 
     Returns
     -------
     Nest
-        With ``strategy`` ``"order"``.
+        Registered as ``"order"``, so ``samplesar.nest(sample, "order",
+        order=...)`` is the same.
 
     Raises
     ------
@@ -216,8 +229,12 @@ def nest_from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_point
     """
     check_size(sample, min_points)
     order = np.asarray(order)
-    if order.ndim != 1 or (order.size and not np.issubdtype(order.dtype, np.integer)):
+    if order.ndim != 1:
         raise ValueError("order must be a one-dimensional sequence of point indices.")
+    if order.size and not np.issubdtype(order.dtype, np.integer):
+        if not np.issubdtype(order.dtype, np.floating) or not np.all(order == np.round(order)):
+            raise ValueError("order must hold whole numbers: indices of the sample's points.")
+        order = order.astype(int)
     n = sample.n_points
     if order.size and (order.min() < 0 or order.max() >= n):
         raise ValueError(f"order names a point outside the sample's {n} points.")
@@ -228,4 +245,4 @@ def nest_from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_point
     for point in order[: n - min_points]:
         remaining = remaining[remaining != point]
         steps.append(remaining.copy())
-    return Nest(sample=sample, steps=tuple(steps), strategy="order")
+    return Nest(sample=sample, steps=tuple(steps))
