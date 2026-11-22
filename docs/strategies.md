@@ -51,6 +51,14 @@ the hull is a segment, and its vertices are its two ends.
 per step, chosen uniformly at random: the outside-in counterpart of
 `strategies.random`.
 
+### Isolation-weighted hull vertex
+
+`strategies.hull_weighted(sample, power=1.0, min_points=3, seed=None)` removes a
+random hull vertex too, but picks each one with probability proportional to
+its distance from the nearest other remaining point, raised to `power`.
+Isolated outliers (vagrants, georeferencing errors, one-off trips) tend to go
+first, and clustered edges last longer. With `power=0` it is `hull_random`.
+
 ### Hull peeling
 
 `strategies.hull_peel(sample, min_points=3)` removes the whole hull boundary at each

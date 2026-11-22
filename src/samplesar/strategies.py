@@ -12,6 +12,7 @@ from samplesar._hull import (
     hull_peel,
     hull_random,
     hull_species,
+    hull_weighted,
 )
 from samplesar._nest import from_order, random
 from samplesar._ranked import density_peel, grow, radial, sweep
@@ -28,6 +29,7 @@ __all__ = [
     "hull_peel",
     "hull_random",
     "hull_species",
+    "hull_weighted",
     "radial",
     "random",
     "register",

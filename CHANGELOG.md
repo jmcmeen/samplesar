@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format is based on
   density first, giving kernel-smoothed boundaries) and `strategies.grow`
   (the reverse of a region grown from a seed by nearest neighbours).
 
+- `strategies.hull_weighted`: a random hull vertex, picked with probability
+  proportional to its isolation (distance to the nearest other point) raised
+  to `power`, so isolated outliers tend to go first.
+
 ### Changed
 
 - **Breaking: the API is grouped by job, and the old top-level names are

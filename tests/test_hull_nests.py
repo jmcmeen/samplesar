@@ -9,6 +9,7 @@ from samplesar._hull import hull_vertices
 
 STRATEGIES = [
     samplesar.strategies.hull_random,
+    samplesar.strategies.hull_weighted,
     samplesar.strategies.hull_peel,
     samplesar.strategies.hull_area,
     samplesar.strategies.hull_species,
@@ -452,3 +453,37 @@ class TestConcavePeelNest:
     def test_bad_ratio(self, sample, ratio):
         with pytest.raises(ValueError, match="ratio must be between 0 and 1"):
             samplesar.strategies.concave_peel(sample, ratio=ratio)
+
+
+def test_hull_weighted_with_power_zero_is_hull_random(sample):
+    weighted = samplesar.strategies.hull_weighted(sample, power=0, seed=3)
+    plain = samplesar.strategies.hull_random(sample, seed=3)
+    assert all(np.array_equal(a, b) for a, b in zip(weighted.steps, plain.steps, strict=True))
+
+
+def test_hull_weighted_removes_a_far_outlier_first():
+    """A square of close points and one vertex 50 km away: with power 2 the
+    outlier carries almost all the weight, so it goes first for nearly
+    every seed."""
+    square = grid(4, spacing=100.0)
+    far = square[:1] + [50_000.0, 50_000.0]
+    sample = make_sample(np.vstack([square, far]), crs=UTM_17N)
+    outlier = int(np.argmax(sample.xy.sum(axis=1)))
+    firsts = [
+        int(np.setdiff1d(*samplesar.strategies.hull_weighted(sample, power=2, seed=s).steps[:2])[0])
+        for s in range(50)
+    ]
+    assert firsts.count(outlier) >= 49
+
+
+def test_hull_weighted_only_removes_hull_vertices(sample):
+    nest = samplesar.strategies.hull_weighted(sample, power=1, seed=0)
+    for before, after in zip(nest.steps, nest.steps[1:], strict=False):
+        (gone,) = np.setdiff1d(before, after)
+        assert gone in hull_vertices(sample.xy, before)
+
+
+@pytest.mark.parametrize("power", [-1.0, float("inf"), float("nan")])
+def test_hull_weighted_bad_power(sample, power):
+    with pytest.raises(ValueError, match="power"):
+        samplesar.strategies.hull_weighted(sample, power=power)

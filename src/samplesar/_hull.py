@@ -130,6 +130,66 @@ def hull_random(sample: Sample, min_points: int = 3, seed: int | None = None) ->
     return _remove_one(sample, min_points, lambda _, vertices: int(rng.choice(vertices)))
 
 
+def isolation(points: np.ndarray, remaining: np.ndarray, vertices: np.ndarray) -> np.ndarray:
+    """Each vertex's distance to its nearest other remaining point (km)."""
+    from scipy.spatial import cKDTree
+
+    distance, _ = cKDTree(points[remaining]).query(points[vertices], k=2)
+    return np.asarray(distance[:, 1])
+
+
+@register("hull_weighted")
+def hull_weighted(
+    sample: Sample, power: float = 1.0, min_points: int = 3, seed: int | None = None
+) -> Nest:
+    """Nest a sample by removing a random hull vertex, weighted by its isolation.
+
+    Each vertex of the current hull is picked with probability proportional
+    to its distance from the nearest other remaining point, raised to
+    ``power``. Isolated outliers (vagrants, georeferencing errors, one-off
+    trips) then tend to go first, while clustered edges last longer. A power
+    of 0 is `strategies.hull_random` (the same nest for the same seed); a
+    large power approaches always removing the most isolated vertex.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    power : float
+        The exponent on each vertex's isolation; at least 0.
+    min_points : int
+        Stop when this many points remain.
+    seed : int, optional
+        Seed for the random choices, for a reproducible nest.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``power`` is negative or not finite, or ``min_points`` is below 1
+        or the sample has fewer points.
+    """
+    if not (np.isfinite(power) and power >= 0):
+        raise ValueError(f"power must be a finite number of at least 0, got {power}.")
+    rng = np.random.default_rng(seed)
+    points = sample.xy
+
+    def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
+        if power == 0 or len(remaining) < 2:
+            return int(rng.choice(vertices))
+        weight = isolation(points, remaining, vertices) ** power
+        total = weight.sum()
+        if not np.isfinite(total) or total <= 0:  # overflow, or every vertex shared
+            weight = (weight == weight.max()).astype(float)
+            total = weight.sum()
+        return int(rng.choice(vertices, p=weight / total))
+
+    return _remove_one(sample, min_points, choose)
+
+
 @register("hull_peel")
 def hull_peel(sample: Sample, min_points: int = 3) -> Nest:
     """Nest a sample by peeling off its whole convex hull at each step.

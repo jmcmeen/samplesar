@@ -38,6 +38,7 @@ def test_built_in_strategies_are_listed():
         "random",
         "order",
         "hull_random",
+        "hull_weighted",
         "hull_peel",
         "hull_area",
         "hull_species",

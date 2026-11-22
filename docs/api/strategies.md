@@ -14,6 +14,10 @@
 
 ::: samplesar.strategies.hull_random
 
+## strategies.hull_weighted
+
+::: samplesar.strategies.hull_weighted
+
 ## strategies.hull_peel
 
 ::: samplesar.strategies.hull_peel
