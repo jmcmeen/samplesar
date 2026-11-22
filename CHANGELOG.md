@@ -6,13 +6,9 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-10-27
-
-### Added
-
-- CI tests and PyPI classifiers cover Python 3.14 and 3.15.
-
-## [0.1.0] - 2026-10-27
+The first release as samplesar. Releases 0.1.0 to 0.1.3 were published as
+nestsar, a project that no longer exists; samplesar starts its version numbers
+again at 0.1.0.
 
 ### Added
 
@@ -21,4 +17,13 @@ All notable changes to this project are documented here. The format is based on
 - `Nest` and `random_nest()`: nest a sample by removing one point at a time
   uniformly at random, the baseline for every other strategy, and export the
   area and species table that `sars` fits.
+- Tests and PyPI classifiers cover Python 3.10 to 3.15.
 
+### Changed
+
+- **Renamed from nestsar to samplesar**, for the distribution and the import
+  name alike: `pip install samplesar` and `import samplesar` replace
+  `nestsar`. The package now covers geometric sampling designs in general,
+  with nesting as one of them. Apart from the import name the API is
+  unchanged, so `nestsar.random_nest(...)` becomes
+  `samplesar.random_nest(...)`.

@@ -4,9 +4,10 @@ name: Publish
 # starts it on a new tag. It only runs on a vX.Y.Z tag.
 #
 # Uses PyPI Trusted Publishing (OIDC) — no API token/secret required. Before the
-# first release, configure a Trusted Publisher on PyPI for this project:
-#   PyPI → project "nestsar" → Settings → Publishing → add a GitHub publisher with
-#   owner=jmcmeen, repo=nestsar, workflow=publish.yml, environment=pypi.
+# first release, add a pending publisher on PyPI (Account → Publishing, since the
+# project doesn't exist until its first upload; once it does, the same settings
+# live under the project's Settings → Publishing):
+#   project=samplesar, owner=jmcmeen, repo=samplesar, workflow=publish.yml, environment=pypi.
 # Also create a GitHub environment named "pypi" (Settings → Environments).
 
 on:
@@ -64,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/nestsar
+      url: https://pypi.org/p/samplesar
     permissions:
       id-token: write # required for trusted publishing
     steps:

@@ -3,12 +3,12 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "nestsar"
+name = "samplesar"
 dynamic = ["version"]
 authors = [
   { name="John McMeen", email="johnmcmeen@gmail.com" },
 ]
-description = "Nested species-area relationship datasets from point observations"
+description = "Species-area relationship datasets from geometric sampling of point observations"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -42,16 +42,16 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jmcmeen/nestsar"
-Source = "https://github.com/jmcmeen/nestsar"
-Changelog = "https://github.com/jmcmeen/nestsar/blob/main/CHANGELOG.md"
-"Bug Tracker" = "https://github.com/jmcmeen/nestsar/issues"
+Homepage = "https://github.com/jmcmeen/samplesar"
+Source = "https://github.com/jmcmeen/samplesar"
+Changelog = "https://github.com/jmcmeen/samplesar/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/jmcmeen/samplesar/issues"
 
 [tool.hatch.version]
 source = "vcs"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/nestsar"]
+packages = ["src/samplesar"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -65,7 +65,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/nestsar"]
+source = ["src/samplesar"]
 
 [tool.ruff]
 target-version = "py310"
@@ -92,4 +92,4 @@ ignore = [
 "tests/*" = ["B011", "E402"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["nestsar"]
+known-first-party = ["samplesar"]

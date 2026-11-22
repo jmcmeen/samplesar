@@ -1,15 +1,15 @@
-# nestsar
+# samplesar
 
-Nested species-area relationship datasets from point observations. Build a
-sequence of nested sub-samples from georeferenced species records and hand
-the resulting area and richness table to [sars](https://pypi.org/project/sars/)
-for curve fitting.
+Species-area relationship datasets from geometric sampling of point
+observations. Sample georeferenced species records with a geometric design,
+such as a sequence of nested hulls, and hand the resulting area and richness
+table to [sars](https://pypi.org/project/sars/) for curve fitting.
 
 ```python
-import nestsar, sars
+import samplesar, sars
 
-sample = nestsar.Sample.from_csv("observations.csv")   # species, lon, lat
-nest = nestsar.random_nest(sample, seed=0)
+sample = samplesar.Sample.from_csv("observations.csv")   # species, lon, lat
+nest = samplesar.random_nest(sample, seed=0)
 fit = sars.sar_power(nest.sar_data())
 ```
 
