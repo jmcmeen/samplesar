@@ -78,6 +78,14 @@ class Nest:
         return frame.loc[frame["area"] > 0, ["area", "species"]].reset_index(drop=True)
 
 
+def check_size(sample: Sample, min_points: int) -> None:
+    """Raise ValueError unless ``1 <= min_points <= sample.n_points``."""
+    if min_points < 1:
+        raise ValueError(f"min_points must be at least 1, got {min_points}")
+    if sample.n_points < min_points:
+        raise ValueError(f"Sample has {sample.n_points} points; need at least {min_points}")
+
+
 def random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
     """Nest a sample by removing one point at a time, uniformly at random.
 
@@ -99,11 +107,10 @@ def random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) ->
     Raises
     ------
     ValueError
-        If the sample has fewer than ``min_points`` points.
+        If ``min_points`` is below 1 or the sample has fewer points.
     """
+    check_size(sample, min_points)
     n = sample.n_points
-    if n < min_points:
-        raise ValueError(f"Sample has {n} points; need at least {min_points}")
     rng = np.random.default_rng(seed)
     remaining = np.arange(n)
     steps = [remaining.copy()]

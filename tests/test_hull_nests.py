@@ -138,3 +138,21 @@ def test_sar_data_fits_with_sars(strategy, sample):
     assert (data["area"] > 0).all()
     assert len(data) >= 2
     assert np.isfinite(sars.sar_power(data).params["z"])
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_hull_vertices_match_brute_force(seed):
+    """A point is a vertex exactly when removing it shrinks the hull."""
+    rng = np.random.default_rng(seed)
+    points = rng.uniform(0, 1, size=(12, 2))
+    idx = np.arange(len(points))
+    full = samplesar.hull_area(points)
+    brute = [i for i in idx if samplesar.hull_area(points[idx != i]) < full - 1e-12]
+    assert sorted(hull_vertices(points, idx)) == brute
+
+
+def test_peeling_points_all_on_the_hull_is_an_error():
+    angles = np.linspace(0, 2 * np.pi, 10, endpoint=False)
+    circle = make_sample(np.column_stack([np.cos(angles), np.sin(angles)]))
+    with pytest.raises(ValueError, match="No layer can be peeled"):
+        samplesar.hull_peel_nest(circle)

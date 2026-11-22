@@ -8,15 +8,8 @@ import numpy as np
 import shapely
 from shapely.geometry import MultiPoint, Polygon
 
-from samplesar._nest import Nest
+from samplesar._nest import Nest, check_size
 from samplesar._sample import Sample
-
-
-def _check(sample: Sample, min_points: int) -> None:
-    if min_points < 1:
-        raise ValueError(f"min_points must be at least 1, got {min_points}")
-    if sample.n_points < min_points:
-        raise ValueError(f"Sample has {sample.n_points} points; need at least {min_points}")
 
 
 def _hull(points: np.ndarray, idx: np.ndarray) -> shapely.Geometry:
@@ -50,7 +43,7 @@ def _remove_one(
     sample: Sample, min_points: int, choose: Callable[[np.ndarray, np.ndarray], int]
 ) -> Nest:
     """Drop one hull vertex per step: ``choose(remaining, vertices)`` names it."""
-    _check(sample, min_points)
+    check_size(sample, min_points)
     points = sample.points
     remaining = np.arange(sample.n_points)
     steps = [remaining.copy()]
@@ -112,9 +105,11 @@ def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
     Raises
     ------
     ValueError
-        If ``min_points`` is below 1 or the sample has fewer points.
+        If ``min_points`` is below 1, the sample has fewer points, or no layer
+        can be peeled (every point but fewer than ``min_points`` lies on the
+        hull).
     """
-    _check(sample, min_points)
+    check_size(sample, min_points)
     points = sample.points
     remaining = np.arange(sample.n_points)
     steps = [remaining.copy()]
@@ -124,4 +119,9 @@ def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
             break
         remaining = inside
         steps.append(remaining.copy())
+    if len(steps) == 1:
+        raise ValueError(
+            f"No layer can be peeled: fewer than {min_points} points lie strictly inside the "
+            "sample's convex hull."
+        )
     return Nest(sample=sample, steps=tuple(steps))

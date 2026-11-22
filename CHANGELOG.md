@@ -27,6 +27,11 @@ All notable changes to this project are documented here. The format is based on
   oldest and newest Pythons on pull requests and every supported Python on
   `main`, and checks the minimum and newest allowed dependency versions.
 
+### Fixed
+
+- `random_nest()` rejects `min_points` below 1 with a clear message; 0 gave
+  a nest ending in an empty step and a negative value failed inside numpy.
+
 ## [0.1.0] - 2026-11-22
 
 The first release as samplesar. Releases 0.1.0 to 0.1.3 were published as

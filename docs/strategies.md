@@ -16,8 +16,9 @@ These strategies only remove points on the sample's convex hull, so the
 sample shrinks from its edges inwards and each step's hull lies inside the
 one before.
 
-A point is a hull **vertex** if the hull bends there; a point on a straight
-edge between two vertices isn't one. When the remaining points are collinear
+A point is a hull **vertex** if the hull bends there; a point exactly on a
+straight edge between two vertices isn't one. "Exactly" is in floating point:
+a point rounding puts a hair outside the edge is a vertex. When the remaining points are collinear
 the hull is a segment, and its vertices are its two ends.
 
 ### Random hull vertex
