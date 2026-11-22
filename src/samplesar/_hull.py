@@ -138,15 +138,16 @@ def _near_max(values: np.ndarray) -> np.ndarray:
     """Which values tie for the maximum, allowing for floating-point rounding:
     geometrically equal areas or distances differ in their last bits once the
     points sit at real longitudes and latitudes."""
-    return values >= values.max() - 1e-9 * max(float(np.abs(values).max()), 1e-300)
+    top = values.max()
+    return values >= top - 1e-9 * max(abs(float(top)), float(np.abs(values).max()), 1e-300)
 
 
 def _pick(vertices: np.ndarray, score: np.ndarray, distance: np.ndarray) -> int:
     """The vertex with the highest score; ties (to within rounding) go to the
     one farthest from the centre, then to the lowest point index."""
-    best = _near_max(score)
-    farthest = _near_max(np.where(best, distance, -np.inf))
-    return int(vertices[best & farthest].min())
+    tied = np.flatnonzero(_near_max(score))
+    farthest = tied[_near_max(distance[tied])]
+    return int(vertices[farthest].min())
 
 
 def hull_area_nest(

@@ -217,6 +217,13 @@ class TestHullAreaNest:
         square = make_sample([[0, 0], [1, 0], [1, 1], [0, 1]])
         assert list(samplesar.hull_area_nest(square).steps[1]) == [1, 2, 3]
 
+    def test_area_ties_go_to_the_farthest_vertex(self):
+        # Dropping vertex 2 or 3 leaves the same area (1.0); 3 is farther from
+        # the vertices' centroid, so it goes, though its index is higher.
+        quad = make_sample([[0, 0], [0, 2], [1, 1], [1, 0]])
+        nest = samplesar.hull_area_nest(quad, keep="largest")
+        assert list(nest.steps[1]) == [0, 1, 2]
+
     @pytest.mark.parametrize("keep", ["largest", "smallest"])
     def test_reproducible_wherever_the_sample_lies(self, keep):
         # A symmetric hexagon: its tied vertices get areas that differ in the
