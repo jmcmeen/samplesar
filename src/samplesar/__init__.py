@@ -2,6 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from samplesar._hull import hull_peel_nest, hull_random_nest
 from samplesar._nest import Nest, random_nest
 from samplesar._sample import Sample, hull_area
 
@@ -10,4 +11,12 @@ try:
 except PackageNotFoundError:  # running from a source tree without an install
     __version__ = "0.0.0"
 
-__all__ = ["Nest", "Sample", "__version__", "hull_area", "random_nest"]
+__all__ = [
+    "Nest",
+    "Sample",
+    "__version__",
+    "hull_area",
+    "hull_peel_nest",
+    "hull_random_nest",
+    "random_nest",
+]
