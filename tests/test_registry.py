@@ -129,7 +129,67 @@ def test_a_strategy_must_return_a_nest(sample, clean_registry):
         samplesar.nest(sample, "broken")
 
 
-def test_compare_a_sequence_needs_distinct_labels(sample):
-    twice = [samplesar.nest(sample, "random", seed=0), samplesar.nest(sample, "random", seed=0)]
-    with pytest.raises(ValueError, match=r"share a label \(random\(seed=0\)\)"):
-        samplesar.compare_nests(twice)
+def test_compare_numbers_repeated_labels(sample):
+    table = samplesar.compare_nests(
+        [
+            samplesar.random_nest(sample),
+            samplesar.random_nest(sample),
+            samplesar.hull_peel_nest(sample),
+        ]
+    )
+    assert list(table.index) == ["random", "random #2", "hull_peel"]
+
+
+def test_nests_pickle_and_deep_copy(sample):
+    import copy
+    import pickle
+
+    for made in (
+        samplesar.nest(sample, "hull_area", keep="smallest"),
+        samplesar.Nest(sample=sample, steps=(np.arange(sample.n_points),)),
+    ):
+        for again in (pickle.loads(pickle.dumps(made)), copy.deepcopy(made)):
+            assert again.label == made.label
+            assert all(np.array_equal(a, b) for a, b in zip(again.steps, made.steps, strict=True))
+
+
+def test_a_same_named_function_cannot_replace_a_built_in(clean_registry):
+    with pytest.raises(ValueError, match="already registered"):
+
+        @samplesar.register_strategy("random")
+        def random_nest(sample):
+            return None
+
+
+def test_keyword_extras_are_recorded_flat(sample, clean_registry):
+    @samplesar.register_strategy("flexible")
+    def flexible(sample, **opts):
+        """A strategy with free-form options."""
+        return samplesar.Nest(sample=sample, steps=(np.arange(sample.n_points),))
+
+    assert samplesar.nest(sample, "flexible", k=2).label == "flexible(k=2)"
+
+
+def test_an_option_may_be_called_strategy(sample, clean_registry):
+    @samplesar.register_strategy("greedy")
+    def greedy(sample, strategy="fast"):
+        """Takes an option named strategy."""
+        return samplesar.Nest(sample=sample, steps=(np.arange(sample.n_points),))
+
+    assert dict(samplesar.nest(sample, "greedy", strategy="slow").options) == {"strategy": "slow"}
+
+
+def test_wrapped_summary_is_kept_whole(clean_registry):
+    @samplesar.register_strategy("wordy")
+    def wordy(sample):
+        """Drop the point that
+        loses the most area.
+
+        More detail here.
+        """
+
+    assert samplesar.strategies()["wordy"] == "Drop the point that loses the most area."
+
+
+def test_numpy_option_values_label_plainly(sample):
+    assert samplesar.random_nest(sample, seed=np.int64(1)).label == "random(seed=1)"

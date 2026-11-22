@@ -5,8 +5,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import inspect
-from collections.abc import Callable
-from types import MappingProxyType
+from collections.abc import Callable, Iterator, Mapping
 from typing import TYPE_CHECKING, Any, ParamSpec
 
 if TYPE_CHECKING:
@@ -16,11 +15,58 @@ if TYPE_CHECKING:
 P = ParamSpec("P")
 
 
+class Options(Mapping[str, Any]):
+    """A read-only mapping of a strategy's options; unlike a mappingproxy it
+    pickles and deep-copies, so nests can go to other processes or to disk."""
+
+    def __init__(self, values: Mapping[str, Any] | None = None) -> None:
+        self._values = dict(values or {})
+
+    def __getitem__(self, key: str) -> Any:
+        return self._values[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __repr__(self) -> str:
+        return f"Options({self._values!r})"
+
+
 @dataclasses.dataclass(frozen=True)
 class _Strategy:
     name: str
     func: Callable[..., Nest]
+    original: Callable[..., Nest]
     description: str
+
+
+def _given_options(signature: inspect.Signature, args: Any, kwargs: Any) -> dict[str, Any]:
+    """The options a strategy was called with, as given: everything but the
+    sample (its first parameter), with ``**kwargs`` extras flattened."""
+    bound = signature.bind(*args, **kwargs).arguments
+    sample_name = next(iter(signature.parameters))
+    options: dict[str, Any] = {}
+    for key, value in bound.items():
+        if key == sample_name:
+            continue
+        kind = signature.parameters[key].kind
+        if kind is inspect.Parameter.VAR_KEYWORD:
+            options.update(value)
+        elif kind is inspect.Parameter.VAR_POSITIONAL:
+            if value:
+                options[key] = value
+        else:
+            options[key] = value
+    return options
+
+
+def _summary(func: Callable[..., Any]) -> str:
+    """The first paragraph of a docstring, on one line."""
+    doc = inspect.getdoc(func) or ""
+    return " ".join(doc.split("\n\n", 1)[0].split())
 
 
 _REGISTRY: dict[str, _Strategy] = {}
@@ -74,15 +120,17 @@ def register_strategy(
             result = func(*args, **kwargs)
             if not isinstance(result, Nest):
                 raise TypeError(f"Strategy {name!r} returned {type(result).__name__}, not a Nest.")
-            given = signature.bind(*args, **kwargs).arguments
-            options = dict(list(given.items())[1:])  # everything but the sample
-            return dataclasses.replace(result, strategy=name, options=MappingProxyType(options))
+            options = Options(_given_options(signature, args, kwargs))
+            return dataclasses.replace(result, strategy=name, options=options)
 
         existing = _REGISTRY.get(name)
-        if existing is not None and existing.func.__qualname__ != func.__qualname__:
+        same = existing is not None and (
+            (existing.original.__module__, existing.original.__qualname__)
+            == (func.__module__, func.__qualname__)
+        )
+        if existing is not None and not same:
             raise ValueError(f"A strategy named {name!r} is already registered.")
-        doc = inspect.getdoc(func) or ""
-        _REGISTRY[name] = _Strategy(name, run, description or doc.split("\n", 1)[0])
+        _REGISTRY[name] = _Strategy(name, run, func, description or _summary(func))
         return run
 
     return decorate
@@ -100,7 +148,7 @@ def strategies() -> dict[str, str]:
     return {s.name: s.description for s in _REGISTRY.values()}
 
 
-def nest(sample: Sample, strategy: str = "random", **options: Any) -> Nest:
+def nest(sample: Sample, strategy: str = "random", /, **options: Any) -> Nest:
     """Nest a sample with any registered strategy, by name.
 
     ``samplesar.nest(sample, "hull_area", keep="smallest")`` is the same as

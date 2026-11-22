@@ -67,6 +67,7 @@ def compare_nests(
     nests : mapping of str to Nest, or sequence of Nest
         The nests to compare: by name, or a sequence named by each nest's
         [`label`][samplesar.Nest.label], such as ``hull_area(keep='smallest')``.
+        Repeated labels (two unseeded random nests, say) get ``#2``, ``#3``.
     model : str
         A sars model with one fit per dataset, such as ``"power"`` or
         ``"loga"``.
@@ -84,8 +85,7 @@ def compare_nests(
     Raises
     ------
     ValueError
-        If ``nests`` is empty, two nests in a sequence share a label, sars
-        has no such model, a nest has too few
+        If ``nests`` is empty, sars has no such model, a nest has too few
         steps to fit (the message names it), or the fit has no parameters to
         compare (a multi-model average, for example).
 
@@ -98,14 +98,12 @@ def compare_nests(
     >>> samplesar.compare_nests(nests)  # doctest: +SKIP
     """
     if not isinstance(nests, Mapping):
-        listed = list(nests)
-        named = {nest.label: nest for nest in listed}
-        if len(named) < len(listed):
-            labels = [nest.label for nest in listed]
-            twice = sorted({lab for lab in labels if labels.count(lab) > 1})
-            raise ValueError(
-                f"Nests share a label ({', '.join(twice)}); pass a mapping of names to nests."
-            )
+        named: dict[str, Nest] = {}
+        seen: dict[str, int] = {}
+        for nest in nests:
+            seen[nest.label] = seen.get(nest.label, 0) + 1
+            count = seen[nest.label]
+            named[nest.label if count == 1 else f"{nest.label} #{count}"] = nest
         nests = named
     if not nests:
         raise ValueError("No nests to compare.")

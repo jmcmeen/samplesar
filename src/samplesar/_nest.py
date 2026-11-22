@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from types import MappingProxyType
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from samplesar._registry import register_strategy
+from samplesar._registry import Options, register_strategy
 from samplesar._sample import Sample, hull_area
 
 
@@ -34,13 +33,13 @@ class Nest:
         empty for a nest built directly.
     options : mapping
         The options the strategy was called with, as given (defaults left
-        out).
+        out), read-only.
     """
 
     sample: Sample
     steps: tuple[np.ndarray, ...]
     strategy: str = ""
-    options: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
+    options: Mapping[str, Any] = field(default_factory=Options)
 
     @property
     def label(self) -> str:
@@ -51,7 +50,10 @@ class Nest:
         name = self.strategy or "nest"
         if not self.options:
             return name
-        return f"{name}({', '.join(f'{k}={v!r}' for k, v in self.options.items())})"
+        shown = (
+            f"{k}={v.item() if isinstance(v, np.generic) else v!r}" for k, v in self.options.items()
+        )
+        return f"{name}({', '.join(shown)})"
 
     @property
     def n_steps(self) -> int:
