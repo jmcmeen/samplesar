@@ -83,8 +83,12 @@ nests = {
     "most species": samplesar.hull_species_nest(sample, keep="most"),
     "farthest": samplesar.hull_distance_nest(sample, remove="farthest"),
 }
-samplesar.compare_nests(nests)          # n_steps, c, z, r_squared, aicc, converged
+samplesar.compare_nests(nests)   # n_steps, n_fitted, c, z, r_squared, aicc, converged
 ```
+
+The areas are convex hull areas in square degrees, so `c` is per square
+degree; `z` doesn't depend on the unit. A nest needs at least three steps with
+a positive area to fit (a peeled nest with few layers may not have them).
 
 Random removal keeps the sample's whole extent until its last few points, so
 it gives a steep curve; the outside-in strategies shrink the area from the

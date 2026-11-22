@@ -81,6 +81,10 @@ class Nest:
     def fit(self, model: str = "power", **kwargs: Any) -> Any:
         """Fit one of sars' models to the nest's species-area data.
 
+        The areas are convex hull areas in square degrees, so a parameter
+        scaled by area (``c`` of the power model, for example) is in those
+        units.
+
         Parameters
         ----------
         model : str
@@ -97,7 +101,8 @@ class Nest:
         Raises
         ------
         ValueError
-            If sars has no such model.
+            If sars has no such model, or the nest has fewer than three steps
+            with a positive area to fit.
         """
         from samplesar._evaluate import fit_nest
 

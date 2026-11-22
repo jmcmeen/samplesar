@@ -40,7 +40,8 @@ def test_compare_nests(sample):
     }
     table = samplesar.compare_nests(nests)
     assert list(table.index) == ["random", "peel", "farthest"]
-    assert {"n_steps", "c", "z", "r_squared", "aicc", "converged"} <= set(table.columns)
+    assert {"n_steps", "n_fitted", "c", "z", "r_squared", "aicc", "converged"} <= set(table.columns)
+    assert table.loc["random", "n_fitted"] == len(nests["random"].sar_data())
     assert table.loc["peel", "n_steps"] == nests["peel"].n_steps
     assert table.loc["random", "z"] == pytest.approx(nests["random"].fit().params["z"])
 
@@ -65,3 +66,38 @@ def test_compare_needs_a_single_model(sample, monkeypatch):
     nest = samplesar.random_nest(sample, seed=0)
     with pytest.raises(ValueError, match="returns Averaged, not a single fit"):
         samplesar.compare_nests({"a": nest}, model="averaged")
+
+
+def test_compare_needs_nests():
+    with pytest.raises(ValueError, match="No nests to compare"):
+        samplesar.compare_nests({})
+
+
+def test_too_few_steps_to_fit_names_the_nest():
+    # One inner layer: the peeled nest has two steps, too few to fit.
+    square = [[0, 0], [4, 0], [4, 4], [0, 4]]
+    inner = [[1, 1], [3, 1], [2, 3]]
+    pts = np.array(square + inner, dtype=float) * 0.01
+    sample = samplesar.Sample.from_df(
+        pd.DataFrame({"species": list("abcdefg"), "lon": pts[:, 0], "lat": pts[:, 1]})
+    )
+    peel = samplesar.hull_peel_nest(sample)
+    assert peel.n_steps == 2
+    with pytest.raises(ValueError, match="The nest has 2 step"):
+        peel.fit()
+    with pytest.raises(ValueError, match="Nest 'peel' has 2 step"):
+        samplesar.compare_nests({"random": samplesar.random_nest(sample, seed=0), "peel": peel})
+
+
+def test_compare_passes_options_to_sars(sample, monkeypatch):
+    import sars
+
+    seen = {}
+
+    def fake(data, **kwargs):
+        seen.update(kwargs)
+        return sars.sar_power(data)
+
+    monkeypatch.setattr(sars, "sar_fake", fake, raising=False)
+    samplesar.compare_nests({"a": samplesar.random_nest(sample, seed=0)}, model="fake", flag=1)
+    assert seen == {"flag": 1}
