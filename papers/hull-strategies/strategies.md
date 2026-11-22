@@ -8,11 +8,12 @@ and a disagreement between the two is a bug in one of them.
 
 **Sample.** A sample is a set of observations, each a species at a location.
 Locations are projected to the plane (km): by default a Lambert azimuthal
-equal-area projection of the WGS84 ellipsoid centred on the sample, or the
-sample's own projected coordinate system (`Sample.xy`). Let
+equal-area projection of the WGS84 ellipsoid centred on the points' mean
+direction (or on a given `centre`), or the sample's own projected coordinate
+system (`Sample.xy`). Let
 
-- $P = \{p_1, \dots, p_n\} \subset \mathbb{R}^2$ be the distinct projected
-  points, indexed in the order first seen;
+- $P = \{p_1, \dots, p_n\} \subset \mathbb{R}^2$ be the projections of the
+  distinct (longitude, latitude) points, indexed in the order first seen;
 - $S(p)$ be the set of species observed at point $p$.
 
 For any subset $Q \subseteq P$:
@@ -23,11 +24,14 @@ For any subset $Q \subseteq P$:
   when that system isn't equal-area).
 - **Vertices** $V(Q) = \{p \in Q : p \notin \operatorname{conv}(Q \setminus
   \{p\})\}$: the points where the hull bends. A point on an edge between two
-  vertices is not a vertex. If the points of $Q$ are collinear, $V(Q)$ is the
+  vertices is not a vertex; in floating point, "on" means within
+  $\delta(Q) = 10^{-9} \cdot \operatorname{diag}(H(Q))$ of the line through
+  its neighbours on the hull, where $\operatorname{diag}$ is the diagonal of
+  the hull's bounding box. If the points of $Q$ are collinear, $V(Q)$ is the
   two ends of the segment.
-- **Boundary** $B(Q) = Q \cap \partial H(Q)$: the vertices and any points on
-  the hull's edges (to within floating-point rounding). If $H(Q)$ isn't a
-  polygon (fewer than three points, or collinear), $B(Q) = Q$.
+- **Boundary** $B(Q) = \{p \in Q : \operatorname{dist}(p, \partial H(Q)) \le
+  \delta(Q)\}$: the vertices and any points on the hull's edges. If $H(Q)$
+  isn't a polygon (fewer than three points, or collinear), $B(Q) = Q$.
 - **Centre** $c(Q) = \frac{1}{|V(Q)|} \sum_{v \in V(Q)} v$, the centroid of
   the vertices, and $d_Q(p) = \lVert p - c(Q) \rVert$.
 - **Holders** $h_Q(s) = |\{p \in Q : s \in S(p)\}|$, the number of points in
@@ -40,9 +44,9 @@ with $Q_0 = P$. Its species-area data are the pairs $(A(Q_t), R(Q_t))$ for
 the steps with $A(Q_t) > 0$, which are what a SAR model is fitted to.
 
 **Stopping.** Every strategy takes a minimum size $m \ge 1$ (`min_points`,
-default 3). The one-at-a-time strategies stop when $|Q_t| = m$, so
-$T = n - m$; hull peeling stops before a step would leave fewer than $m$
-points.
+default 3) and needs $n \ge m$. The one-at-a-time strategies stop when
+$|Q_t| = m$, so $T = n - m$; hull peeling stops before a step would leave
+fewer than $m$ points.
 
 **Ties.** The deterministic strategies pick one vertex by a score $f$.
 Scores computed at real coordinates differ in their last bits even when
@@ -85,7 +89,11 @@ deterministic.
 | S3 | Hull peeling | $Q_{t+1} = Q_t \setminus B(Q_t)$, while $\lvert Q_{t+1} \rvert \ge m$ | `hull_peel_nest` |
 
 S3 gives the sample's convex layers (onion peeling). It removes many points
-per step, so its nest is short: $T$ is the number of layers, not $n - m$.
+per step, so its nest is short: $T$ is the number of layers peeled while at
+least $m$ points remain inside, at most one fewer than the number of layers
+(the innermost is never peeled). If not even the first layer can be peeled,
+because fewer than $m$ points lie strictly inside the hull, it raises an
+error rather than return a nest with nothing to fit.
 
 ## Properties
 
@@ -117,7 +125,8 @@ species per point:
 | S4, S5 | $h$ hulls, $O(h\, n \log n)$ | $O(h\, n^2 \log n)$ |
 | S6, S7 | one hull and $O(hk)$ | $O(n^2 \log n)$ |
 
-On 893 points, every strategy runs in under a second.
+Measured on an 893-point sample (one laptop): S4 and S5 took 0.5 to 0.8 s,
+every other strategy under 0.2 s.
 
 ## Open questions for the Methods
 
