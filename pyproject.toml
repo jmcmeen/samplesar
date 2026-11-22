@@ -44,6 +44,9 @@ dev = [
   "geopandas>=0.14",  # Sample.from_geodataframe tests; not a runtime dependency
   "ruff>=0.17,<0.18",  # pinned: minor releases change formatting; upgrade on purpose
 ]
+inat = [
+  "pyinaturalist>=0.19",
+]
 docs = [
   "mkdocs-material>=9.5",
   "mkdocstrings[python]",
@@ -84,7 +87,7 @@ warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
 # No type information published for these.
-module = ["shapely.*", "sars.*", "pyproj.*"]
+module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

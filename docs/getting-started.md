@@ -41,6 +41,22 @@ A GeoDataFrame of points works directly; its CRS is read from the frame
 sample = samplesar.Sample.from_geodataframe(gdf, species_col="species")
 ```
 
+## From iNaturalist
+
+With `pip install 'samplesar[inat]'`, a sample can come straight from
+iNaturalist, fetched through pyinaturalist (or from records you already
+have):
+
+```python
+sample = samplesar.Sample.from_pyinaturalist(
+    taxon_id=20979, place_id=45, quality_grade="research"   # frogs in Tennessee
+)
+```
+
+Only species-level identifications are kept, and obscured coordinates
+(randomised by iNaturalist within about 0.2°) are dropped, unless you ask
+otherwise (`ranks=None`, `skip_obscured=False`).
+
 ## A nest
 
 A nesting strategy shrinks the sample one step at a time. Each step keeps a

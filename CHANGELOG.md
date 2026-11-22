@@ -25,6 +25,10 @@ All notable changes to this project are documented here. The format is based on
   (geopandas isn't required). `Sample.xy`, `Sample.projection`; areas in a
   CRS that isn't equal-area are corrected by its area distortion
   (`Sample.area_scale`).
+- `Sample.from_pyinaturalist()`: a sample from iNaturalist observations,
+  fetched through pyinaturalist (the new `inat` extra) past the API's
+  10,000-result limit, keeping species-level identifications with true
+  coordinates by default.
 
 ### Changed
 

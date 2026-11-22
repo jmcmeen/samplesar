@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -220,6 +220,71 @@ class Sample:
             If a keyword other than the three column names is given.
         """
         return cls.from_df(pd.read_csv(path), **kwargs)
+
+    @classmethod
+    def from_pyinaturalist(
+        cls,
+        observations: Iterable[Mapping[str, Any]] | None = None,
+        *,
+        ranks: Iterable[str] | None = ("species",),
+        skip_obscured: bool = True,
+        max_results: int | None = None,
+        **query: Any,
+    ) -> Sample:
+        """Build a sample from iNaturalist observations.
+
+        Either pass observation records already fetched (the ``results`` of
+        pyinaturalist's ``get_observations``, or the API's JSON), or give a
+        query and they're fetched through pyinaturalist (``pip install
+        'samplesar[inat]'``), paging past the API's 10,000-result limit.
+
+        Parameters
+        ----------
+        observations : iterable of dict, optional
+            Observation records. If omitted, ``query`` is fetched.
+        ranks : iterable of str or None
+            Keep only taxa at these ranks; by default species-level
+            identifications, so a genus-level record doesn't count as a
+            species. ``None`` keeps every rank.
+        skip_obscured : bool
+            Drop observations whose coordinates iNaturalist has obscured
+            (randomised within a cell about 0.2° across), which would distort
+            any hull.
+        max_results : int, optional
+            Stop fetching after this many records.
+        **query
+            Search parameters for ``get_observations``, such as
+            ``place_id``, ``taxon_id``, ``user_id`` or ``quality_grade``.
+
+        Returns
+        -------
+        Sample
+
+        Raises
+        ------
+        ValueError
+            If no usable observations remain.
+        ImportError
+            If a query needs fetching and pyinaturalist isn't installed.
+
+        Examples
+        --------
+        >>> sample = samplesar.Sample.from_pyinaturalist(  # doctest: +SKIP
+        ...     place_id=130630, taxon_id=20978, quality_grade="research"
+        ... )
+        """
+        from samplesar._inat import fetch_inaturalist, inaturalist_frame
+
+        if observations is None:
+            observations = fetch_inaturalist(max_results=max_results, **query)
+        elif query:
+            raise ValueError("Give observations or a query, not both.")
+        frame = inaturalist_frame(observations, ranks=ranks, skip_obscured=skip_obscured)
+        if frame.empty:
+            raise ValueError(
+                "No usable iNaturalist observations (see the filters on ranks and obscured)."
+            )
+        return cls.from_df(frame)
 
     @property
     def n_observations(self) -> int:
