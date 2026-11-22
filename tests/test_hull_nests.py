@@ -76,6 +76,13 @@ def test_a_utm_grid_has_only_its_corners_as_vertices():
     assert sorted(vertices) == [0, 6, 42, 48]
 
 
+def test_a_row_collinear_but_for_rounding_has_two_ends():
+    row = make_sample(grid(7)[:7], crs=UTM_17N)
+    assert sorted(hull_vertices(row.xy, np.arange(row.n_points))) == [0, 6]
+    points = np.array([[0, 0], [1, 1e-13], [2, -1e-13], [3, 0], [1.5, 2e-13]])
+    assert sorted(hull_vertices(points, np.arange(5))) == [0, 3]
+
+
 def test_a_real_bend_is_kept():
     # A corner well off the line through its neighbours stays a vertex.
     points = np.array([[0, 0], [1, -1e-3], [2, 0], [2, 2], [0, 2]], dtype=float)

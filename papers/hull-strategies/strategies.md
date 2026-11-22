@@ -120,7 +120,7 @@ species per point:
 | Strategies | Per step | Whole nest |
 | --- | --- | --- |
 | S1 | $O(1)$ | $O(n)$ |
-| S2, S8, S9 | one hull, $O(n \log n)$ | $O(n^2 \log n)$ |
+| S2, S8, S9 | one hull, $O(n \log n)$, plus $O(h^2)$ at worst to drop corners rounding pushed off straight edges | $O(n^2 \log n)$ |
 | S3 | one hull per layer | $O(n^2 \log n)$ at worst |
 | S4, S5 | $h$ hulls, $O(h\, n \log n)$ | $O(h\, n^2 \log n)$ |
 | S6, S7 | one hull and $O(hk)$ | $O(n^2 \log n)$ |

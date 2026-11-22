@@ -27,24 +27,33 @@ def _tolerance(hull: Polygon) -> float:
     return 1e-9 * float(np.hypot(x1 - x0, y1 - y0))
 
 
+def _off_line(corners: np.ndarray, before: np.ndarray, after: np.ndarray) -> np.ndarray:
+    """Each corner's distance from the line through its two neighbours."""
+    edge = after - before
+    cross = np.abs(edge[:, 0] * (corners - before)[:, 1] - edge[:, 1] * (corners - before)[:, 0])
+    return cross / np.maximum(np.hypot(edge[:, 0], edge[:, 1]), 1e-300)
+
+
 def _true_corners(ring: np.ndarray, tolerance: float) -> np.ndarray:
     """The ring's corners without those within ``tolerance`` of the line
-    through their neighbours: edge points that rounding pushed outward."""
+    through their neighbours: edge points that rounding pushed outward. If
+    what's left is a sliver (points collinear but for rounding), its two far
+    ends."""
     corners = ring
-    changed = True
-    while changed and len(corners) > 3:
-        before, after = np.roll(corners, 1, axis=0), np.roll(corners, -1, axis=0)
-        edge = after - before
-        cross = np.abs(
-            edge[:, 0] * (corners - before)[:, 1] - edge[:, 1] * (corners - before)[:, 0]
-        )
-        off_line = cross / np.maximum(np.hypot(edge[:, 0], edge[:, 1]), 1e-300)
-        # Drop the flattest corner first, one at a time, so two neighbouring
-        # near-collinear corners can't both go.
-        flattest = int(np.argmin(off_line))
-        changed = bool(off_line[flattest] <= tolerance)
-        if changed:
-            corners = np.delete(corners, flattest, axis=0)
+    while len(corners) > 3:
+        off = _off_line(corners, np.roll(corners, 1, axis=0), np.roll(corners, -1, axis=0))
+        # One corner per pass, the flattest, so each later decision is made
+        # against the corner's current neighbours, not ones already dropped.
+        flattest = int(np.argmin(off))
+        if off[flattest] > tolerance:
+            break
+        corners = np.delete(corners, flattest, axis=0)
+    if len(corners) == 3:
+        off = _off_line(corners, np.roll(corners, 1, axis=0), np.roll(corners, -1, axis=0))
+        if off.min() <= tolerance:
+            gaps = [np.hypot(*(corners[a] - corners[b])) for a, b in ((0, 1), (1, 2), (0, 2))]
+            a, b = ((0, 1), (1, 2), (0, 2))[int(np.argmax(gaps))]
+            corners = corners[[a, b]]
     return corners
 
 
