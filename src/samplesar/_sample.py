@@ -563,8 +563,9 @@ class Sample:
         Returns
         -------
         Sample
-            With the same ``crs``; its projection is centred on the points
-            kept, as for a new sample.
+            With the same ``crs`` and ``centre``; without an explicit
+            ``centre``, its projection is centred on the points kept, as for
+            a new sample.
 
         Raises
         ------
@@ -576,7 +577,7 @@ class Sample:
         keep = inside(as_geometry(boundary), self.data["lon"], self.data["lat"])
         if not keep.any():
             raise ValueError("No observations lie inside the boundary.")
-        return Sample(self.data[keep].reset_index(drop=True), crs=self.crs)
+        return Sample(self.data[keep].reset_index(drop=True), centre=self.centre, crs=self.crs)
 
     def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at some of the sample's points.

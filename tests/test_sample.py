@@ -366,3 +366,11 @@ class TestWithin:
 
         with pytest.raises(ValueError, match="No observations"):
             self.sample().within(box(10, 10, 11, 11))
+
+
+def test_within_keeps_an_explicit_centre():
+    from shapely.geometry import box
+
+    sample = samplesar.Sample.from_df(frame([0.1, 0.5, 0.9, 1.5], [0.1, 0.5, 0.9, 0.5]))
+    pinned = samplesar.Sample(sample.data, centre=(0.0, 0.0))
+    assert pinned.within(box(0, 0, 1, 1)).centre == (0.0, 0.0)

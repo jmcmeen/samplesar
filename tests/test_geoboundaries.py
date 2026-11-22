@@ -118,3 +118,42 @@ def test_works_with_within(fake):
     )
     south = samplesar.boundary("XYZ", 1, "South", cache_dir=cache)
     assert sorted(sample.within(south).data["species"]) == ["a", "c"]
+
+
+def test_nothing_inside_the_parent(fake):
+    cache, _ = fake
+    with pytest.raises(ValueError, match="No ADM2 unit of XYZ lies inside"):
+        samplesar.boundary("XYZ", 2, inside=box(50, 50, 51, 51), cache_dir=cache)
+
+
+def test_a_broken_cached_file_is_downloaded_again(fake):
+    cache, calls = fake
+    samplesar.boundary("XYZ", 1, "North", cache_dir=cache)
+    (cache / "XYZ_ADM1.geojson").write_text('{"type": "FeatureCo')  # cut off mid-download
+    n = len(calls)
+    assert samplesar.boundary("XYZ", 1, "North", cache_dir=cache).equals(box(0, 5, 10, 10))
+    assert len(calls) == n + 1
+
+
+def test_a_failed_download_is_a_value_error(fake, monkeypatch):
+    cache, _ = fake
+    samplesar.boundary("XYZ", 0, cache_dir=cache)  # metadata cached
+    (cache / "XYZ_ADM0.geojson").unlink()
+
+    def offline(url):
+        raise OSError("unreachable")
+
+    monkeypatch.setattr(gb, "_fetch", offline)
+    with pytest.raises(ValueError, match="Couldn't download"):
+        samplesar.boundary("XYZ", 0, cache_dir=cache)
+    assert not list(cache.glob("*.partial"))
+
+
+def test_invalid_rings_are_repaired(fake, monkeypatch):
+    from shapely.geometry import Polygon
+
+    cache, _ = fake
+    bowtie = Polygon([(0, 0), (2, 2), (2, 0), (0, 2)])  # self-intersecting
+    monkeypatch.setitem(FILES, "XYZ_ADM0", [feature("Xland", "XYZ", bowtie, "c0")])
+    result = samplesar.boundary("XYZ", cache_dir=cache)
+    assert result.is_valid and result.area == pytest.approx(2.0)

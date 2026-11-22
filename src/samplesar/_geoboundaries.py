@@ -28,9 +28,34 @@ def _cache_dir(given: str | Path | None) -> Path:
     return Path(base) / "samplesar" / "geoboundaries"
 
 
+TIMEOUT = 120  # seconds without data before a download fails
+
+
 def _fetch(url: str) -> bytes:
-    with urllib.request.urlopen(url) as response:
+    with urllib.request.urlopen(url, timeout=TIMEOUT) as response:
         return response.read()
+
+
+def _cached(path: Path, url: str) -> bytes:
+    """``url``'s content, kept at ``path``: downloaded to a temporary file and
+    moved into place, so an interrupted download leaves no broken cache, and
+    fetched again if the cached copy doesn't parse."""
+    if path.exists():
+        content = path.read_bytes()
+        try:
+            json.loads(content)
+            return content
+        except ValueError:
+            path.unlink()
+    try:
+        content = _fetch(url)
+        json.loads(content)
+    except Exception as err:
+        raise ValueError(f"Couldn't download {url}: {err}") from err
+    partial = path.with_suffix(path.suffix + ".partial")
+    partial.write_bytes(content)
+    os.replace(partial, path)
+    return content
 
 
 def _features(iso: str, level: int, simplified: bool, cache: Path) -> tuple[list[dict], dict]:
@@ -39,23 +64,21 @@ def _features(iso: str, level: int, simplified: bool, cache: Path) -> tuple[list
     cache.mkdir(parents=True, exist_ok=True)
     stem = f"{iso}_ADM{level}"
     meta_path = cache / f"{stem}.json"
-    if meta_path.exists():
-        meta = json.loads(meta_path.read_text())
-    else:
-        try:
-            meta = json.loads(_fetch(API_URL.format(iso=iso, level=level)))
-        except Exception as err:
-            raise ValueError(
-                f"geoBoundaries has no ADM{level} boundaries for {iso!r} (or couldn't be "
-                f"reached): {err}"
-            ) from err
-        meta_path.write_text(json.dumps(meta))
+    try:
+        meta = json.loads(_cached(meta_path, API_URL.format(iso=iso, level=level)))
+    except ValueError as err:
+        raise ValueError(
+            f"geoBoundaries has no ADM{level} boundaries for {iso!r} (or couldn't be "
+            f"reached): {err}"
+        ) from err
     key = "simplifiedGeometryGeoJSON" if simplified else "gjDownloadURL"
+    if not meta.get(key):
+        kind = "simplified " if simplified else ""
+        raise ValueError(f"geoBoundaries gives no {kind}file for {iso} ADM{level}.")
     geo_path = cache / f"{stem}{'_simplified' if simplified else ''}.geojson"
     if not geo_path.exists():
         logger.info("Downloading %s ADM%d boundaries from geoBoundaries", iso, level)
-        geo_path.write_bytes(_fetch(meta[key]))
-    return json.loads(geo_path.read_text())["features"], meta
+    return json.loads(_cached(geo_path, meta[key]))["features"], meta
 
 
 def boundary(
@@ -98,8 +121,9 @@ def boundary(
         to tell apart units with one name: ``inside=samplesar.boundary("USA",
         1, "Tennessee")`` picks Tennessee's Sullivan County.
     cache_dir : str or Path, optional
-        Where downloads are kept; by default ``$SAMPLESAR_CACHE`` or
-        ``~/.cache/samplesar``.
+        Where downloads are kept; by default ``$SAMPLESAR_CACHE/geoboundaries``
+        if that's set, else ``samplesar/geoboundaries`` under
+        ``$XDG_CACHE_HOME`` or ``~/.cache``.
 
     Returns
     -------
@@ -109,8 +133,9 @@ def boundary(
     Raises
     ------
     ValueError
-        If the country code or level is invalid or unavailable, or ``name``
-        matches no unit or several (the message lists them).
+        If the country code or level is invalid or unavailable, a download
+        fails, no unit lies ``inside`` the region, or ``name`` matches no
+        unit or several (the message lists them).
 
     Examples
     --------
@@ -126,14 +151,17 @@ def boundary(
         raise ValueError(f"level must be 0 to 5, got {level!r}.")
     iso = country.upper()
     features, _ = _features(iso, level, simplified, _cache_dir(cache_dir))
+    # Some published rings self-intersect; repair them so unions and tests work.
+    for f in features:
+        f["_geometry"] = shapely.make_valid(shape(f["geometry"]))
     if inside is not None:
         from samplesar._boundary import as_geometry
 
         region = as_geometry(inside)
         shapely.prepare(region)
-        features = [
-            f for f in features if region.contains(shape(f["geometry"]).representative_point())
-        ]
+        features = [f for f in features if region.contains(f["_geometry"].representative_point())]
+        if not features:
+            raise ValueError(f"No ADM{level} unit of {iso} lies inside the given region.")
     if name is not None:
         wanted = name.casefold()
         matches = [
@@ -160,4 +188,9 @@ def boundary(
                 "Narrow them with inside=, a boundary of the level above."
             )
         features = matches
-    return shapely.union_all([shape(f["geometry"]) for f in features])
+    merged = shapely.union_all([f["_geometry"] for f in features])
+    # make_valid can leave stray lines or points beside the polygons.
+    parts = [
+        g for g in getattr(merged, "geoms", [merged]) if g.geom_type in ("Polygon", "MultiPolygon")
+    ]
+    return parts[0] if len(parts) == 1 else shapely.union_all(parts)

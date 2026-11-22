@@ -300,3 +300,19 @@ def test_a_boundary(parquet):
         parquet, boundary=region, bbox=(-82.205, 36.5, -82.2, 36.52)
     )
     assert narrower.n_observations == 1
+
+
+@pytest.mark.parametrize(
+    ("bbox", "match"),
+    [
+        ((-100.0, 30.0, -95.0, 40.0), "don't overlap"),
+        ((-82.3, 50.0, -82.1, 51.0), "don't overlap"),
+        ((1.0, 2.0, 3.0), "west, south, east, north"),
+        ((-82.3, 37.0, -82.1, 36.0), "west, south, east, north"),
+    ],
+)
+def test_a_bbox_that_doesnt_fit_the_boundary(parquet, bbox, match):
+    from shapely.geometry import box
+
+    with pytest.raises(ValueError, match=match):
+        samplesar.Sample.from_open_data(parquet, boundary=box(-82.3, 36.4, -82.1, 36.6), bbox=bbox)

@@ -39,14 +39,24 @@ def clip_bbox(
     boundary: shapely.Geometry, bbox: tuple[float, float, float, float] | None
 ) -> tuple[float, float, float, float]:
     """The boundary's bounding box, narrowed by ``bbox`` if one is given (an
-    antimeridian-crossing ``bbox`` is kept as it is)."""
+    antimeridian-crossing ``bbox`` is kept as it is). Raises if ``bbox``
+    isn't (west, south, east, north) or doesn't overlap the boundary."""
     west, south, east, north = boundary.bounds
     if bbox is None:
         return (west, south, east, north)
-    b_west, b_south, b_east, b_north = (float(v) for v in bbox)
+    try:
+        b_west, b_south, b_east, b_north = (float(v) for v in bbox)
+    except (TypeError, ValueError):
+        raise ValueError(f"bbox must be (west, south, east, north), got {bbox!r}.") from None
+    if not (b_south <= b_north and -90 <= b_south and b_north <= 90):
+        raise ValueError(f"bbox must be (west, south, east, north), got {bbox!r}.")
     south, north = max(south, b_south), min(north, b_north)
     if b_west <= b_east:
         west, east = max(west, b_west), min(east, b_east)
-    else:
+        overlaps = west <= east
+    else:  # the caller's bbox crosses the antimeridian
+        overlaps = boundary.bounds[2] >= b_west or boundary.bounds[0] <= b_east
         west, east = b_west, b_east
+    if south > north or not overlaps:
+        raise ValueError("bbox and boundary don't overlap.")
     return (west, south, east, north)
