@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `download_open_data()` and `Sample.from_open_data()`: a local copy of
+  iNaturalist's open-data export as one Parquet file, and samples queried
+  from it by region, taxon (and everything under it), grade, date and
+  positional accuracy, through the new `opendata` extra (DuckDB).
 - `papers/`: manuscripts built on samplesar. The first, on the hull
   strategies, has an outline and a formal specification of strategies S1 to
   S9 that the code is checked against.

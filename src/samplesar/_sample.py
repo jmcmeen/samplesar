@@ -288,6 +288,82 @@ class Sample:
             )
         return cls.from_df(frame)
 
+    @classmethod
+    def from_open_data(
+        cls,
+        path: str | Path,
+        *,
+        bbox: tuple[float, float, float, float] | None = None,
+        taxon_id: int | None = None,
+        quality_grade: str | Iterable[str] | None = "research",
+        ranks: Iterable[str] | None = ("species", "subspecies", "variety", "form"),
+        since: Any = None,
+        until: Any = None,
+        max_accuracy: float | None = None,
+    ) -> Sample:
+        """Build a sample from a local copy of iNaturalist's open data.
+
+        Queries the Parquet file [`download_open_data`][samplesar.download_open_data]
+        builds, with DuckDB (``pip install 'samplesar[opendata]'``), so a
+        region or taxon comes back in moments without the API.
+
+        Parameters
+        ----------
+        path : str or Path
+            ``observations.parquet``.
+        bbox : tuple of float, optional
+            (west, south, east, north) in degrees; west greater than east
+            crosses the antimeridian.
+        taxon_id : int, optional
+            An iNaturalist taxon: it and everything under it (by ancestry),
+            so ``20979`` is every frog.
+        quality_grade : str, iterable of str or None
+            By default research grade only; ``None`` keeps every grade.
+        ranks : iterable of str or None
+            By default species and below, a subspecies, variety or form
+            counting as its species; ``None`` keeps every rank.
+        since, until : date or str, optional
+            Observed on or after, and on or before, these dates (ISO).
+        max_accuracy : float, optional
+            Keep observations whose positional accuracy is given and at most
+            this many metres. The export doesn't mark obscured observations,
+            whose public coordinates are randomised; this is the filter
+            available.
+
+        Returns
+        -------
+        Sample
+
+        Raises
+        ------
+        ValueError
+            If no observations match, or ``bbox`` isn't (west, south, east,
+            north).
+        ImportError
+            If DuckDB isn't installed.
+
+        Examples
+        --------
+        >>> frogs = samplesar.Sample.from_open_data(  # doctest: +SKIP
+        ...     "observations.parquet", bbox=(-85.0, 35.0, -81.5, 37.0), taxon_id=20979
+        ... )
+        """
+        from samplesar._opendata import open_data_frame
+
+        frame = open_data_frame(
+            path,
+            bbox=bbox,
+            taxon_id=taxon_id,
+            quality_grade=quality_grade,
+            ranks=ranks,
+            since=since,
+            until=until,
+            max_accuracy=max_accuracy,
+        )
+        if frame.empty:
+            raise ValueError("No observations in the open data match these filters.")
+        return cls.from_df(frame)
+
     @property
     def n_observations(self) -> int:
         """The number of observations."""

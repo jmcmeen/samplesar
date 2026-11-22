@@ -58,6 +58,28 @@ counts as its species), and obscured coordinates
 (randomised by iNaturalist within about 0.2°) are dropped, unless you ask
 otherwise (`ranks=None`, `skip_obscured=False`).
 
+## From a local copy of iNaturalist's open data
+
+For many samples, or large ones, keep a local copy of iNaturalist's
+open-data export instead of calling the API (`pip install
+'samplesar[opendata]'`, which adds DuckDB). The first call downloads about
+14 GB and builds a 12 GB Parquet file; later queries take moments:
+
+```python
+from pathlib import Path
+
+parquet = samplesar.download_open_data(Path.home() / "data" / "inaturalist-open-data")
+frogs = samplesar.Sample.from_open_data(
+    parquet, bbox=(-85.0, 35.0, -81.5, 37.0), taxon_id=20979   # frogs, East Tennessee
+)
+```
+
+`taxon_id` takes any taxon and everything under it. By default only research
+grade observations at species level or below are kept. The export holds only
+observations with openly licensed photos, and obscured observations carry
+their public, randomised coordinates without a flag; `max_accuracy` (metres)
+is the filter available for that.
+
 ## A nest
 
 A nesting strategy shrinks the sample one step at a time. Each step keeps a

@@ -42,10 +42,14 @@ dev = [
   "mypy",
   "pandas-stubs",
   "geopandas>=0.14",  # Sample.from_geodataframe tests; not a runtime dependency
+  "duckdb>=1.1",  # open-data tests; the opendata extra at run time
   "ruff>=0.17,<0.18",  # pinned: minor releases change formatting; upgrade on purpose
 ]
 inat = [
   "pyinaturalist>=0.19",
+]
+opendata = [
+  "duckdb>=1.1",
 ]
 docs = [
   "mkdocs-material>=9.5",
@@ -87,7 +91,7 @@ warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
 # No type information published for these.
-module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*"]
+module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*", "duckdb.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

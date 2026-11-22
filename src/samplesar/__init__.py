@@ -11,6 +11,7 @@ from samplesar._hull import (
     hull_species_nest,
 )
 from samplesar._nest import Nest, nest_from_order, random_nest
+from samplesar._opendata import download_open_data
 from samplesar._plot import animate_nest, plot_nest, plot_nest_curve
 from samplesar._registry import nest, register_strategy, strategies
 from samplesar._sample import Sample, hull_area
@@ -26,6 +27,7 @@ __all__ = [
     "__version__",
     "animate_nest",
     "compare_nests",
+    "download_open_data",
     "hull_area",
     "hull_area_nest",
     "hull_distance_nest",
