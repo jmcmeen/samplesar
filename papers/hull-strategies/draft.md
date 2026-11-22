@@ -314,8 +314,9 @@ uv run python papers/hull-strategies/analysis/run.py \
 ```
 
 The script writes every table and figure to `results/` (or `--out`); the
-benchmark records the machine it ran on, and `--benchmark-only` runs just the
-benchmark, which needs no data. None of the outputs holds
+run-time benchmark is a separate script, `analysis/benchmark.py`, which needs
+no data and writes to `results/benchmarks/<machine>/`, so each machine's
+timings sit side by side. None of the outputs holds
 coordinates of real observations; the only point maps are of a simulated
 sample.
 
@@ -327,7 +328,7 @@ sample.
 4. `results/figures/fig4_merge_sensitivity.png`: *z* against the merge distance, single-observer park sample.
 5. `results/figures/fig5_simulated_clusters.png`: simulated clustering, with and without merging.
 6. `results/figures/fig6_compactness.png`: hull compactness as points are removed.
-7. `results/figures/fig7_runtime.png`: run time against sample size, by strategy.
+7. `results/benchmarks/<machine>/fig7_runtime.png`: run time against sample size, by strategy (one per machine benchmarked).
 
 ## References (to verify)
 
