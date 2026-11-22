@@ -20,7 +20,8 @@ All notable changes to this project are documented here. The format is based on
 
 - `Nest.to_frame()` (and so `sar_data()`, `fit()` and `compare_nests()`) is
   5 to 7 times faster: species counts are updated by the points each step
-  drops instead of recounted. `Sample.points` is computed once.
+  drops instead of recounted. `Sample.points` is computed once and is
+  read-only (an in-place edit of the returned array now raises).
 
 ## [0.1.1] - 2026-11-22
 

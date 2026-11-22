@@ -50,7 +50,8 @@ class Sample:
     data : pd.DataFrame
         One row per observation, with columns ``species`` (str), ``lon`` and
         ``lat`` (float, decimal degrees). Several observations may share a
-        point.
+        point. Treat it as read-only: the points and other derived values
+        are computed once, so build a new sample rather than editing it.
     """
 
     data: pd.DataFrame
