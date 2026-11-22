@@ -9,4 +9,4 @@ figures and tables only.
 
 | Folder | Paper | Status |
 | --- | --- | --- |
-| [hull-strategies](hull-strategies/) | Nested species-area relationships from convex hull sampling strategies | Outline and strategy spec |
+| [hull-strategies](hull-strategies/) | Nested species-area relationships from convex hull sampling strategies | Pre-draft, reproducible analysis, strategy spec |
