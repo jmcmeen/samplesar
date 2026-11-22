@@ -27,3 +27,7 @@
 ## hull_distance_nest
 
 ::: samplesar.hull_distance_nest
+
+## nest_from_order
+
+::: samplesar.nest_from_order

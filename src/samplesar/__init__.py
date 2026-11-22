@@ -10,7 +10,9 @@ from samplesar._hull import (
     hull_random_nest,
     hull_species_nest,
 )
-from samplesar._nest import Nest, random_nest
+from samplesar._nest import Nest, nest_from_order, random_nest
+from samplesar._plot import animate_nest, plot_nest, plot_nest_curve
+from samplesar._registry import nest, register_strategy, strategies
 from samplesar._sample import Sample, hull_area
 
 try:
@@ -22,6 +24,7 @@ __all__ = [
     "Nest",
     "Sample",
     "__version__",
+    "animate_nest",
     "compare_nests",
     "hull_area",
     "hull_area_nest",
@@ -29,5 +32,11 @@ __all__ = [
     "hull_peel_nest",
     "hull_random_nest",
     "hull_species_nest",
+    "nest",
+    "nest_from_order",
+    "plot_nest",
+    "plot_nest_curve",
     "random_nest",
+    "register_strategy",
+    "strategies",
 ]

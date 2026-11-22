@@ -6,6 +6,45 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `nest(sample, strategy, **options)` runs any strategy by name, and
+  `strategies()` lists them with a one-line description each.
+- `register_strategy(name)`: register a new sampling design so it runs by
+  name and labels its nests like the built-in strategies.
+- `Nest.strategy`, `Nest.options` and `Nest.label` record how a nest was made;
+  `compare_nests()` also takes a plain sequence of nests, named by label
+  (repeated labels are numbered).
+- `nest_from_order(sample, order)`: nest a sample by removing its points in
+  a given order, so any ordering can be evaluated.
+- `Nest.to_dict()` / `Nest.from_dict()` and `Nest.to_json()` /
+  `Nest.from_json()`: save and load a nest, with its strategy and options.
+- `Sample.from_df(..., crs=...)` takes coordinates in any coordinate reference
+  system; in a projected one (UTM, a national grid) areas and distances are
+  measured in it. `Sample.from_geodataframe()` reads point GeoDataFrames
+  (geopandas isn't required). `Sample.xy`, `Sample.projection`; areas in a
+  CRS that isn't equal-area are corrected by its area distortion
+  (`Sample.area_scale`).
+- `Sample.from_pyinaturalist()`: a sample from iNaturalist observations,
+  fetched through pyinaturalist (the new `inat` extra) past the API's
+  10,000-result limit, keeping identifications at species level or below
+  (a subspecies counts as its species) with true coordinates by default.
+- `plot_nest()`, `plot_nest_curve()` and `animate_nest()`: draw a nest's
+  points and hull at a step, its species-area curve with a power fit, and an
+  animation of it shrinking (saved as GIF or MP4).
+
+### Changed
+
+- `Nest.to_frame()` (and so `sar_data()`, `fit()` and `compare_nests()`) is
+  5 to 7 times faster: species counts are updated by the points each step
+  drops instead of recounted. `Sample.points` is computed once and is
+  read-only (an in-place edit of the returned array now raises).
+- **Areas are in km², distances in km.** Hulls are measured on an equal-area
+  projection of the WGS84 ellipsoid centred on each sample (pyproj, a new
+  dependency), not in square degrees. Every reported area and the fitted `c`
+  change; `z` doesn't. A degree of longitude no longer counts as much as one
+  of latitude in the distance strategy.
+
 ## [0.1.1] - 2026-11-22
 
 ### Added

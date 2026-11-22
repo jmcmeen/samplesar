@@ -22,13 +22,16 @@ design turns a `Sample` of points into an area and richness table, and
    `steps[i]` are row indices into `sample.points`, each step a subset of the one before.
    Don't copy observation data per step.
 2. **One public function per strategy family**, named for what it removes
-   (`random_nest`, `hull_*_nest`), with `min_points` and, if random, `seed`. Choices that
+   (`random_nest`, `hull_*_nest`) or what it takes (`nest_from_order`), registered with
+   `register_strategy`, with `min_points` and, if random, `seed`. Choices that
    pick one candidate are deterministic: ties are broken by a stated rule, never by set
    or dict order.
 3. **sars is a required dependency.** Evaluating a sampling design means fitting its SAR
    data, so `samplesar` uses sars directly rather than as an optional extra.
-4. **Areas are convex hull areas in square degrees** until a projected area lands. Say so
-   wherever an area is reported.
+4. **Geometry happens on `Sample.xy`, in km.** Hulls, areas (km²) and distances use the
+   points projected by pyproj: an equal-area projection of the WGS84 ellipsoid centred on
+   the sample, or the sample's own projected CRS. Never measure in degrees; say km² wherever
+   an area is reported.
 5. **Errors are exceptions** (`ValueError`, `KeyError`) with messages that name the
    problem; no sentinel returns.
 

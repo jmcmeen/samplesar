@@ -6,12 +6,12 @@ from collections.abc import Callable
 from typing import Literal
 
 import numpy as np
-import pandas as pd
 import shapely
 from shapely.geometry import MultiPoint, Polygon
 
 from samplesar._nest import Nest, check_size
-from samplesar._sample import Sample, hull_area
+from samplesar._registry import register_strategy
+from samplesar._sample import Sample, hull_area, point_species
 
 
 def _hull(points: np.ndarray, idx: np.ndarray) -> shapely.Geometry:
@@ -32,13 +32,18 @@ def hull_vertices(points: np.ndarray, idx: np.ndarray) -> np.ndarray:
 
 
 def _on_boundary(points: np.ndarray, idx: np.ndarray) -> np.ndarray:
-    """The rows of ``idx`` on the boundary of their convex hull: the vertices
-    and any points on its edges. A degenerate hull (a point or a segment) has
-    every point on it."""
+    """The rows of ``idx`` on the boundary of their convex hull, to within
+    rounding: the vertices and any points on its edges. A degenerate hull (a
+    point or a segment) has every point on it."""
     hull = _hull(points, idx)
     if not isinstance(hull, Polygon):
         return idx.copy()
-    return idx[shapely.intersects(hull.boundary, shapely.points(points[idx]))]
+    # Within rounding of the boundary counts as on it: a row of points laid out
+    # straight in the sample's crs (a UTM grid, say) is straight here only to
+    # within rounding after its round trip through longitude and latitude.
+    x0, y0, x1, y1 = hull.bounds
+    tolerance = 1e-9 * np.hypot(x1 - x0, y1 - y0)
+    return idx[shapely.distance(hull.boundary, shapely.points(points[idx])) <= tolerance]
 
 
 def _remove_one(
@@ -46,7 +51,7 @@ def _remove_one(
 ) -> Nest:
     """Drop one hull vertex per step: ``choose(remaining, vertices)`` names it."""
     check_size(sample, min_points)
-    points = sample.points
+    points = sample.xy
     remaining = np.arange(sample.n_points)
     steps = [remaining.copy()]
     while len(remaining) > min_points:
@@ -56,6 +61,7 @@ def _remove_one(
     return Nest(sample=sample, steps=tuple(steps))
 
 
+@register_strategy("hull_random")
 def hull_random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
     """Nest a sample by removing a random vertex of its convex hull at each step.
 
@@ -84,6 +90,7 @@ def hull_random_nest(sample: Sample, min_points: int = 3, seed: int | None = Non
     return _remove_one(sample, min_points, lambda _, vertices: int(rng.choice(vertices)))
 
 
+@register_strategy("hull_peel")
 def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
     """Nest a sample by peeling off its whole convex hull at each step.
 
@@ -112,7 +119,7 @@ def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
         hull).
     """
     check_size(sample, min_points)
-    points = sample.points
+    points = sample.xy
     remaining = np.arange(sample.n_points)
     steps = [remaining.copy()]
     while True:
@@ -130,7 +137,7 @@ def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
 
 
 def _centre_distance(points: np.ndarray, vertices: np.ndarray) -> np.ndarray:
-    """Each vertex's distance from the centroid of the vertices (degrees)."""
+    """Each vertex's distance from the centroid of the vertices (km)."""
     corners = points[vertices]
     return np.hypot(*(corners - corners.mean(axis=0)).T)
 
@@ -151,6 +158,7 @@ def _pick(vertices: np.ndarray, score: np.ndarray, distance: np.ndarray) -> int:
     return int(vertices[farthest].min())
 
 
+@register_strategy("hull_area")
 def hull_area_nest(
     sample: Sample, keep: Literal["largest", "smallest"] = "largest", min_points: int = 3
 ) -> Nest:
@@ -186,7 +194,7 @@ def hull_area_nest(
     if keep not in ("largest", "smallest"):
         raise ValueError(f"keep must be 'largest' or 'smallest', got {keep!r}")
     sign = 1.0 if keep == "largest" else -1.0
-    points = sample.points
+    points = sample.xy
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
         areas = np.array([hull_area(points[remaining[remaining != v]]) for v in vertices])
@@ -195,17 +203,7 @@ def hull_area_nest(
     return _remove_one(sample, min_points, choose)
 
 
-def _point_species(sample: Sample) -> tuple[list[np.ndarray], int]:
-    """The species codes found at each of the sample's points, and the number
-    of species."""
-    data = sample.data
-    codes, uniques = pd.factorize(data["species"])
-    lookup = {(x, y): i for i, (x, y) in enumerate(map(tuple, sample.points))}
-    which = np.array([lookup[(x, y)] for x, y in zip(data["lon"], data["lat"], strict=True)])
-    grouped = pd.Series(codes).groupby(which).unique()
-    return [np.asarray(grouped[i], dtype=int) for i in range(sample.n_points)], len(uniques)
-
-
+@register_strategy("hull_species")
 def hull_species_nest(
     sample: Sample, keep: Literal["most", "fewest"] = "most", min_points: int = 3
 ) -> Nest:
@@ -241,8 +239,8 @@ def hull_species_nest(
     if keep not in ("most", "fewest"):
         raise ValueError(f"keep must be 'most' or 'fewest', got {keep!r}")
     sign = 1.0 if keep == "most" else -1.0
-    points = sample.points
-    species, n_species = _point_species(sample)
+    points = sample.xy
+    species, n_species = point_species(sample)
     # How many remaining points hold each species: removing a point loses the
     # species it is the last holder of.
     holders = np.zeros(n_species, dtype=int)
@@ -258,14 +256,15 @@ def hull_species_nest(
     return _remove_one(sample, min_points, choose)
 
 
+@register_strategy("hull_distance")
 def hull_distance_nest(
     sample: Sample, remove: Literal["farthest", "closest"] = "farthest", min_points: int = 3
 ) -> Nest:
     """Nest a sample by removing the hull vertex farthest from, or closest to, its centre.
 
     The centre is the centroid of the current hull's vertices, and distances
-    are Euclidean in degrees: a degree of longitude counts as much as a
-    degree of latitude, as in the hull areas. ``remove="farthest"`` trims the
+    are in km on the sample's projection (see
+    [`Sample.xy`][samplesar.Sample.xy]). ``remove="farthest"`` trims the
     outlying corners first; ``remove="closest"`` removes the vertex nearest
     the centre, leaving the outliers to last. Ties, to within floating-point
     rounding, go to the lowest point index.
@@ -292,7 +291,7 @@ def hull_distance_nest(
     if remove not in ("farthest", "closest"):
         raise ValueError(f"remove must be 'farthest' or 'closest', got {remove!r}")
     sign = 1.0 if remove == "farthest" else -1.0
-    points = sample.points
+    points = sample.xy
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
         distance = _centre_distance(points, vertices)

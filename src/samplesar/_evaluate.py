@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import pandas as pd
@@ -16,8 +16,8 @@ MIN_FIT_POINTS = 3
 def fit_nest(nest: Nest, model: str = "power", name: str | None = None, **kwargs: Any) -> Any:
     """Fit one of sars' models to a nest's species-area data.
 
-    The areas are convex hull areas in square degrees, so a parameter scaled
-    by area (``c`` of the power model, for example) is in those units.
+    The areas are convex hull areas in km², so a parameter scaled by area
+    (``c`` of the power model, for example) is per km².
 
     Parameters
     ----------
@@ -53,17 +53,21 @@ def fit_nest(nest: Nest, model: str = "power", name: str | None = None, **kwargs
     return func(data, **kwargs)
 
 
-def compare_nests(nests: Mapping[str, Nest], model: str = "power", **kwargs: Any) -> pd.DataFrame:
+def compare_nests(
+    nests: Mapping[str, Nest] | Iterable[Nest], model: str = "power", **kwargs: Any
+) -> pd.DataFrame:
     """Fit the same sars model to several nests and compare the fits.
 
     Use it to compare sampling strategies on one sample: how steep each one
     makes the curve, and how well the model fits. The areas are convex hull
-    areas in square degrees.
+    areas in km².
 
     Parameters
     ----------
-    nests : mapping of str to Nest
-        The nests to compare, by name (for example, one per strategy).
+    nests : mapping of str to Nest, or sequence of Nest
+        The nests to compare: by name, or a sequence named by each nest's
+        [`label`][samplesar.Nest.label], such as ``hull_area(keep='smallest')``.
+        Repeated labels (two unseeded random nests, say) get ``#2``, ``#3``.
     model : str
         A sars model with one fit per dataset, such as ``"power"`` or
         ``"loga"``.
@@ -93,6 +97,14 @@ def compare_nests(nests: Mapping[str, Nest], model: str = "power", **kwargs: Any
     ... }
     >>> samplesar.compare_nests(nests)  # doctest: +SKIP
     """
+    if not isinstance(nests, Mapping):
+        named: dict[str, Nest] = {}
+        seen: dict[str, int] = {}
+        for nest in nests:
+            seen[nest.label] = seen.get(nest.label, 0) + 1
+            count = seen[nest.label]
+            named[nest.label if count == 1 else f"{nest.label} #{count}"] = nest
+        nests = named
     if not nests:
         raise ValueError("No nests to compare.")
     rows = []
