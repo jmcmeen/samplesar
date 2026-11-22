@@ -1,0 +1,7 @@
+,value
+cpu,AMD Ryzen 7 7700 8-Core Processor
+system,Linux-7.0.0-43-generic-x86_64-with-glibc2.43
+python,3.14.4
+numpy,2.5.5
+shapely,2.2.0
+samplesar,0.2.0.dev0
