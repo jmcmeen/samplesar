@@ -6,15 +6,22 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
+from pyproj import CRS, Transformer
 from shapely.geometry import MultiPoint
 
 COLUMNS = ("species", "lon", "lat")
 
 
-def _validate(df: pd.DataFrame) -> pd.DataFrame:
+WGS84 = CRS.from_epsg(4326)
+
+
+def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
+    """Check and normalise the columns; with a CRS, convert its coordinates
+    (in the ``lon`` and ``lat`` columns) to WGS84 longitude and latitude."""
     missing = [c for c in COLUMNS if c not in df.columns]
     if missing:
         raise KeyError(f"Missing column(s): {missing}. Need {list(COLUMNS)}.")
@@ -26,7 +33,13 @@ def _validate(df: pd.DataFrame) -> pd.DataFrame:
     lon = pd.to_numeric(out["lon"], errors="coerce")
     lat = pd.to_numeric(out["lat"], errors="coerce")
     if lon.isna().any() or lat.isna().any():
-        raise ValueError("lon and lat must be numeric with no missing values")
+        raise ValueError("Coordinates must be numeric with no missing values")
+    if crs is not None and crs != WGS84:
+        to_wgs84 = Transformer.from_crs(crs, WGS84, always_xy=True)
+        x, y = to_wgs84.transform(lon.to_numpy(float), lat.to_numpy(float))
+        if not (np.isfinite(x).all() and np.isfinite(y).all()):
+            raise ValueError(f"Some coordinates fall outside {crs.name}.")
+        lon, lat = pd.Series(x), pd.Series(y)
     if ((lat < -90) | (lat > 90)).any():
         raise ValueError("lat must be within [-90, 90]")
     if ((lon < -180) | (lon > 180)).any():
@@ -52,9 +65,22 @@ class Sample:
         ``lat`` (float, decimal degrees). Several observations may share a
         point. Treat it as read-only: the points and other derived values
         are computed once, so build a new sample rather than editing it.
+    centre : tuple of float, optional
+        The (lon, lat) the points are projected about for areas and
+        distances (see [`xy`][samplesar.Sample.xy]), when there's no
+        ``crs``. By default the centre of the sample's points; a
+        [`subset`][samplesar.Sample.subset] keeps its parent's, so their
+        areas are comparable.
+    crs : pyproj.CRS, optional
+        A projected coordinate reference system to measure areas and
+        distances in, such as the UTM zone the sample was laid out in. Set by
+        [`from_df`][samplesar.Sample.from_df] when the coordinates come in
+        one.
     """
 
     data: pd.DataFrame
+    centre: tuple[float, float] | None = None
+    crs: CRS | None = None
 
     @classmethod
     def from_df(
@@ -63,6 +89,7 @@ class Sample:
         species_col: str = "species",
         lon_col: str = "lon",
         lat_col: str = "lat",
+        crs: Any = None,
     ) -> Sample:
         """Build a sample from a DataFrame.
 
@@ -73,9 +100,18 @@ class Sample:
         species_col : str
             The column holding the species name.
         lon_col : str
-            The column holding the longitude, in decimal degrees.
+            The column holding the longitude in decimal degrees, or the x
+            (easting) coordinate when ``crs`` is projected.
         lat_col : str
-            The column holding the latitude, in decimal degrees.
+            The column holding the latitude in decimal degrees, or the y
+            (northing) coordinate when ``crs`` is projected.
+        crs : str, int or pyproj.CRS, optional
+            The coordinates' reference system, as pyproj accepts it
+            (``"EPSG:32617"``, ``32617``, a WKT string). By default WGS84
+            longitude and latitude. Coordinates in another geographic system
+            are converted to WGS84. Coordinates in a projected system are
+            converted to WGS84 for ``data``, and areas and distances are
+            measured in that system, so a grid laid out in it stays straight.
 
         Returns
         -------
@@ -86,11 +122,56 @@ class Sample:
         KeyError
             If a column is missing.
         ValueError
-            If there are no rows, a species is missing, or a coordinate is
-            missing, not numeric or out of range.
+            If there are no rows, a species is missing, a coordinate is
+            missing, not numeric or out of range, or ``crs`` isn't a
+            coordinate reference system.
         """
         renamed = df.rename(columns={species_col: "species", lon_col: "lon", lat_col: "lat"})
-        return cls(_validate(renamed))
+        parsed = _parse_crs(crs)
+        projected = parsed if parsed is not None and parsed.is_projected else None
+        return cls(_validate(renamed, parsed), crs=projected)
+
+    @classmethod
+    def from_geodataframe(cls, gdf: Any, species_col: str = "species") -> Sample:
+        """Build a sample from a GeoDataFrame of point observations.
+
+        The geometries' coordinates and the frame's CRS are read directly, so
+        geopandas isn't a requirement of samplesar; the frame just needs a
+        point ``geometry`` and a ``crs``.
+
+        Parameters
+        ----------
+        gdf : geopandas.GeoDataFrame
+            One point per observation. A frame without a CRS is taken to be
+            in WGS84 longitude and latitude.
+        species_col : str
+            The column holding the species name.
+
+        Returns
+        -------
+        Sample
+
+        Raises
+        ------
+        ValueError
+            If a geometry isn't a point, or as [`from_df`][samplesar.Sample.from_df].
+        KeyError
+            If the species column is missing.
+        """
+        geometry = gdf.geometry
+        kinds = set(geometry.geom_type)
+        if kinds - {"Point"}:
+            raise ValueError(f"Every geometry must be a point; found {', '.join(sorted(kinds))}.")
+        if species_col not in gdf.columns:
+            raise KeyError(f"Missing column {species_col!r}.")
+        frame = pd.DataFrame(
+            {
+                "species": np.asarray(gdf[species_col]),
+                "lon": np.asarray(geometry.x),
+                "lat": np.asarray(geometry.y),
+            }
+        )
+        return cls.from_df(frame, crs=gdf.crs)
 
     @classmethod
     def from_csv(cls, path: str | Path, **kwargs: str) -> Sample:
@@ -146,15 +227,52 @@ class Sample:
         return len(self.points)
 
     @property
-    def area(self) -> float:
-        """Area of the convex hull of the points, in square degrees.
+    def projection_centre(self) -> tuple[float, float]:
+        """The (lon, lat) the points are projected about when there's no
+        ``crs``: ``centre`` if given, else the centre of the points (their
+        mean direction, so a sample across the antimeridian is centred
+        correctly)."""
+        if self.centre is not None:
+            return self.centre
+        return centre_of(self.points)
 
-        Zero when fewer than three distinct, non-collinear points remain.
-        Square degrees aren't a physical area; they are fine for ordering
-        nested samples and for fitting within one sample, which is what the
-        nesting strategies need. A projected area is planned.
+    @property
+    def projection(self) -> CRS:
+        """The projected CRS areas and distances are measured in: ``crs`` if
+        set, else a Lambert azimuthal equal-area projection on the WGS84
+        ellipsoid, centred on
+        [`projection_centre`][samplesar.Sample.projection_centre]."""
+        if self.crs is not None:
+            return self.crs
+        lon, lat = self.projection_centre
+        return CRS.from_proj4(f"+proj=laea +lat_0={lat!r} +lon_0={lon!r} +ellps=WGS84 +units=m")
+
+    @cached_property
+    def xy(self) -> np.ndarray:
+        """The points in km on [`projection`][samplesar.Sample.projection],
+        shape (n_points, 2), in the order of [`points`][samplesar.Sample.points].
+
+        All the package's hulls, areas and distances use these. By default
+        the projection is equal-area, so areas measured on it are true areas
+        on the ellipsoid. Computed once and read-only.
         """
-        return hull_area(self.points)
+        projection = self.projection
+        to_plane = Transformer.from_crs(WGS84, projection, always_xy=True)
+        x, y = to_plane.transform(self.points[:, 0], self.points[:, 1])
+        metres = projection.axis_info[0].unit_conversion_factor
+        xy = np.column_stack([x, y]) * metres / 1000.0
+        xy.flags.writeable = False
+        return xy
+
+    @property
+    def area(self) -> float:
+        """Area of the convex hull of the points, in km².
+
+        Measured on [`xy`][samplesar.Sample.xy]: by default an equal-area
+        projection centred on the sample, or the sample's ``crs``.
+        Zero when fewer than three distinct, non-collinear points remain.
+        """
+        return hull_area(self.xy)
 
     def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at some of the sample's points.
@@ -171,7 +289,8 @@ class Sample:
         """
         keep = self.points[list(point_indices)]
         mask = pd.MultiIndex.from_frame(self.data[["lon", "lat"]]).isin([tuple(p) for p in keep])
-        return Sample(self.data.loc[mask].reset_index(drop=True))
+        centre = self.projection_centre if self.crs is None else self.centre
+        return Sample(self.data.loc[mask].reset_index(drop=True), centre=centre, crs=self.crs)
 
     def __repr__(self) -> str:
         return (
@@ -180,13 +299,38 @@ class Sample:
         )
 
 
+def _parse_crs(crs: Any) -> CRS | None:
+    if crs is None:
+        return None
+    try:
+        return CRS.from_user_input(crs)
+    except Exception as err:  # pyproj raises CRSError; anything else is equally unusable
+        raise ValueError(f"Not a coordinate reference system: {crs!r} ({err})") from err
+
+
+def centre_of(points: np.ndarray) -> tuple[float, float]:
+    """The centre of (lon, lat) points, as the mean of their directions from
+    the Earth's centre."""
+    lon, lat = np.radians(np.asarray(points, dtype=float)).T
+    x, y, z = (
+        (np.cos(lat) * np.cos(lon)).mean(),
+        (np.cos(lat) * np.sin(lon)).mean(),
+        np.sin(lat).mean(),
+    )
+    return float(np.degrees(np.arctan2(y, x))), float(np.degrees(np.arctan2(z, np.hypot(x, y))))
+
+
 def hull_area(points: np.ndarray) -> float:
-    """Convex hull area of a set of points, in square degrees.
+    """Convex hull area of a set of points, in their own units.
+
+    For a sample's area in km², pass its projected points,
+    [`Sample.xy`][samplesar.Sample.xy] (as [`Sample.area`][samplesar.Sample.area]
+    does).
 
     Parameters
     ----------
     points : np.ndarray
-        Shape (n, 2): longitude and latitude.
+        Shape (n, 2).
 
     Returns
     -------

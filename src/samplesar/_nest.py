@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -10,6 +11,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from pyproj import CRS
 
 from samplesar._registry import Options, register_strategy
 from samplesar._sample import Sample, hull_area, point_species
@@ -70,9 +72,9 @@ class Nest:
         -------
         pd.DataFrame
             One row per step: ``step``, ``n_points``, ``area`` (convex hull,
-            square degrees) and ``species`` (distinct species remaining).
+            km²) and ``species`` (distinct species remaining).
         """
-        points = self.sample.points
+        points = self.sample.xy
         species, n_species = point_species(self.sample)
         # How many of the step's points hold each species, updated by the
         # points each step drops (or adds), not recounted.
@@ -103,7 +105,7 @@ class Nest:
         Returns
         -------
         pd.DataFrame
-            ``area`` (convex hull, square degrees) and ``species`` columns,
+            ``area`` (convex hull, km²) and ``species`` columns,
             one row per step, without the zero-area steps at the end.
         """
         frame = self.to_frame()
@@ -144,6 +146,8 @@ class Nest:
                 "lon": data["lon"].tolist(),
                 "lat": data["lat"].tolist(),
             },
+            "centre": list(self.sample.centre) if self.sample.centre is not None else None,
+            "crs": self.sample.crs.to_wkt() if self.sample.crs is not None else None,
             "first": np.asarray(self.steps[0]).tolist(),
             "removed": removed,
         }
@@ -180,6 +184,14 @@ class Nest:
                 f"{FORMAT_VERSION}. Upgrade samplesar to load it."
             )
         sample = Sample.from_df(pd.DataFrame(data["observations"]))
+        centre = data.get("centre")
+        crs = data.get("crs")
+        if centre is not None or crs is not None:
+            sample = dataclasses.replace(
+                sample,
+                centre=tuple(centre) if centre is not None else None,
+                crs=CRS.from_wkt(crs) if crs is not None else None,
+            )
         remaining = _indices(data["first"])
         if remaining.size and (remaining.min() < 0 or remaining.max() >= sample.n_points):
             raise ValueError("The saved steps name points outside the saved sample.")
@@ -232,9 +244,8 @@ class Nest:
     def fit(self, model: str = "power", **kwargs: Any) -> Any:
         """Fit one of sars' models to the nest's species-area data.
 
-        The areas are convex hull areas in square degrees, so a parameter
-        scaled by area (``c`` of the power model, for example) is in those
-        units.
+        The areas are convex hull areas in km², so a parameter scaled by
+        area (``c`` of the power model, for example) is per km².
 
         Parameters
         ----------

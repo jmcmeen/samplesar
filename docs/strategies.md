@@ -85,9 +85,8 @@ nowhere else, so richness falls as fast as possible.
 ### By distance from the centre
 
 `hull_distance_nest(sample, remove="farthest", min_points=3)` removes the
-vertex farthest from the centroid of the hull's vertices (Euclidean, in
-degrees, so a degree of longitude counts as much as one of latitude),
-trimming outlying corners first. `remove="closest"` removes the vertex nearest
+vertex farthest from the centroid of the hull's vertices (in km on the
+sample's projection), trimming outlying corners first. `remove="closest"` removes the vertex nearest
 the centre and leaves the outliers to last. Ties go to the lowest point index.
 
 ## Comparing strategies
@@ -110,8 +109,8 @@ nests = {
 samplesar.compare_nests(nests)   # n_steps, n_fitted, c, z, r_squared, aicc, converged
 ```
 
-The areas are convex hull areas in square degrees, so `c` is per square
-degree; `z` doesn't depend on the unit. A nest needs at least three steps with
+The areas are convex hull areas in km², so `c` is per km²; `z` doesn't
+depend on the unit. A nest needs at least three steps with
 a positive area to fit (a peeled nest with few layers may not have them).
 
 Random removal keeps the sample's whole extent until its last few points, so

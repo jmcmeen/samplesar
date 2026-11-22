@@ -16,8 +16,8 @@ MIN_FIT_POINTS = 3
 def fit_nest(nest: Nest, model: str = "power", name: str | None = None, **kwargs: Any) -> Any:
     """Fit one of sars' models to a nest's species-area data.
 
-    The areas are convex hull areas in square degrees, so a parameter scaled
-    by area (``c`` of the power model, for example) is in those units.
+    The areas are convex hull areas in km², so a parameter scaled by area
+    (``c`` of the power model, for example) is per km².
 
     Parameters
     ----------
@@ -60,7 +60,7 @@ def compare_nests(
 
     Use it to compare sampling strategies on one sample: how steep each one
     makes the curve, and how well the model fits. The areas are convex hull
-    areas in square degrees.
+    areas in km².
 
     Parameters
     ----------

@@ -111,3 +111,20 @@ def test_nested_options_with_numpy_values(sample):
     saved = nest.to_dict()["options"]
     assert saved == {"weights": {"a": 0.5}, "pair": [1, 2]}
     json.dumps(saved)
+
+
+def test_round_trip_keeps_the_crs_and_centre(tmp_path):
+    x = [500_000, 501_000, 501_000, 500_000, 500_700]
+    y = [4_000_000, 4_000_000, 4_001_000, 4_001_000, 4_000_300]
+    utm = samplesar.Sample.from_df(
+        pd.DataFrame({"species": list("abcde"), "lon": x, "lat": y}), crs="EPSG:32617"
+    )
+    for sample in (
+        utm,
+        utm.subset([0, 1, 2, 4]),
+        samplesar.Sample.from_df(utm.data).subset([0, 1, 2, 4]),
+    ):
+        nest = samplesar.hull_peel_nest(sample, min_points=1)
+        again = samplesar.Nest.from_dict(nest.to_dict())
+        assert again.sample.crs == sample.crs and again.sample.centre == sample.centre
+        pd.testing.assert_frame_equal(again.to_frame(), nest.to_frame())

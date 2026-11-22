@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format is based on
   a given order, so any ordering can be evaluated.
 - `Nest.to_dict()` / `Nest.from_dict()` and `Nest.to_json()` /
   `Nest.from_json()`: save and load a nest, with its strategy and options.
+- `Sample.from_df(..., crs=...)` takes coordinates in any coordinate reference
+  system; in a projected one (UTM, a national grid) areas and distances are
+  measured in it. `Sample.from_geodataframe()` reads point GeoDataFrames
+  (geopandas isn't required). `Sample.xy`, `Sample.projection`.
 
 ### Changed
 
@@ -26,6 +30,11 @@ All notable changes to this project are documented here. The format is based on
   5 to 7 times faster: species counts are updated by the points each step
   drops instead of recounted. `Sample.points` is computed once and is
   read-only (an in-place edit of the returned array now raises).
+- **Areas are in km², distances in km.** Hulls are measured on an equal-area
+  projection of the WGS84 ellipsoid centred on each sample (pyproj, a new
+  dependency), not in square degrees. Every reported area and the fitted `c`
+  change; `z` doesn't. A degree of longitude no longer counts as much as one
+  of latitude in the distance strategy.
 
 ## [0.1.1] - 2026-11-22
 

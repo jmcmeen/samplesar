@@ -17,11 +17,29 @@ df = pd.DataFrame(
     }
 )
 sample = samplesar.Sample.from_df(df)
-sample.n_points, sample.n_species, sample.area   # area in square degrees
+sample.n_points, sample.n_species, sample.area   # area in km²
 ```
 
 `Sample.from_csv` reads the same three columns from a file; pass
 `species_col`, `lon_col` and `lat_col` if yours are named differently.
+
+## Coordinate systems
+
+Areas are measured in km² on an equal-area projection centred on the sample.
+If your coordinates are already projected, say a grid laid out in UTM, give
+the CRS, and areas and distances are measured in it, so the grid stays
+exactly straight:
+
+```python
+utm = samplesar.Sample.from_df(df, lon_col="easting", lat_col="northing", crs="EPSG:32617")
+```
+
+A GeoDataFrame of points works directly; its CRS is read from the frame
+(geopandas isn't needed by samplesar itself):
+
+```python
+sample = samplesar.Sample.from_geodataframe(gdf, species_col="species")
+```
 
 ## A nest
 
@@ -31,7 +49,7 @@ a nested species-area curve.
 
 ```python
 nest = samplesar.random_nest(sample, seed=0)
-nest.to_frame()      # step, n_points, area (square degrees), species
+nest.to_frame()      # step, n_points, area (km²), species
 ```
 
 ## Fitting the curve

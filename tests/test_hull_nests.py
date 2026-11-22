@@ -16,12 +16,12 @@ STRATEGIES = [
 ]
 
 
-def make_sample(points, species=None):
+def make_sample(points, species=None, crs=None):
     points = np.asarray(points, dtype=float)
     if species is None:
         species = [f"sp{i % 5}" for i in range(len(points))]
     return samplesar.Sample.from_df(
-        pd.DataFrame({"species": species, "lon": points[:, 0], "lat": points[:, 1]})
+        pd.DataFrame({"species": species, "lon": points[:, 0], "lat": points[:, 1]}), crs=crs
     )
 
 
@@ -35,9 +35,13 @@ def sample():
     )
 
 
-def grid(k):
+UTM_17N = "EPSG:32617"
+
+
+def grid(k, spacing=100.0):
+    """A k-by-k grid of points laid out in UTM zone 17N, in metres."""
     xs, ys = np.meshgrid(np.arange(k), np.arange(k))
-    return np.column_stack([xs.ravel(), ys.ravel()]) * 0.01
+    return np.column_stack([xs.ravel(), ys.ravel()]) * spacing + [500_000.0, 4_000_000.0]
 
 
 def assert_nested(nest):
@@ -77,7 +81,7 @@ class TestHullRandomNest:
         assert_nested(nest)
 
     def test_only_hull_vertices_are_removed(self, sample):
-        points = sample.points
+        points = sample.xy
         for before, gone in removed(samplesar.hull_random_nest(sample, seed=2)):
             assert gone[0] in hull_vertices(points, before)
 
@@ -105,16 +109,16 @@ class TestHullRandomNest:
 
 class TestHullPeelNest:
     def test_peels_a_grid_ring_by_ring(self):
-        nest = samplesar.hull_peel_nest(make_sample(grid(7)), min_points=1)
+        nest = samplesar.hull_peel_nest(make_sample(grid(7), crs=UTM_17N), min_points=1)
         assert [len(s) for s in nest.steps] == [49, 25, 9, 1]
         assert_nested(nest)
 
     def test_stops_before_leaving_too_few(self):
-        nest = samplesar.hull_peel_nest(make_sample(grid(7)))
+        nest = samplesar.hull_peel_nest(make_sample(grid(7), crs=UTM_17N))
         assert [len(s) for s in nest.steps] == [49, 25, 9]
 
     def test_each_step_removes_the_whole_boundary(self, sample):
-        points = sample.points
+        points = sample.xy
         for before, gone in removed(samplesar.hull_peel_nest(sample)):
             vertices = set(hull_vertices(points, before))
             assert vertices <= set(gone)
@@ -170,7 +174,7 @@ def brute_force_choice(sample, before, score):
     """The vertex a rule-based strategy should remove from ``before``: highest
     score, then farthest from the vertices' centroid, then lowest index, with
     scores and distances compared to 9 significant figures."""
-    points = sample.points
+    points = sample.xy
     vertices = hull_vertices(points, before)
     centre = points[vertices].mean(axis=0)
 
@@ -187,8 +191,11 @@ def brute_force_choice(sample, before, score):
     )
 
 
-def shifted(points, by=(-80.1, 35.2)):
-    return np.asarray(points, dtype=float) + by
+def at_real_coordinates(offsets, centre=(-80.1, 35.2)):
+    """Offsets (in degrees) placed around a real location. A shape mirrored
+    east-west about its centre stays mirrored once projected, so mirror pairs
+    tie exactly in theory but differ in their last bits in floating point."""
+    return np.asarray(offsets, dtype=float) + centre
 
 
 class TestHullAreaNest:
@@ -200,42 +207,56 @@ class TestHullAreaNest:
         assert_nested(nest)
         for before, gone in removed(nest):
             expected = brute_force_choice(
-                sample, before, lambda rest: sign * samplesar.hull_area(sample.points[rest])
+                sample, before, lambda rest: sign * samplesar.hull_area(sample.xy[rest])
             )
             assert gone[0] == expected
 
     def test_known_answer(self):
-        # A unit square with a point just inside corner 0: dropping corner 0
+        # A small square with a point just inside corner 0: dropping corner 0
         # loses almost nothing, so "largest" takes it first; "smallest" takes a
         # corner whose loss halves the square.
-        points = [[0, 0], [1, 0], [1, 1], [0, 1], [0.05, 0.05]]
+        points = np.array([[0, 0], [1, 0], [1, 1], [0, 1], [0.05, 0.05]]) * 0.01
         largest = samplesar.hull_area_nest(make_sample(points), keep="largest")
         assert 0 not in largest.steps[1]
-        smallest = samplesar.hull_area_nest(make_sample(points), keep="smallest")
-        assert samplesar.hull_area(np.asarray(points, float)[smallest.steps[1]]) < 0.6
+        smallest = samplesar.hull_area_nest(make_sample(points), keep="smallest").to_frame()
+        assert smallest["area"][1] / smallest["area"][0] < 0.6
 
     def test_ties_go_to_the_lowest_index(self):
-        # The four corners of a square are interchangeable.
-        square = make_sample([[0, 0], [1, 0], [1, 1], [0, 1]])
+        # The four corners of a square centred on (0, 0), where the projection
+        # is symmetric, are interchangeable.
+        square = make_sample(np.array([[-1, -1], [1, -1], [1, 1], [-1, 1]]) * 0.01)
         assert list(samplesar.hull_area_nest(square).steps[1]) == [1, 2, 3]
 
     def test_area_ties_go_to_the_farthest_vertex(self):
         # Dropping vertex 2 or 3 leaves the same area (1.0); 3 is farther from
         # the vertices' centroid, so it goes, though its index is higher.
-        quad = make_sample([[0, 0], [0, 2], [1, 1], [1, 0]])
+        quad = make_sample(np.array([[0, 0], [0, 2], [1, 1], [1, 0]]) * 0.001)
         nest = samplesar.hull_area_nest(quad, keep="largest")
         assert list(nest.steps[1]) == [0, 1, 2]
 
     @pytest.mark.parametrize("keep", ["largest", "smallest"])
-    def test_reproducible_wherever_the_sample_lies(self, keep):
-        # A symmetric hexagon: its tied vertices get areas that differ in the
-        # last bits at real coordinates, which must not change the choice.
-        hexagon = [[0, 0], [0.3, 0], [0.3, 0.1], [0, 0.1], [0.15, 0.3], [0.15, -0.2], [0.1, 0.05]]
-        here = samplesar.hull_area_nest(make_sample(hexagon), keep=keep)
-        again = samplesar.hull_area_nest(make_sample(hexagon), keep=keep)
-        there = samplesar.hull_area_nest(make_sample(shifted(hexagon)), keep=keep)
-        for a, b, c in zip(here.steps, again.steps, there.steps, strict=True):
-            assert np.array_equal(a, b) and np.array_equal(a, c)
+    def test_ties_hold_at_real_coordinates(self, keep):
+        # A hexagon mirrored east-west, at a real location: its mirror pairs'
+        # areas differ only in the last bits, and the tie rule must still pick.
+        hexagon = [
+            [-0.15, 0],
+            [0.15, 0],
+            [0.15, 0.1],
+            [-0.15, 0.1],
+            [0, 0.3],
+            [0, -0.2],
+            [-0.05, 0.05],
+        ]
+        sample = make_sample(at_real_coordinates(hexagon))
+        sign = 1 if keep == "largest" else -1
+        nest = samplesar.hull_area_nest(sample, keep=keep)
+        again = samplesar.hull_area_nest(sample, keep=keep)
+        assert all(np.array_equal(a, b) for a, b in zip(nest.steps, again.steps, strict=True))
+        for before, gone in removed(nest):
+            expected = brute_force_choice(
+                sample, before, lambda rest: sign * samplesar.hull_area(sample.xy[rest])
+            )
+            assert gone[0] == expected
 
     def test_rejects_unknown_keep(self, sample):
         with pytest.raises(ValueError, match="keep must be"):
@@ -291,16 +312,10 @@ class TestHullSpeciesNest:
         assert list(fewest.steps[1]) == [1, 2, 3, 4]
 
     @pytest.mark.parametrize("keep", ["most", "fewest"])
-    def test_reproducible_wherever_the_sample_lies(self, shared_points_sample, keep):
-        data = shared_points_sample.data
-        moved = samplesar.Sample.from_df(
-            data.assign(lon=data["lon"] - 80.1, lat=data["lat"] + 35.2)
-        )
+    def test_reproducible(self, shared_points_sample, keep):
         here = samplesar.hull_species_nest(shared_points_sample, keep=keep)
         again = samplesar.hull_species_nest(shared_points_sample, keep=keep)
-        there = samplesar.hull_species_nest(moved, keep=keep)
-        for a, b, c in zip(here.steps, again.steps, there.steps, strict=True):
-            assert np.array_equal(a, b) and np.array_equal(a, c)
+        assert all(np.array_equal(a, b) for a, b in zip(here.steps, again.steps, strict=True))
 
     def test_rejects_unknown_keep(self, sample):
         with pytest.raises(ValueError, match="keep must be"):
@@ -311,7 +326,7 @@ class TestHullDistanceNest:
     @pytest.mark.parametrize("remove", ["farthest", "closest"])
     def test_matches_brute_force(self, sample, remove):
         sign = 1 if remove == "farthest" else -1
-        points = sample.points
+        points = sample.xy
         nest = samplesar.hull_distance_nest(sample, remove=remove)
         assert nest.n_steps == sample.n_points - 3 + 1
         assert_nested(nest)
@@ -333,19 +348,25 @@ class TestHullDistanceNest:
         assert 4 in near.steps[-1]
 
     def test_ties_go_to_the_lowest_index(self):
-        square = make_sample([[0, 0], [1, 0], [1, 1], [0, 1]])
+        square = make_sample(np.array([[-1, -1], [1, -1], [1, 1], [-1, 1]]) * 0.01)
         assert list(samplesar.hull_distance_nest(square).steps[1]) == [1, 2, 3]
 
     @pytest.mark.parametrize("remove", ["farthest", "closest"])
-    def test_reproducible_wherever_the_sample_lies(self, remove):
-        # A small square: its corners tie on distance, and at real lon/lat the
-        # distances differ in their last bits.
-        square = [[0, 0], [0.01, 0], [0.01, 0.01], [0, 0.01], [0.004, 0.006]]
-        here = samplesar.hull_distance_nest(make_sample(square), remove=remove)
-        again = samplesar.hull_distance_nest(make_sample(square), remove=remove)
-        there = samplesar.hull_distance_nest(make_sample(shifted(square)), remove=remove)
-        for a, b, c in zip(here.steps, again.steps, there.steps, strict=True):
-            assert np.array_equal(a, b) and np.array_equal(a, c)
+    def test_ties_hold_at_real_coordinates(self, remove):
+        # A square mirrored east-west at a real location: the two southern
+        # corners tie on distance (to the last bits), so the lower index goes.
+        square = [[-0.005, -0.005], [0.005, -0.005], [0.005, 0.005], [-0.005, 0.005], [0.001, 0.0]]
+        nest = samplesar.hull_distance_nest(make_sample(at_real_coordinates(square)), remove=remove)
+        points = nest.sample.xy
+        for before, gone in removed(nest):
+            vertices = hull_vertices(points, before)
+            centre = points[vertices].mean(axis=0)
+            sign = 1 if remove == "farthest" else -1
+            expected = min(
+                vertices,
+                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - centre)):.9g}"), v),
+            )
+            assert gone[0] == expected
 
     def test_rejects_unknown_remove(self, sample):
         with pytest.raises(ValueError, match="remove must be"):
