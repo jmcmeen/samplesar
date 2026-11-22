@@ -151,16 +151,11 @@ def simulated_community(rng: np.random.Generator, cluster_share: float) -> sampl
     return samplesar.sources.dataframe(df, lon_col="x", lat_col="y", crs="EPSG:32617")
 
 
-POWER_Z_BOUND = 5.0  # sars searches the power model's z within ±5
 
 
 def at_bounds(fit) -> str:
-    """The parameters stopped on a bound: sars' SARFit.at_bounds where the
-    installed sars has it, else z at the power model's bound."""
-    names = getattr(fit, "at_bounds", None)
-    if names is None:
-        names = ("z",) if abs(fit.params["z"]) >= POWER_Z_BOUND * (1 - 1e-6) else ()
-    return ",".join(names)
+    """The parameters stopped on a bound of the fit (sars' SARFit.at_bounds)."""
+    return ",".join(fit.at_bounds)
 
 
 def fit_row(nest: samplesar.Nest) -> dict:

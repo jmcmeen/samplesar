@@ -182,7 +182,7 @@ class TestBaseline:
         assert (table["p"] > 0).all() and (table["p"] <= 1).all()
         assert table.loc["z", "q025"] <= table.loc["z", "q975"]
         share = table.attrs["at_bounds_share"]
-        assert np.isnan(share) or 0 <= share <= 1  # unknown with a sars without at_bounds
+        assert 0 <= share <= 1
 
     def test_a_member_of_the_baseline_isnt_extreme(self, sample):
         baseline = samplesar.evaluate.baseline(sample, n=19, seed=0)

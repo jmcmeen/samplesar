@@ -70,6 +70,10 @@ All notable changes to this project are documented here. The format is based on
   store the sample's `center` (format version 3); files saved with `centre`
   still load, as do nests saved with a `centre` option, read as `center`.
 
+- samplesar needs sars 0.11.5 or newer, which reports the parameters a fit
+  left on a bound (`at_bounds` in `evaluate.compare` and the baseline's
+  `at_bounds_share`).
+
 ## [0.1.3] - 2026-11-22
 
 ### Added

@@ -84,8 +84,8 @@ def compare(
         parameters (``c`` and ``z`` for the power model), ``r_squared``,
         ``aicc``, ``converged`` and ``at_bounds``: the parameters that
         stopped on a bound of sars' search, whose values are the bound's and
-        not estimates (empty when none; missing, ``pd.NA``, with a sars too
-        old to tell).
+        not estimates (empty when none; missing, ``pd.NA``, for a fit
+        object that doesn't report it).
 
     Warns
     -----
@@ -154,7 +154,7 @@ def compare(
 
 def _at_bounds(fit: Any) -> Any:
     """The fit's parameters on a bound (sars' ``SARFit.at_bounds``), or a
-    missing value (``pd.NA``) in the table with a sars that can't tell."""
+    missing value (``pd.NA``) for a fit object that doesn't report it."""
     names = getattr(fit, "at_bounds", None)
     return pd.NA if names is None else tuple(names)
 
