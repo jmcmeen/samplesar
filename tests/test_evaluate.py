@@ -101,3 +101,54 @@ def test_compare_passes_options_to_sars(sample, monkeypatch):
     monkeypatch.setattr(sars, "sar_fake", fake, raising=False)
     samplesar.compare_nests({"a": samplesar.random_nest(sample, seed=0)}, model="fake", flag=1)
     assert seen == {"flag": 1}
+
+
+def test_fits_at_a_bound_are_flagged(sample, monkeypatch):
+    import sars
+
+    nests = {"a": samplesar.random_nest(sample, seed=0), "b": samplesar.hull_peel_nest(sample)}
+    real = sars.sar_power
+
+    def bounded_for_a(data):
+        fit = real(data)
+        stuck = len(data) == nests["a"].n_steps
+        return type(
+            "Fit",
+            (),
+            {
+                **vars(fit),
+                "params": fit.params,
+                "r_squared": fit.r_squared,
+                "aicc": fit.aicc,
+                "converged": fit.converged,
+                "at_bounds": ("z",) if stuck else (),
+            },
+        )()
+
+    monkeypatch.setattr(sars, "sar_power", bounded_for_a)
+    with pytest.warns(UserWarning, match=r"stopped on a bound.*a \(z\)"):
+        table = samplesar.compare_nests(nests)
+    assert table.loc["a", "at_bounds"] == ("z",) and table.loc["b", "at_bounds"] == ()
+
+
+def test_an_old_sars_leaves_at_bounds_unknown(sample, monkeypatch):
+    import sars
+
+    real = sars.sar_power
+
+    def no_attribute(data):
+        fit = real(data)
+        return type(
+            "Fit",
+            (),
+            {
+                "params": fit.params,
+                "r_squared": fit.r_squared,
+                "aicc": fit.aicc,
+                "converged": fit.converged,
+            },
+        )()
+
+    monkeypatch.setattr(sars, "sar_power", no_attribute)
+    table = samplesar.compare_nests({"a": samplesar.random_nest(sample, seed=0)})
+    assert table.loc["a", "at_bounds"] is None

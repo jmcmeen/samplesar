@@ -72,6 +72,7 @@ def test_animate_and_save_a_gif(nest, tmp_path):
         assert gif.n_frames == nest.n_steps
 
 
+@pytest.mark.filterwarnings("ignore:Animation was deleted without rendering")
 def test_animate_in_reverse(nest):
     forward = samplesar.animate_nest(nest)
     backward = samplesar.animate_nest(nest, reverse=True)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -80,7 +81,15 @@ def compare_nests(
         One row per nest, indexed by name: ``n_steps``, ``n_fitted`` (the
         steps with a positive area, which are fitted), the model's
         parameters (``c`` and ``z`` for the power model), ``r_squared``,
-        ``aicc`` and ``converged``.
+        ``aicc``, ``converged`` and ``at_bounds``: the parameters that
+        stopped on a bound of sars' search, whose values are the bound's and
+        not estimates (empty when none; missing values with a sars too old
+        to tell).
+
+    Warns
+    -----
+    UserWarning
+        If a fit's parameter stopped on a bound, naming the nests.
 
     Raises
     ------
@@ -124,6 +133,22 @@ def compare_nests(
                 "r_squared": fit.r_squared,
                 "aicc": fit.aicc,
                 "converged": fit.converged,
+                "at_bounds": _at_bounds(fit),
             }
         )
-    return pd.DataFrame(rows).set_index("nest")
+    table = pd.DataFrame(rows).set_index("nest")
+    bounded = [f"{name} ({', '.join(b)})" for name, b in table["at_bounds"].items() if b]
+    if bounded:
+        warnings.warn(
+            f"Parameters stopped on a bound of the fit, so their values are the bound's, "
+            f"not estimates: {'; '.join(bounded)}.",
+            stacklevel=2,
+        )
+    return table
+
+
+def _at_bounds(fit: Any) -> tuple[str, ...] | None:
+    """The fit's parameters on a bound (sars' ``SARFit.at_bounds``), or None
+    with a sars that can't tell."""
+    names = getattr(fit, "at_bounds", None)
+    return None if names is None else tuple(names)

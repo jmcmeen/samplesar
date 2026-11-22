@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `compare_nests()` has an `at_bounds` column naming the parameters that
+  stopped on a bound of sars' search (such as the power model's z at 5 for a
+  near-vertical curve), and warns about them; it needs a sars with
+  `SARFit.at_bounds`, and is left unknown with an older one.
 - `download_open_data()` and `Sample.from_open_data()`: a local copy of
   iNaturalist's open-data export as one Parquet file, and samples queried
   from it by region, taxon (and everything under it), grade, date and
