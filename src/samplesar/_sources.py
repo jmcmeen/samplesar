@@ -311,7 +311,9 @@ def gbif(
     Parameters
     ----------
     records : iterable of dict, optional
-        Occurrence records. If omitted, ``query`` is fetched.
+        Occurrence records. If omitted, ``query`` is fetched. Records marked
+        absent or carrying a geospatial issue are dropped, as a query
+        leaves them out.
     ranks : iterable of str or None
         Keep only records identified at these ranks; by default species and
         below, named by their species (GBIF's ``species`` field). ``None``
@@ -321,7 +323,9 @@ def gbif(
         many metres.
     boundary : polygon, optional
         Keep only records inside this region (as [`Sample.within`][samplesar.Sample.within]
-        takes); a query is narrowed to its bounding box.
+        takes); a query is narrowed to its bounding box (only by latitude if
+        the region crosses the antimeridian). ``max_results`` counts records
+        fetched, before this filter.
     max_results : int, optional
         Stop fetching after this many records (only with a query).
     **query
@@ -352,11 +356,9 @@ def gbif(
     if records is None:
         if region is not None:
             west, south, east, north = region.bounds
-            query = {
-                "decimalLongitude": f"{west},{east}",
-                "decimalLatitude": f"{south},{north}",
-                **query,
-            }
+            if east - west <= 180:  # a region split at the antimeridian spans the globe
+                query = {"decimalLongitude": f"{west},{east}", **query}
+            query = {"decimalLatitude": f"{south},{north}", **query}
         records = fetch_gbif(max_results=max_results, **query)
     elif query or max_results is not None:
         raise ValueError("Give records or a query (and max_results), not both.")

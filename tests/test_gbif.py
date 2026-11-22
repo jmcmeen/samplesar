@@ -24,21 +24,33 @@ RECORDS = [
     record(1),
     record(2, species="Dendrobates auratus"),
     record(3, species="Oophaga pumilio", rank="SUBSPECIES"),
-    record(4, species=None, rank="GENUS", scientificName="Pristimantis"),
+    record(
+        4,
+        species=None,
+        rank="GENUS",
+        scientificName="Pristimantis Jiménez de la Espada, 1870",
+        canonicalName="Pristimantis",
+    ),
     {"key": 5, "species": "Hyla", "taxonRank": "SPECIES"},  # no coordinates
     record(6, coordinateUncertaintyInMeters=5000),
     record(7, coordinateUncertaintyInMeters=10),
+    record(8, occurrenceStatus="ABSENT"),
+    record(9, issues=["COUNTRY_COORDINATE_MISMATCH"]),
+    record(10, issues=["RECORDED_DATE_INVALID"]),
 ]
 
 
 def test_records_become_a_sample():
     sample = samplesar.sources.gbif(RECORDS)
-    assert sample.n_observations == 5  # not the genus or the record without coordinates
+    # not the genus, the record without coordinates, the absence or the mismatch
+    assert sample.n_observations == 6
     assert "Oophaga pumilio" in set(sample.data["species"])
 
 
 def test_every_rank_and_uncertainty():
-    assert samplesar.sources.gbif(RECORDS, ranks=None).n_observations == 6
+    every_rank = samplesar.sources.gbif(RECORDS, ranks=None)
+    assert every_rank.n_observations == 7
+    assert "Pristimantis" in set(every_rank.data["species"])
     assert samplesar.sources.gbif(RECORDS, max_uncertainty=100).n_observations == 1
 
 
@@ -109,3 +121,13 @@ def test_a_query_needs_pygbif(monkeypatch):
     monkeypatch.setitem(sys.modules, "pygbif", None)
     with pytest.raises(ImportError, match=r"samplesar\[gbif\]"):
         samplesar.sources.gbif(country="CR")
+
+
+def test_a_boundary_across_the_antimeridian_narrows_only_latitude(fake_pygbif):
+    from shapely.geometry import MultiPolygon
+
+    region = MultiPolygon([box(170, -20, 180, -10), box(-180, -20, -175, -10)])
+    with pytest.raises(ValueError, match="No usable"):
+        samplesar.sources.gbif(boundary=region, max_results=10)
+    assert "decimalLongitude" not in fake_pygbif[0]
+    assert fake_pygbif[0]["decimalLatitude"] == "-20.0,-10.0"

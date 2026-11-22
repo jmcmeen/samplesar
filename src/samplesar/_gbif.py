@@ -14,6 +14,15 @@ logger = logging.getLogger(__name__)
 PAGE = 300  # the occurrence search API's largest page
 OFFSET_LIMIT = 100_000  # the search API serves no records beyond this offset
 SPECIES_LEVEL = ("SPECIES", "SUBSPECIES", "VARIETY", "FORM")
+# The issues behind GBIF's hasGeospatialIssue flag.
+GEOSPATIAL_ISSUES = frozenset(
+    {
+        "ZERO_COORDINATE",
+        "COORDINATE_INVALID",
+        "COORDINATE_OUT_OF_RANGE",
+        "COUNTRY_COORDINATE_MISMATCH",
+    }
+)
 
 
 def gbif_frame(
@@ -23,8 +32,10 @@ def gbif_frame(
 ) -> pd.DataFrame:
     """GBIF occurrence records as ``species``, ``lon``, ``lat`` rows.
 
-    A record needs coordinates and a species-level name (GBIF's ``species``
-    field, which names infraspecific taxa by their species); with ``ranks``,
+    A record needs coordinates, must not be marked absent or carry a
+    geospatial issue, and needs a species-level name (GBIF's ``species``
+    field, which names infraspecific taxa by their species, or without
+    ``ranks`` its ``canonicalName``, the name without authorship); with ``ranks``,
     its ``taxonRank`` must be one of them, and with ``max_uncertainty`` its
     ``coordinateUncertaintyInMeters`` must be given and at most that.
     """
@@ -33,7 +44,11 @@ def gbif_frame(
     for r in records:
         if r.get("decimalLongitude") is None or r.get("decimalLatitude") is None:
             continue
-        name = r.get("species") or (r.get("scientificName") if wanted is None else None)
+        if str(r.get("occurrenceStatus", "PRESENT")).upper() == "ABSENT":
+            continue
+        if r.get("hasGeospatialIssue") or GEOSPATIAL_ISSUES.intersection(r.get("issues") or ()):
+            continue
+        name = r.get("species") or (r.get("canonicalName") if wanted is None else None)
         if not name:
             continue
         if wanted is not None and str(r.get("taxonRank", "")).upper() not in wanted:
