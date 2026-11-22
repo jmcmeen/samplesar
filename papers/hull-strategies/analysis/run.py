@@ -12,7 +12,7 @@ Usage (from the repository root):
 baseline nests and simulation replicates, for a fast check.
 
 Writes ``results/tables/*.csv`` and ``results/figures/*.png`` beside this
-folder. Nothing written holds coordinates of real observations: the only
+folder (or under ``--out``). Nothing written holds coordinates of real observations: the only
 point maps are of a simulated sample.
 """
 
@@ -291,10 +291,12 @@ def main() -> None:
     parser.add_argument("--opendata", type=Path, help="observations.parquet from download_open_data")
     parser.add_argument("--local-sample", type=Path, help="CSV of iNaturalist observations")
     parser.add_argument("--quick", action="store_true", help="fewer baselines and replicates")
+    parser.add_argument("--out", type=Path, default=RESULTS, help="where to write (default: results/)")
     args = parser.parse_args()
     warnings.simplefilter("ignore", UserWarning)  # bounds are recorded in the tables
 
-    tables, figures = RESULTS / "tables", RESULTS / "figures"
+    out = args.out.expanduser()
+    tables, figures = out / "tables", out / "figures"
     tables.mkdir(parents=True, exist_ok=True)
     figures.mkdir(parents=True, exist_ok=True)
     baseline_n = 19 if args.quick else 99
@@ -331,7 +333,7 @@ def main() -> None:
     sim.to_csv(tables / "simulations.csv", index=False)
     figure_simulation(sim, figures / "fig5_simulated_clusters.png")
     figure_compactness(nests_by_dataset[first.key], figures / "fig6_compactness.png")
-    print("written to", RESULTS)
+    print("written to", out)
 
 
 if __name__ == "__main__":
