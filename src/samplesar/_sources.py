@@ -286,3 +286,85 @@ def open_data(
     if frame.empty:
         raise ValueError("No observations in the open data match these filters.")
     return dataframe(frame)
+
+
+def gbif(
+    records: Iterable[Mapping[str, Any]] | None = None,
+    *,
+    ranks: Iterable[str] | None = ("SPECIES", "SUBSPECIES", "VARIETY", "FORM"),
+    max_uncertainty: float | None = None,
+    boundary: Any = None,
+    max_results: int | None = None,
+    **query: Any,
+) -> Sample:
+    """Build a sample from GBIF occurrences.
+
+    GBIF gathers occurrences from museums, surveys, eBird, iNaturalist and
+    many other sources. Either pass records already fetched (the ``results``
+    of pygbif's ``occurrences.search``, or the API's JSON), or give a query
+    and they're fetched through pygbif (``pip install 'samplesar[gbif]'``),
+    a page at a time, up to the search API's 100,000-record limit (a warning
+    says when a query matches more: narrow it, or use GBIF's download
+    service). A query asks by default for records with coordinates, without
+    geospatial issues and marked present.
+
+    Parameters
+    ----------
+    records : iterable of dict, optional
+        Occurrence records. If omitted, ``query`` is fetched.
+    ranks : iterable of str or None
+        Keep only records identified at these ranks; by default species and
+        below, named by their species (GBIF's ``species`` field). ``None``
+        keeps every rank.
+    max_uncertainty : float, optional
+        Keep records whose coordinate uncertainty is given and at most this
+        many metres.
+    boundary : polygon, optional
+        Keep only records inside this region (as [`Sample.within`][samplesar.Sample.within]
+        takes); a query is narrowed to its bounding box.
+    max_results : int, optional
+        Stop fetching after this many records (only with a query).
+    **query
+        Search parameters for GBIF's occurrence search, such as
+        ``taxonKey``, ``country`` (ISO 3166-1 alpha-2), ``year``,
+        ``basisOfRecord`` or ``datasetKey``.
+
+    Returns
+    -------
+    Sample
+
+    Raises
+    ------
+    ValueError
+        If no usable records remain, both records and a query (or
+        ``max_results``) are given, or ``max_results`` is below 1.
+    ImportError
+        If a query needs fetching and pygbif isn't installed.
+
+    Examples
+    --------
+    >>> frogs = samplesar.sources.gbif(taxonKey=952, country="CR")  # doctest: +SKIP
+    """
+    from samplesar._boundary import as_geometry, inside
+    from samplesar._gbif import fetch_gbif, gbif_frame
+
+    region = None if boundary is None else as_geometry(boundary)
+    if records is None:
+        if region is not None:
+            west, south, east, north = region.bounds
+            query = {
+                "decimalLongitude": f"{west},{east}",
+                "decimalLatitude": f"{south},{north}",
+                **query,
+            }
+        records = fetch_gbif(max_results=max_results, **query)
+    elif query or max_results is not None:
+        raise ValueError("Give records or a query (and max_results), not both.")
+    frame = gbif_frame(records, ranks=ranks, max_uncertainty=max_uncertainty)
+    if region is not None and not frame.empty:
+        frame = frame[inside(region, frame["lon"], frame["lat"])].reset_index(drop=True)
+    if frame.empty:
+        raise ValueError(
+            "No usable GBIF records (see the filters on ranks, uncertainty and boundary)."
+        )
+    return dataframe(frame)

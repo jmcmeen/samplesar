@@ -22,6 +22,10 @@
 
 ::: samplesar.sources.open_data
 
+## sources.gbif
+
+::: samplesar.sources.gbif
+
 ## sources.download_open_data
 
 ::: samplesar.sources.download_open_data

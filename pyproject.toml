@@ -55,6 +55,9 @@ opendata = [
 geo = [
   "geopandas>=0.14",
 ]
+gbif = [
+  "pygbif>=0.6",
+]
 docs = [
   "mkdocs-material>=9.5",
   "mkdocstrings[python]",
@@ -95,7 +98,7 @@ warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
 # No type information published for these.
-module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*", "duckdb.*", "scipy.*", "geopandas.*"]
+module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*", "duckdb.*", "scipy.*", "geopandas.*", "pygbif.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

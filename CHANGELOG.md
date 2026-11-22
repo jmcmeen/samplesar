@@ -18,6 +18,11 @@ All notable changes to this project are documented here. The format is based on
   `regions.ecoregion(source, codes=..., names=...)`: regions from any
   boundary file or URL (cached), or from the US EPA's Level III and IV and
   RESOLVE 2017 ecoregions, through the new `geo` extra (geopandas).
+- `sources.gbif()`: a sample from GBIF occurrences, records you have or a
+  query fetched through pygbif (the new `gbif` extra) up to the search API's
+  100,000-record limit, keeping present, georeferenced, species-level
+  records without geospatial issues, optionally by coordinate uncertainty
+  and boundary.
 
 ### Changed
 

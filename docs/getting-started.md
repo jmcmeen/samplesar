@@ -58,6 +58,22 @@ counts as its species), and obscured coordinates
 (randomised by iNaturalist within about 0.2°) are dropped, unless you ask
 otherwise (`ranks=None`, `skip_obscured=False`).
 
+## From GBIF
+
+With `pip install 'samplesar[gbif]'`, `sources.gbif` builds a sample from
+GBIF, which gathers occurrences from museums, surveys, eBird, iNaturalist and
+more:
+
+```python
+frogs = samplesar.sources.gbif(taxonKey=952, country="CR")   # Anura in Costa Rica
+```
+
+It keeps present, georeferenced records identified at species level or
+below, without geospatial issues; `max_uncertainty` (metres) and `boundary`
+narrow it further. The search API serves up to 100,000 records per query;
+for more, use GBIF's download service. (`taxonKey` takes GBIF Backbone keys,
+which pygbif warns are being replaced by Catalogue of Life keys.)
+
 ## From a local copy of iNaturalist's open data
 
 For many samples, or large ones, keep a local copy of iNaturalist's
