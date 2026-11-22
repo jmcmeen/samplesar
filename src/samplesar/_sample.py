@@ -40,7 +40,8 @@ def _validate(df: pd.DataFrame) -> pd.DataFrame:
 class Sample:
     """A set of georeferenced species observations.
 
-    Build one with `from_df` or `from_csv` rather than directly: they check
+    Build one with [`from_df`][samplesar.Sample.from_df] or
+    [`from_csv`][samplesar.Sample.from_csv] rather than directly: they check
     and normalise the columns.
 
     Attributes
@@ -67,9 +68,12 @@ class Sample:
         ----------
         df : pd.DataFrame
             One row per observation. Other columns are dropped.
-        species_col, lon_col, lat_col : str
-            The columns holding the species name and the longitude and
-            latitude in decimal degrees.
+        species_col : str
+            The column holding the species name.
+        lon_col : str
+            The column holding the longitude, in decimal degrees.
+        lat_col : str
+            The column holding the latitude, in decimal degrees.
 
         Returns
         -------
@@ -95,11 +99,22 @@ class Sample:
         path : str or Path
             The CSV file, one row per observation.
         **kwargs : str
-            ``species_col``, ``lon_col`` and ``lat_col``, as in `from_df`.
+            ``species_col``, ``lon_col`` and ``lat_col``, as in
+            [`from_df`][samplesar.Sample.from_df]. Nothing else is passed to
+            the CSV reader.
 
         Returns
         -------
         Sample
+
+        Raises
+        ------
+        KeyError
+            If a column is missing.
+        ValueError
+            As in [`from_df`][samplesar.Sample.from_df].
+        TypeError
+            If a keyword other than the three column names is given.
         """
         return cls.from_df(pd.read_csv(path), **kwargs)
 
@@ -140,7 +155,7 @@ class Sample:
         Parameters
         ----------
         point_indices : sequence of int or np.ndarray
-            Rows of `points` to keep.
+            Rows of [`points`][samplesar.Sample.points] to keep.
 
         Returns
         -------

@@ -62,7 +62,7 @@ fmt-check: ## Check formatting without modifying files
 typecheck: ## Type-check src with mypy (settings in pyproject.toml)
 	$(UV) run --extra dev mypy
 
-check: lint fmt-check typecheck test ## Run lint, format check, type check, and tests
+check: lint fmt-check typecheck test docs ## Run lint, format check, type check, tests, and the docs build
 
 ## --- Documentation (mkdocs) ---
 

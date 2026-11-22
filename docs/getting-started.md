@@ -17,7 +17,7 @@ df = pd.DataFrame(
     }
 )
 sample = samplesar.Sample.from_df(df)
-sample.n_points, sample.n_species, sample.area
+sample.n_points, sample.n_species, sample.area   # area in square degrees
 ```
 
 `Sample.from_csv` reads the same three columns from a file; pass
@@ -31,7 +31,7 @@ a nested species-area curve.
 
 ```python
 nest = samplesar.random_nest(sample, seed=0)
-nest.to_frame()      # step, n_points, area, species
+nest.to_frame()      # step, n_points, area (square degrees), species
 ```
 
 ## Fitting the curve

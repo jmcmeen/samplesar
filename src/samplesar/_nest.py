@@ -12,9 +12,9 @@ from samplesar._sample import Sample, hull_area
 
 @dataclass(frozen=True)
 class Nest:
-    """A nested sequence of sub-samples of one `Sample`.
+    """A nested sequence of sub-samples of one [`Sample`][samplesar.Sample].
 
-    Made by a nesting strategy such as `random_nest`. Strategies differ only
+    Made by a nesting strategy such as [`random_nest`][samplesar.random_nest]. Strategies differ only
     in which points they drop at each step.
 
     Attributes
@@ -36,7 +36,7 @@ class Nest:
         return len(self.steps)
 
     def sample_at(self, step: int) -> Sample:
-        """The observations remaining at a step, as a `Sample`."""
+        """The observations remaining at a step, as a [`Sample`][samplesar.Sample]."""
         return self.sample.subset(self.steps[step])
 
     def to_frame(self) -> pd.DataFrame:
@@ -71,8 +71,8 @@ class Nest:
         Returns
         -------
         pd.DataFrame
-            ``area`` and ``species`` columns, one row per step, without the
-            zero-area steps at the end.
+            ``area`` (convex hull, square degrees) and ``species`` columns,
+            one row per step, without the zero-area steps at the end.
         """
         frame = self.to_frame()
         return frame.loc[frame["area"] > 0, ["area", "species"]].reset_index(drop=True)

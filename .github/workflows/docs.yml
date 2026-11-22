@@ -8,7 +8,8 @@ name: Docs
 
 on:
   # Run by release.yml on the new tag, so the site matches the latest release
-  # (a merge to main alone doesn't redeploy it). Also by hand, on any ref.
+  # (a merge to main alone doesn't redeploy it). Also by hand, on main or a
+  # release tag: the github-pages environment refuses other refs.
   workflow_dispatch:
 
 permissions:
@@ -32,14 +33,11 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.12"
           enable-cache: true
 
-      - name: Install docs dependencies
-        run: uv sync --extra docs
-
+      # The locked versions, as the CI docs job builds on pull requests.
       - name: Build (mkdocstrings analyzes source statically)
-        run: uv run mkdocs build --strict
+        run: uv run --frozen --extra docs mkdocs build --strict
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

@@ -54,6 +54,7 @@ plugins:
             heading_level: 3
             docstring_style: numpy
             members_order: source
+            group_by_category: false
             show_signature_annotations: true
             separate_signature: true
 
