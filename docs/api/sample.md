@@ -15,3 +15,11 @@
 ## boundary
 
 ::: samplesar.boundary
+
+## read_boundary
+
+::: samplesar.read_boundary
+
+## ecoregion
+
+::: samplesar.ecoregion

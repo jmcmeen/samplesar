@@ -20,12 +20,9 @@ API_URL = "https://www.geoboundaries.org/api/current/gbOpen/{iso}/ADM{level}/"
 
 
 def _cache_dir(given: str | Path | None) -> Path:
-    if given is not None:
-        return Path(given).expanduser()
-    if os.environ.get("SAMPLESAR_CACHE"):
-        return Path(os.environ["SAMPLESAR_CACHE"]).expanduser() / "geoboundaries"
-    base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
-    return Path(base) / "samplesar" / "geoboundaries"
+    from samplesar._regions import cache_root
+
+    return cache_root(given, "geoboundaries")
 
 
 TIMEOUT = 120  # seconds without data before a download fails

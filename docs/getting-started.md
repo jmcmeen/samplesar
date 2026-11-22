@@ -95,9 +95,22 @@ tennessee = samplesar.boundary("USA", level=1, name="Tennessee")
 sullivan = samplesar.boundary("USA", 2, "Sullivan", inside=tennessee)
 ```
 
-Regions that cross political lines (ecoregions, physiographic provinces,
-watersheds) come as shapefiles or GeoJSON; read them with geopandas and pass
-the frame, or the rows you want, as the boundary. geoBoundaries' files carry
+Regions that cross political lines come from boundary files.
+`samplesar.ecoregion` reads known ecoregion datasets (US EPA Level III and
+IV, and RESOLVE 2017 worldwide), and `samplesar.read_boundary` any other
+file or URL (physiographic provinces, watersheds, protected areas), with
+`pip install 'samplesar[geo]'`. Downloads are cached, so a script that names
+its sources is reproducible:
+
+```python
+# The Southern Appalachians: three EPA ecoregions south of the Roanoke Gap.
+southern_appalachians = samplesar.ecoregion(
+    "epa_l3", codes=["66", "67", "68"], clip=(-90, 30, -75, 37.3)
+)
+salamanders = samplesar.Sample.from_open_data(
+    parquet, boundary=southern_appalachians, taxon_id=26718
+)
+``` geoBoundaries' files carry
 their own licenses (CC BY 4.0 or ODbL) and need attribution when published.
 
 ## A nest

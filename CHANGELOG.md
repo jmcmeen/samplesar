@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format is based on
 - `samplesar.boundary(country, level=0, name=None)`: a country's, state's or
   county's boundary from geoBoundaries' open release, cached, for
   `within` and `boundary=`.
+- `samplesar.read_boundary(source, column, values, clip=...)` and
+  `samplesar.ecoregion(source, codes=..., names=...)`: regions from any
+  boundary file or URL (cached), or from the US EPA's Level III and IV and
+  RESOLVE 2017 ecoregions, through the new `geo` extra (geopandas).
 
 ## [0.1.3] - 2026-11-22
 

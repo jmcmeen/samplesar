@@ -2649,6 +2649,9 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
 ]
+geo = [
+    { name = "geopandas" },
+]
 inat = [
     { name = "pyinaturalist" },
 ]
@@ -2661,6 +2664,7 @@ requires-dist = [
     { name = "duckdb", marker = "extra == 'dev'", specifier = ">=1.1" },
     { name = "duckdb", marker = "extra == 'opendata'", specifier = ">=1.1" },
     { name = "geopandas", marker = "extra == 'dev'", specifier = ">=0.14" },
+    { name = "geopandas", marker = "extra == 'geo'", specifier = ">=0.14" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'" },
     { name = "mypy", marker = "extra == 'dev'" },
@@ -2677,7 +2681,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.9.2" },
     { name = "shapely", specifier = ">=2.0" },
 ]
-provides-extras = ["dev", "docs", "inat", "opendata"]
+provides-extras = ["dev", "docs", "geo", "inat", "opendata"]
 
 [[package]]
 name = "sars"

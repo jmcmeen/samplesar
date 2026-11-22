@@ -16,6 +16,7 @@ from samplesar._hull import (
 from samplesar._nest import Nest, nest_from_order, random_nest
 from samplesar._opendata import download_open_data
 from samplesar._plot import animate_nest, plot_nest, plot_nest_curve
+from samplesar._regions import ecoregion, read_boundary
 from samplesar._registry import nest, register_strategy, strategies
 from samplesar._sample import Sample, hull_area
 
@@ -33,6 +34,7 @@ __all__ = [
     "compare_nests",
     "compare_to_baseline",
     "concave_peel_nest",
+    "ecoregion",
     "download_open_data",
     "hull_area",
     "hull_area_nest",
@@ -47,6 +49,7 @@ __all__ = [
     "plot_nest_curve",
     "random_baseline",
     "random_nest",
+    "read_boundary",
     "register_strategy",
     "residual_autocorrelation",
     "strategies",

@@ -52,6 +52,9 @@ inat = [
 opendata = [
   "duckdb>=1.1",
 ]
+geo = [
+  "geopandas>=0.14",
+]
 docs = [
   "mkdocs-material>=9.5",
   "mkdocstrings[python]",
@@ -92,7 +95,7 @@ warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
 # No type information published for these.
-module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*", "duckdb.*", "scipy.*"]
+module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*", "duckdb.*", "scipy.*", "geopandas.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
