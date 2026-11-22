@@ -80,3 +80,35 @@ def test_sar_data_fits_with_sars(sample):
     fit = sars.sar_power(data)
     assert fit.converged
     assert 0.0 <= fit.r_squared <= 1.0
+
+
+def recount(nest):
+    """to_frame's species column, recounted from scratch for each step."""
+    return [nest.sample_at(i).n_species for i in range(nest.n_steps)]
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_to_frame_species_match_a_recount(seed):
+    rng = np.random.default_rng(seed)
+    points = rng.uniform(0, 0.1, size=(30, 2))
+    pick = rng.integers(0, 30, size=120)
+    sample = samplesar.Sample.from_df(
+        pd.DataFrame(
+            {
+                "species": rng.choice([f"sp{i}" for i in range(25)], size=120),
+                "lon": points[pick, 0],
+                "lat": points[pick, 1],
+            }
+        )
+    )
+    for nest in (samplesar.random_nest(sample, seed=seed), samplesar.hull_peel_nest(sample)):
+        frame = nest.to_frame()
+        assert list(frame["species"]) == recount(nest)
+        assert list(frame["n_points"]) == [len(s) for s in nest.steps]
+
+
+def test_to_frame_handles_steps_that_are_not_nested(sample):
+    # Built by hand, a step may add points back; counts still follow the step.
+    steps = (np.arange(10), np.arange(5), np.arange(3, 12))
+    nest = samplesar.Nest(sample=sample, steps=steps)
+    assert list(nest.to_frame()["species"]) == recount(nest)

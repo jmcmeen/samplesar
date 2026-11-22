@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 import numpy as np
@@ -128,10 +129,15 @@ class Sample:
         """The number of distinct species."""
         return int(self.data["species"].nunique())
 
-    @property
+    @cached_property
     def points(self) -> np.ndarray:
-        """Distinct (lon, lat) points, shape (n_points, 2), in first-seen order."""
-        return self.data[["lon", "lat"]].drop_duplicates().to_numpy(dtype=float)
+        """Distinct (lon, lat) points, shape (n_points, 2), in first-seen order.
+
+        Computed once and read-only.
+        """
+        points = self.data[["lon", "lat"]].drop_duplicates().to_numpy(dtype=float)
+        points.flags.writeable = False
+        return points
 
     @property
     def n_points(self) -> int:
@@ -190,3 +196,14 @@ def hull_area(points: np.ndarray) -> float:
     if len(pts) < 3:
         return 0.0
     return float(MultiPoint(pts).convex_hull.area)
+
+
+def point_species(sample: Sample) -> tuple[list[np.ndarray], int]:
+    """The species codes found at each of the sample's points, and the number
+    of species."""
+    data = sample.data
+    codes, uniques = pd.factorize(data["species"])
+    lookup = {(x, y): i for i, (x, y) in enumerate(map(tuple, sample.points))}
+    which = np.array([lookup[(x, y)] for x, y in zip(data["lon"], data["lat"], strict=True)])
+    grouped = pd.Series(codes).groupby(which).unique()
+    return [np.asarray(grouped[i], dtype=int) for i in range(sample.n_points)], len(uniques)

@@ -16,6 +16,12 @@ All notable changes to this project are documented here. The format is based on
   `compare_nests()` also takes a plain sequence of nests, named by label
   (repeated labels are numbered).
 
+### Changed
+
+- `Nest.to_frame()` (and so `sar_data()`, `fit()` and `compare_nests()`) is
+  5 to 7 times faster: species counts are updated by the points each step
+  drops instead of recounted. `Sample.points` is computed once.
+
 ## [0.1.1] - 2026-11-22
 
 ### Added

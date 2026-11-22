@@ -6,13 +6,12 @@ from collections.abc import Callable
 from typing import Literal
 
 import numpy as np
-import pandas as pd
 import shapely
 from shapely.geometry import MultiPoint, Polygon
 
 from samplesar._nest import Nest, check_size
 from samplesar._registry import register_strategy
-from samplesar._sample import Sample, hull_area
+from samplesar._sample import Sample, hull_area, point_species
 
 
 def _hull(points: np.ndarray, idx: np.ndarray) -> shapely.Geometry:
@@ -199,17 +198,6 @@ def hull_area_nest(
     return _remove_one(sample, min_points, choose)
 
 
-def _point_species(sample: Sample) -> tuple[list[np.ndarray], int]:
-    """The species codes found at each of the sample's points, and the number
-    of species."""
-    data = sample.data
-    codes, uniques = pd.factorize(data["species"])
-    lookup = {(x, y): i for i, (x, y) in enumerate(map(tuple, sample.points))}
-    which = np.array([lookup[(x, y)] for x, y in zip(data["lon"], data["lat"], strict=True)])
-    grouped = pd.Series(codes).groupby(which).unique()
-    return [np.asarray(grouped[i], dtype=int) for i in range(sample.n_points)], len(uniques)
-
-
 @register_strategy("hull_species")
 def hull_species_nest(
     sample: Sample, keep: Literal["most", "fewest"] = "most", min_points: int = 3
@@ -247,7 +235,7 @@ def hull_species_nest(
         raise ValueError(f"keep must be 'most' or 'fewest', got {keep!r}")
     sign = 1.0 if keep == "most" else -1.0
     points = sample.points
-    species, n_species = _point_species(sample)
+    species, n_species = point_species(sample)
     # How many remaining points hold each species: removing a point loses the
     # species it is the last holder of.
     holders = np.zeros(n_species, dtype=int)

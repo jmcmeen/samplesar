@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from samplesar._registry import Options, register_strategy
-from samplesar._sample import Sample, hull_area
+from samplesar._sample import Sample, hull_area, point_species
 
 
 @dataclass(frozen=True)
@@ -74,18 +74,26 @@ class Nest:
             square degrees) and ``species`` (distinct species remaining).
         """
         points = self.sample.points
-        species = self.sample.data["species"].to_numpy()
-        keys = pd.MultiIndex.from_frame(self.sample.data[["lon", "lat"]])
+        species, n_species = point_species(self.sample)
+        # How many of the step's points hold each species, updated by the
+        # points each step drops (or adds), not recounted.
+        holders = np.zeros(n_species, dtype=int)
+        previous = np.empty(0, dtype=int)
         rows = []
         for i, idx in enumerate(self.steps):
-            kept = points[idx]
-            mask = keys.isin([tuple(p) for p in kept])
+            for change, sign in (
+                (np.setdiff1d(previous, idx), -1),
+                (np.setdiff1d(idx, previous), 1),
+            ):
+                if len(change):
+                    np.add.at(holders, np.concatenate([species[p] for p in change]), sign)
+            previous = np.asarray(idx)
             rows.append(
                 {
                     "step": i,
                     "n_points": len(idx),
-                    "area": hull_area(kept),
-                    "species": int(len(np.unique(species[mask]))),
+                    "area": hull_area(points[idx]),
+                    "species": int(np.count_nonzero(holders)),
                 }
             )
         return pd.DataFrame(rows)
