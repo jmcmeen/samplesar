@@ -4,6 +4,22 @@ Each strategy takes a `Sample` and returns a `Nest`: a sequence of ever-smaller
 subsets of the sample's points, stopping when `min_points` remain. Strategies
 differ only in which point they drop next.
 
+## Running a strategy by name
+
+Every strategy below is registered under a short name, so it can be chosen by
+a string, from a script or a config file:
+
+```python
+samplesar.strategies()                      # name -> one-line description
+nest = samplesar.nest(sample, "hull_area", keep="smallest")
+nest.label                                  # "hull_area(keep='smallest')"
+```
+
+Each nest records the strategy that made it and the options it was given
+(`nest.strategy`, `nest.options`), whether it was made by name or by calling
+the function directly. `compare_nests` names its rows by these labels when it
+gets a plain list of nests.
+
 ## Random removal
 
 `random_nest(sample, min_points=3, seed=None)` removes one point at a time,
@@ -95,3 +111,30 @@ it gives a steep curve; the outside-in strategies shrink the area from the
 first step, so their slopes are shallower. Nested steps share most of their
 points, so R² and AICc describe how smooth a strategy's curve is, not
 independent evidence: compare them across strategies on the same sample.
+
+## Adding a strategy
+
+A new sampling design is a function that takes a `Sample` and its options as
+keywords and returns a `Nest` whose `steps` are index arrays into
+`sample.points`, each a subset of the one before. Register it, and it runs by
+name, is listed by `strategies()` and labels its nests like the built-in ones:
+
+```python
+import numpy as np
+import samplesar
+
+@samplesar.register_strategy("every_other")
+def every_other_nest(sample, min_points=3):
+    """Drop every other point at each step."""
+    remaining = np.arange(sample.n_points)
+    steps = [remaining]
+    while len(remaining) // 2 >= min_points:
+        remaining = remaining[::2]
+        steps.append(remaining)
+    return samplesar.Nest(sample=sample, steps=tuple(steps))
+
+samplesar.compare_nests([
+    samplesar.nest(sample, "every_other"),
+    samplesar.nest(sample, "hull_peel"),
+])
+```

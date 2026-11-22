@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import pandas as pd
@@ -53,7 +53,9 @@ def fit_nest(nest: Nest, model: str = "power", name: str | None = None, **kwargs
     return func(data, **kwargs)
 
 
-def compare_nests(nests: Mapping[str, Nest], model: str = "power", **kwargs: Any) -> pd.DataFrame:
+def compare_nests(
+    nests: Mapping[str, Nest] | Iterable[Nest], model: str = "power", **kwargs: Any
+) -> pd.DataFrame:
     """Fit the same sars model to several nests and compare the fits.
 
     Use it to compare sampling strategies on one sample: how steep each one
@@ -62,8 +64,9 @@ def compare_nests(nests: Mapping[str, Nest], model: str = "power", **kwargs: Any
 
     Parameters
     ----------
-    nests : mapping of str to Nest
-        The nests to compare, by name (for example, one per strategy).
+    nests : mapping of str to Nest, or sequence of Nest
+        The nests to compare: by name, or a sequence named by each nest's
+        [`label`][samplesar.Nest.label], such as ``hull_area(keep='smallest')``.
     model : str
         A sars model with one fit per dataset, such as ``"power"`` or
         ``"loga"``.
@@ -81,7 +84,8 @@ def compare_nests(nests: Mapping[str, Nest], model: str = "power", **kwargs: Any
     Raises
     ------
     ValueError
-        If ``nests`` is empty, sars has no such model, a nest has too few
+        If ``nests`` is empty, two nests in a sequence share a label, sars
+        has no such model, a nest has too few
         steps to fit (the message names it), or the fit has no parameters to
         compare (a multi-model average, for example).
 
@@ -93,6 +97,16 @@ def compare_nests(nests: Mapping[str, Nest], model: str = "power", **kwargs: Any
     ... }
     >>> samplesar.compare_nests(nests)  # doctest: +SKIP
     """
+    if not isinstance(nests, Mapping):
+        listed = list(nests)
+        named = {nest.label: nest for nest in listed}
+        if len(named) < len(listed):
+            labels = [nest.label for nest in listed]
+            twice = sorted({lab for lab in labels if labels.count(lab) > 1})
+            raise ValueError(
+                f"Nests share a label ({', '.join(twice)}); pass a mapping of names to nests."
+            )
+        nests = named
     if not nests:
         raise ValueError("No nests to compare.")
     rows = []

@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `nest(sample, strategy, **options)` runs any strategy by name, and
+  `strategies()` lists them with a one-line description each.
+- `register_strategy(name)`: register a new sampling design so it runs by
+  name and labels its nests like the built-in strategies.
+- `Nest.strategy`, `Nest.options` and `Nest.label` record how a nest was made;
+  `compare_nests()` also takes a plain sequence of nests, named by label.
+
 ## [0.1.1] - 2026-11-22
 
 ### Added

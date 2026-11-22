@@ -65,4 +65,5 @@ nav:
   - API Reference:
       - Samples: api/sample.md
       - Nests: api/nest.md
+      - Strategy Registry: api/registry.md
       - Evaluation: api/evaluate.md

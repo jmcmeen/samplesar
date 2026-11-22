@@ -11,6 +11,7 @@ import shapely
 from shapely.geometry import MultiPoint, Polygon
 
 from samplesar._nest import Nest, check_size
+from samplesar._registry import register_strategy
 from samplesar._sample import Sample, hull_area
 
 
@@ -56,6 +57,7 @@ def _remove_one(
     return Nest(sample=sample, steps=tuple(steps))
 
 
+@register_strategy("hull_random")
 def hull_random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
     """Nest a sample by removing a random vertex of its convex hull at each step.
 
@@ -84,6 +86,7 @@ def hull_random_nest(sample: Sample, min_points: int = 3, seed: int | None = Non
     return _remove_one(sample, min_points, lambda _, vertices: int(rng.choice(vertices)))
 
 
+@register_strategy("hull_peel")
 def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
     """Nest a sample by peeling off its whole convex hull at each step.
 
@@ -151,6 +154,7 @@ def _pick(vertices: np.ndarray, score: np.ndarray, distance: np.ndarray) -> int:
     return int(vertices[farthest].min())
 
 
+@register_strategy("hull_area")
 def hull_area_nest(
     sample: Sample, keep: Literal["largest", "smallest"] = "largest", min_points: int = 3
 ) -> Nest:
@@ -206,6 +210,7 @@ def _point_species(sample: Sample) -> tuple[list[np.ndarray], int]:
     return [np.asarray(grouped[i], dtype=int) for i in range(sample.n_points)], len(uniques)
 
 
+@register_strategy("hull_species")
 def hull_species_nest(
     sample: Sample, keep: Literal["most", "fewest"] = "most", min_points: int = 3
 ) -> Nest:
@@ -258,6 +263,7 @@ def hull_species_nest(
     return _remove_one(sample, min_points, choose)
 
 
+@register_strategy("hull_distance")
 def hull_distance_nest(
     sample: Sample, remove: Literal["farthest", "closest"] = "farthest", min_points: int = 3
 ) -> Nest:

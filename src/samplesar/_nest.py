@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from samplesar._registry import register_strategy
 from samplesar._sample import Sample, hull_area
 
 
@@ -26,10 +29,29 @@ class Nest:
         ``steps[i]`` holds the rows of ``sample.points`` that remain at step
         ``i``. ``steps[0]`` is every point and each later step is a subset of
         the one before.
+    strategy : str
+        The registered strategy that made the nest, such as ``"hull_area"``;
+        empty for a nest built directly.
+    options : mapping
+        The options the strategy was called with, as given (defaults left
+        out).
     """
 
     sample: Sample
     steps: tuple[np.ndarray, ...]
+    strategy: str = ""
+    options: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
+
+    @property
+    def label(self) -> str:
+        """The strategy and its options, such as ``hull_area(keep='smallest')``.
+
+        ``"nest"`` for a nest built directly rather than by a strategy.
+        """
+        name = self.strategy or "nest"
+        if not self.options:
+            return name
+        return f"{name}({', '.join(f'{k}={v!r}' for k, v in self.options.items())})"
 
     @property
     def n_steps(self) -> int:
@@ -117,6 +139,7 @@ def check_size(sample: Sample, min_points: int) -> None:
         raise ValueError(f"Sample has {sample.n_points} points; need at least {min_points}")
 
 
+@register_strategy("random")
 def random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
     """Nest a sample by removing one point at a time, uniformly at random.
 

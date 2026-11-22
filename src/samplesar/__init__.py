@@ -11,6 +11,7 @@ from samplesar._hull import (
     hull_species_nest,
 )
 from samplesar._nest import Nest, random_nest
+from samplesar._registry import nest, register_strategy, strategies
 from samplesar._sample import Sample, hull_area
 
 try:
@@ -29,5 +30,8 @@ __all__ = [
     "hull_peel_nest",
     "hull_random_nest",
     "hull_species_nest",
+    "nest",
     "random_nest",
+    "register_strategy",
+    "strategies",
 ]
