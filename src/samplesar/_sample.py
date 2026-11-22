@@ -5,6 +5,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from functools import cached_property
 from pathlib import Path
 from typing import Any
@@ -297,8 +298,8 @@ class Sample:
         taxon_id: int | None = None,
         quality_grade: str | Iterable[str] | None = "research",
         ranks: Iterable[str] | None = ("species", "subspecies", "variety", "form"),
-        since: Any = None,
-        until: Any = None,
+        since: date | str | None = None,
+        until: date | str | None = None,
         max_accuracy: float | None = None,
     ) -> Sample:
         """Build a sample from a local copy of iNaturalist's open data.
@@ -337,8 +338,8 @@ class Sample:
         Raises
         ------
         ValueError
-            If no observations match, or ``bbox`` isn't (west, south, east,
-            north).
+            If no observations match, ``bbox`` isn't (west, south, east,
+            north), or ``quality_grade`` or ``ranks`` is empty.
         ImportError
             If DuckDB isn't installed.
 
