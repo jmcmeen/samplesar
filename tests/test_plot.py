@@ -72,12 +72,13 @@ def test_animate_and_save_a_gif(nest, tmp_path):
         assert gif.n_frames == nest.n_steps
 
 
-@pytest.mark.filterwarnings("ignore:Animation was deleted without rendering")
-def test_animate_in_reverse(nest):
+def test_animate_in_reverse(nest, tmp_path):
     forward = samplesar.animate_nest(nest)
     backward = samplesar.animate_nest(nest, reverse=True)
     assert list(forward.new_frame_seq()) == list(range(nest.n_steps))
     assert list(backward.new_frame_seq()) == list(range(nest.n_steps))[::-1]
+    for i, animation in enumerate((forward, backward)):  # render, as a user would
+        animation.save(tmp_path / f"{i}.gif", writer="pillow", fps=10)
 
 
 def test_animation_computes_the_table_once(nest, monkeypatch, tmp_path):

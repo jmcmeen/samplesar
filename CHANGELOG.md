@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- `nest_diagnostics()` and `residual_autocorrelation()`: each step's hull
+  perimeter, compactness, area share, density and centroid shift, and the
+  lag-1 autocorrelation and Durbin-Watson statistic of a fit's residuals
+  along the nest.
 - `random_baseline()` and `compare_to_baseline()`: fit a model to many
   seeded random nests of a sample, and place a strategy's fit among them
   (mean, spread, quantiles and a rank p-value per parameter), since one

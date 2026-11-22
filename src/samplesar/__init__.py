@@ -2,6 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from samplesar._diagnostics import nest_diagnostics, residual_autocorrelation
 from samplesar._evaluate import compare_nests, compare_to_baseline, random_baseline
 from samplesar._hull import (
     hull_area_nest,
@@ -36,11 +37,13 @@ __all__ = [
     "hull_random_nest",
     "hull_species_nest",
     "nest",
+    "nest_diagnostics",
     "nest_from_order",
     "plot_nest",
     "plot_nest_curve",
     "random_baseline",
     "random_nest",
     "register_strategy",
+    "residual_autocorrelation",
     "strategies",
 ]

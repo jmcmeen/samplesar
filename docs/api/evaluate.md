@@ -15,3 +15,11 @@
 ## compare_to_baseline
 
 ::: samplesar.compare_to_baseline
+
+## nest_diagnostics
+
+::: samplesar.nest_diagnostics
+
+## residual_autocorrelation
+
+::: samplesar.residual_autocorrelation
