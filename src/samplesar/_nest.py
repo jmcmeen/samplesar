@@ -113,7 +113,8 @@ class Nest:
         """The nest as plain data, ready for JSON.
 
         Holds the observations, the strategy and its options, and the steps,
-        stored as the points each step removes rather than in full.
+        stored as the points each step removes rather than in full. Options
+        that are tuples or arrays are stored as lists.
 
         Returns
         -------
@@ -123,7 +124,8 @@ class Nest:
         ------
         ValueError
             If the steps aren't nested (only a nest built by hand can be
-            like that).
+            like that), or an option isn't a plain value JSON can hold (a
+            ``Generator`` seed, say).
         """
         removed = []
         for before, after in zip(self.steps, self.steps[1:], strict=False):
@@ -136,7 +138,7 @@ class Nest:
             "version": FORMAT_VERSION,
             "samplesar": _package_version(),
             "strategy": self.strategy,
-            "options": {k: _plain(v) for k, v in self.options.items()},
+            "options": {k: _plain(k, v) for k, v in self.options.items()},
             "observations": {
                 "species": data["species"].tolist(),
                 "lon": data["lon"].tolist(),
@@ -158,6 +160,7 @@ class Nest:
         Returns
         -------
         Nest
+            Each step's points in the order of the first step.
 
         Raises
         ------
@@ -165,20 +168,26 @@ class Nest:
             If the data isn't a saved nest, is from a newer format version,
             or its steps don't fit its sample.
         """
-        if data.get("format") != FORMAT:
+        missing = {"format", "version", "observations", "first", "removed"} - set(data)
+        if data.get("format") != FORMAT or missing:
             raise ValueError("Not a saved samplesar nest.")
-        if data.get("version", 0) > FORMAT_VERSION:
+        version = data["version"]
+        if not isinstance(version, int) or isinstance(version, bool):
+            raise ValueError(f"The saved format version must be a whole number, got {version!r}.")
+        if version > FORMAT_VERSION:
             raise ValueError(
-                f"Saved with nest format {data['version']}; this samplesar reads up to "
+                f"Saved with nest format {version}; this samplesar reads up to "
                 f"{FORMAT_VERSION}. Upgrade samplesar to load it."
             )
         sample = Sample.from_df(pd.DataFrame(data["observations"]))
-        remaining = np.asarray(data["first"], dtype=int)
+        remaining = _indices(data["first"])
         if remaining.size and (remaining.min() < 0 or remaining.max() >= sample.n_points):
             raise ValueError("The saved steps name points outside the saved sample.")
+        if len(np.unique(remaining)) < len(remaining):
+            raise ValueError("The saved first step repeats a point.")
         steps = [remaining]
         for gone in data["removed"]:
-            gone = np.asarray(gone, dtype=int)
+            gone = _indices(gone)
             if not np.isin(gone, remaining).all():
                 raise ValueError("A saved step removes a point that isn't there.")
             remaining = remaining[~np.isin(remaining, gone)]
@@ -282,13 +291,31 @@ def _package_version() -> str:
     return __version__
 
 
-def _plain(value: Any) -> Any:
-    """An option value as plain JSON data."""
+def _indices(values: Any) -> np.ndarray:
+    """Saved point indices as an int array; anything else isn't a saved nest."""
+    array = np.asarray(values)
+    if array.size == 0:
+        return np.empty(0, dtype=int)
+    if array.ndim != 1 or not np.issubdtype(array.dtype, np.integer):
+        raise ValueError("The saved steps must be lists of whole-number point indices.")
+    return array.astype(int)
+
+
+def _plain(name: str, value: Any) -> Any:
+    """An option value as plain JSON data (tuples and arrays become lists),
+    or a ValueError naming the option if it can't be stored."""
     if isinstance(value, np.generic):
         return value.item()
     if isinstance(value, np.ndarray | tuple | list):
-        return [_plain(v) for v in value]
-    return value
+        return [_plain(name, v) for v in value]
+    if isinstance(value, Mapping):
+        return {str(k): _plain(name, v) for k, v in value.items()}
+    if value is None or isinstance(value, bool | int | float | str):
+        return value
+    raise ValueError(
+        f"Option {name}={value!r} can't be saved as JSON; pass a plain value (a seed as an "
+        "int, not a Generator) to save the nest."
+    )
 
 
 @register_strategy("random")

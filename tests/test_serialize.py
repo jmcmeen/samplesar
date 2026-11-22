@@ -77,9 +77,37 @@ def test_steps_that_are_not_nested_cannot_be_saved(sample):
         ({"version": 99}, "format 99"),
         ({"first": [0, 1, 1000]}, "outside the saved sample"),
         ({"removed": [[1000]]}, "isn't there"),
+        ({"first": [0, 0, 1]}, "repeats a point"),
+        ({"first": [0.5, 1]}, "whole-number point indices"),
+        ({"version": "2"}, "whole number"),
+        ({"observations": None, "first": None}, None),
     ],
 )
 def test_bad_saved_data(sample, change, match):
     data = {**samplesar.random_nest(sample, seed=0).to_dict(), **change}
+    if match is None:  # keys missing altogether
+        data = {k: v for k, v in data.items() if change.get(k, 1) is not None}
+        match = "Not a saved samplesar nest"
     with pytest.raises(ValueError, match=match):
         samplesar.Nest.from_dict(data)
+
+
+def test_options_that_json_cant_hold(sample):
+    nest = samplesar.random_nest(sample, seed=np.random.default_rng(1))
+    with pytest.raises(ValueError, match="Option seed=Generator"):
+        nest.to_dict()
+
+
+def test_nested_options_with_numpy_values(sample):
+    nest = samplesar.Nest(sample=sample, steps=(np.arange(sample.n_points),), strategy="x")
+    from samplesar._registry import Options
+
+    nest = samplesar.Nest(
+        sample=sample,
+        steps=nest.steps,
+        strategy="x",
+        options=Options({"weights": {"a": np.float64(0.5)}, "pair": (1, 2)}),
+    )
+    saved = nest.to_dict()["options"]
+    assert saved == {"weights": {"a": 0.5}, "pair": [1, 2]}
+    json.dumps(saved)
