@@ -150,3 +150,50 @@ def test_bad_arguments(sample, call, match):
 def test_run_by_name(sample):
     nest = samplesar.strategies.run(sample, "sweep", bearing=45.0)
     assert nest.strategy == "sweep" and nest.options["bearing"] == 45.0
+
+
+def test_growth_orders_every_point_at_shared_positions():
+    """Distinct points can share a projected position (lon 180 and -180):
+    each is still ordered, next to its twin."""
+    xy = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 0.0], [3.0, 1.0], [5.0, 0.0], [5.0, 2.0]])
+    order = growth_order(xy, 0)
+    assert sorted(order.tolist()) == list(range(6))
+    assert order.tolist()[:3] == [0, 1, 2]
+    assert growth_order(xy, 2).tolist()[:2] == [2, 1]
+
+
+def test_grow_across_the_antimeridian():
+    lon = [179.9, 180.0, -180.0, 179.95, 179.8, 179.85]
+    lat = [0.0, 0.1, 0.1, 0.2, 0.05, -0.1]
+    frame = pd.DataFrame({"species": list("abcdef"), "lon": lon, "lat": lat})
+    sample = samplesar.sources.dataframe(frame)
+    nest = samplesar.strategies.grow(sample, seed=(179.9, 0.0), min_points=1)
+    assert len(nest.steps) == sample.n_points
+    seed_point = int(np.argmin(np.hypot(*(sample.points - [179.9, 0.0]).T)))
+    assert nest.steps[-1].tolist() == [seed_point]
+
+
+def test_growth_on_a_long_line_is_fast_and_ordered():
+    xy = np.column_stack([np.arange(20_000.0), np.arange(20_000.0) * 0.5])
+    assert growth_order(xy, 0).tolist() == list(range(20_000))
+
+
+def test_density_in_blocks_matches_one_pass(monkeypatch):
+    from samplesar import _ranked
+
+    rng = np.random.default_rng(4)
+    xy = rng.uniform(0, 5, (300, 2))
+    whole = kernel_density(xy, 0.7)
+    monkeypatch.setattr(_ranked, "BLOCK", 37)
+    assert kernel_density(xy, 0.7) == pytest.approx(whole)
+
+
+@pytest.mark.parametrize("bearing", [0.0, 90.0, 180.0, 270.0])
+def test_sweep_ties_go_by_index_at_real_coordinates(bearing):
+    """On a UTM grid, points in one row or column tie exactly; after the
+    round trip through longitude and latitude they differ only by rounding,
+    and the tie still goes to the lowest index."""
+    sample = km_sample([[x * 0.1, y * 0.1] for y in range(6) for x in range(6)])
+    nest = samplesar.strategies.sweep(sample, bearing=bearing, min_points=1)
+    first_six = removed(nest)[:6]
+    assert first_six == sorted(first_six)

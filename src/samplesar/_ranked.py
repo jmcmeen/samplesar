@@ -34,9 +34,20 @@ def _centre_xy(sample: Sample, centre: tuple[float, float] | None) -> np.ndarray
     return _to_xy(sample, lon, lat)
 
 
+def _tied(key: np.ndarray) -> np.ndarray:
+    """``key`` rounded to a billionth of its range, so values equal but for
+    floating-point rounding (points round-tripped through longitude and
+    latitude) tie, and the tie goes by index."""
+    key = np.asarray(key, dtype=float)
+    span = float(np.ptp(key)) if key.size else 0.0
+    if span == 0:
+        return np.zeros_like(key)
+    return np.round((key - key.min()) / span * 1e9)
+
+
 def _by_rank(sample: Sample, key: np.ndarray, min_points: int) -> Nest:
     """Remove points in increasing ``key``, ties by index."""
-    order = np.lexsort((np.arange(sample.n_points), key))
+    order = np.lexsort((np.arange(sample.n_points), _tied(key)))
     return from_order(sample, order, min_points=min_points)
 
 
@@ -104,7 +115,9 @@ def sweep(sample: Sample, bearing: float = 90.0, min_points: int = 3) -> Nest:
     if not np.isfinite(bearing):
         raise ValueError(f"bearing must be a finite number of degrees, got {bearing}.")
     angle = np.radians(bearing)
-    along = sample.xy[:, 0] * np.sin(angle) + sample.xy[:, 1] * np.cos(angle)
+    # Rounded so that bearings like 90° give exact 0 and 1, not 6e-17.
+    east, north = np.round(np.sin(angle), 15), np.round(np.cos(angle), 15)
+    along = sample.xy[:, 0] * east + sample.xy[:, 1] * north
     return _by_rank(sample, along, min_points)
 
 
@@ -115,19 +128,23 @@ def scott_bandwidth(xy: np.ndarray) -> float:
     return spread * len(xy) ** (-1.0 / 6.0) if spread > 0 else 1.0
 
 
+BLOCK = 1024  # points whose neighbours are summed at once, to bound memory
+
+
 def kernel_density(xy: np.ndarray, bandwidth: float) -> np.ndarray:
-    """Each point's Gaussian kernel density from all the points (unnormalised),
-    summed over neighbours within five bandwidths."""
+    """Each point's Gaussian kernel density from all the points (unnormalised,
+    its own kernel included), summed over neighbours within five bandwidths,
+    a block of points at a time so memory stays bounded."""
     from scipy.spatial import cKDTree
 
     tree = cKDTree(xy)
-    pairs = tree.query_pairs(5.0 * bandwidth, output_type="ndarray")
-    density = np.ones(len(xy))  # each point's own kernel
-    if len(pairs):
-        d2 = np.sum((xy[pairs[:, 0]] - xy[pairs[:, 1]]) ** 2, axis=1)
-        weight = np.exp(-0.5 * d2 / bandwidth**2)
-        np.add.at(density, pairs[:, 0], weight)
-        np.add.at(density, pairs[:, 1], weight)
+    density = np.empty(len(xy))
+    for start in range(0, len(xy), BLOCK):
+        block = cKDTree(xy[start : start + BLOCK])
+        pairs = block.sparse_distance_matrix(tree, 5.0 * bandwidth, output_type="ndarray")
+        density[start : start + block.n] = np.bincount(
+            pairs["i"], weights=np.exp(-0.5 * (pairs["v"] / bandwidth) ** 2), minlength=block.n
+        )
     return density
 
 
@@ -168,27 +185,33 @@ def density_peel(sample: Sample, bandwidth_km: float | None = None, min_points: 
 
 
 def _spanning_edges(xy: np.ndarray) -> list[list[tuple[float, int]]]:
-    """Each point's neighbours on the Euclidean minimum spanning tree, with
-    distances: from the Delaunay triangulation, or from all pairs when the
-    points are collinear or too few."""
+    """Each point's neighbours on the Euclidean minimum spanning tree of
+    distinct points, with distances: from the Delaunay triangulation; along
+    the line for collinear points; from all pairs for fewer than four."""
     from scipy.sparse import coo_matrix
     from scipy.sparse.csgraph import minimum_spanning_tree
     from scipy.spatial import Delaunay, QhullError
 
     n = len(xy)
-    try:
-        if n < 4:
-            raise QhullError("too few points")
-        simplices = Delaunay(xy).simplices
-        pairs = np.vstack([simplices[:, [0, 1]], simplices[:, [1, 2]], simplices[:, [0, 2]]])
-    except QhullError:
+    if n < 4:
         i, j = np.triu_indices(n, 1)
         pairs = np.column_stack([i, j])
+    else:
+        try:
+            simplices = Delaunay(xy).simplices
+            pairs = np.vstack([simplices[:, [0, 1]], simplices[:, [1, 2]], simplices[:, [0, 2]]])
+        except QhullError:  # collinear: the tree joins neighbours along the line
+            centred = xy - xy.mean(axis=0)
+            direction = np.linalg.svd(centred, full_matrices=False)[2][0]
+            along = np.argsort(centred @ direction, kind="stable")
+            pairs = np.column_stack([along[:-1], along[1:]])
+    edges: list[list[tuple[float, int]]] = [[] for _ in range(n)]
+    if n < 2:
+        return edges
     pairs = np.unique(np.sort(pairs, axis=1), axis=0)
     weight = np.hypot(*(xy[pairs[:, 0]] - xy[pairs[:, 1]]).T)
     tree = minimum_spanning_tree(coo_matrix((weight, (pairs[:, 0], pairs[:, 1])), shape=(n, n)))
     tree = tree.tocoo()
-    edges: list[list[tuple[float, int]]] = [[] for _ in range(n)]
     for a, b, w in zip(tree.row, tree.col, tree.data, strict=True):
         edges[a].append((float(w), int(b)))
         edges[b].append((float(w), int(a)))
@@ -198,20 +221,32 @@ def _spanning_edges(xy: np.ndarray) -> list[list[tuple[float, int]]]:
 def growth_order(xy: np.ndarray, seed: int) -> np.ndarray:
     """The order Prim's algorithm adds points to a region grown from ``seed``,
     each time the point nearest the region (ties by index). Prim's choices
-    are edges of the minimum spanning tree, so it runs on that tree."""
-    edges = _spanning_edges(xy)
-    added = np.zeros(len(xy), dtype=bool)
-    order = []
-    frontier: list[tuple[float, int]] = [(0.0, seed)]
+    are edges of the minimum spanning tree, so it runs on that tree, built on
+    the distinct positions; points at one position are added together, in
+    index order, the seed first."""
+    positions, where = np.unique(xy, axis=0, return_inverse=True)
+    where = np.asarray(where).ravel()
+    edges = _spanning_edges(positions)
+    by_position = np.argsort(where, kind="stable")  # each position's points, in index order
+    bounds = np.searchsorted(where[by_position], np.arange(len(positions) + 1))
+    first = by_position[bounds[:-1]]  # each position's lowest point index, for ties
+    added = np.zeros(len(positions), dtype=bool)
+    order: list[int] = []
+    frontier: list[tuple[float, int, int]] = [(0.0, seed, int(where[seed]))]
     while frontier:
-        _, point = heapq.heappop(frontier)
-        if added[point]:
+        _, _, position = heapq.heappop(frontier)
+        if added[position]:
             continue
-        added[point] = True
-        order.append(point)
-        for w, other in edges[point]:
+        added[position] = True
+        members = by_position[bounds[position] : bounds[position + 1]]
+        if position == where[seed]:
+            members = np.concatenate([[seed], members[members != seed]])
+        order.extend(int(m) for m in members)
+        for w, other in edges[position]:
             if not added[other]:
-                heapq.heappush(frontier, (w, other))
+                heapq.heappush(frontier, (w, int(first[other]), other))
+    if len(order) != len(xy):  # the tree spans every position
+        raise RuntimeError("The spanning tree missed points; please report this.")
     return np.asarray(order)
 
 
