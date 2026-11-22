@@ -112,3 +112,44 @@ def test_to_frame_handles_steps_that_are_not_nested(sample):
     steps = (np.arange(10), np.arange(5), np.arange(3, 12))
     nest = samplesar.Nest(sample=sample, steps=steps)
     assert list(nest.to_frame()["species"]) == recount(nest)
+
+
+class TestNestFromOrder:
+    def test_removes_in_order(self, sample):
+        order = [5, 0, 17, 3]
+        nest = samplesar.nest_from_order(sample, order)
+        assert nest.n_steps == 5
+        for before, after, point in zip(nest.steps, nest.steps[1:], order, strict=False):
+            assert set(before) - set(after) == {point}
+        assert nest.label == "order"
+
+    def test_stops_at_min_points(self, sample):
+        order = np.random.default_rng(0).permutation(sample.n_points)
+        nest = samplesar.nest_from_order(sample, order, min_points=10)
+        assert len(nest.steps[-1]) == 10
+        assert set(nest.steps[-1]) == set(order[-10:])
+
+    def test_reproduces_another_nest(self, sample):
+        hull = samplesar.hull_area_nest(sample)
+        order = [
+            int(np.setdiff1d(a, b)[0]) for a, b in zip(hull.steps, hull.steps[1:], strict=False)
+        ]
+        again = samplesar.nest_from_order(sample, order)
+        assert all(np.array_equal(a, b) for a, b in zip(hull.steps, again.steps, strict=True))
+
+    def test_empty_order_is_the_whole_sample(self, sample):
+        assert samplesar.nest_from_order(sample, []).n_steps == 1
+
+    @pytest.mark.parametrize(
+        ("order", "match"),
+        [
+            ([1, 1], "repeats"),
+            ([0, 40], "outside"),
+            ([-1], "outside"),
+            ([0.5], "whole numbers|point indices"),
+            ([[0, 1]], "one-dimensional"),
+        ],
+    )
+    def test_bad_orders(self, sample, order, match):
+        with pytest.raises(ValueError, match=match):
+            samplesar.nest_from_order(sample, order)

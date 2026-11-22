@@ -15,6 +15,8 @@ All notable changes to this project are documented here. The format is based on
 - `Nest.strategy`, `Nest.options` and `Nest.label` record how a nest was made;
   `compare_nests()` also takes a plain sequence of nests, named by label
   (repeated labels are numbered).
+- `nest_from_order(sample, order)`: nest a sample by removing its points in
+  a given order, so any ordering can be evaluated.
 
 ### Changed
 

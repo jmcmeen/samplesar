@@ -26,6 +26,14 @@ gets a plain list of nests.
 uniformly at random. It's the baseline every other strategy is compared
 against.
 
+## A given order
+
+`nest_from_order(sample, order, min_points=3)` removes points in the order
+given, one per step: any ordering, from a heuristic, an optimiser or an
+experiment's design, becomes a nest to evaluate like the others. The order
+needn't name every point; the nest stops when it runs out or `min_points`
+remain.
+
 ## From the outside in
 
 These strategies only remove points on the sample's convex hull, so the

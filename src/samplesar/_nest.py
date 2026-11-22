@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -183,3 +183,49 @@ def random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) ->
         remaining = np.delete(remaining, drop)
         steps.append(remaining.copy())
     return Nest(sample=sample, steps=tuple(steps))
+
+
+def nest_from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_points: int = 3) -> Nest:
+    """Nest a sample by removing its points in a given order.
+
+    Any ordering, from a heuristic, an optimiser or an experiment's design,
+    becomes a [`Nest`][samplesar.Nest] that the rest of the package can
+    evaluate. One point goes per step, in ``order``, until ``min_points``
+    remain or the order runs out; the order needn't name every point.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    order : sequence of int or np.ndarray
+        Rows of ``sample.points``, in the order to remove them.
+    min_points : int
+        Stop when this many points remain, even if the order goes on.
+
+    Returns
+    -------
+    Nest
+        With ``strategy`` ``"order"``.
+
+    Raises
+    ------
+    ValueError
+        If ``order`` repeats a point or names one outside the sample, isn't
+        a sequence of whole numbers, or ``min_points`` is below 1 or above the
+        sample's size.
+    """
+    check_size(sample, min_points)
+    order = np.asarray(order)
+    if order.ndim != 1 or (order.size and not np.issubdtype(order.dtype, np.integer)):
+        raise ValueError("order must be a one-dimensional sequence of point indices.")
+    n = sample.n_points
+    if order.size and (order.min() < 0 or order.max() >= n):
+        raise ValueError(f"order names a point outside the sample's {n} points.")
+    if len(np.unique(order)) < len(order):
+        raise ValueError("order repeats a point.")
+    remaining = np.arange(n)
+    steps = [remaining.copy()]
+    for point in order[: n - min_points]:
+        remaining = remaining[remaining != point]
+        steps.append(remaining.copy())
+    return Nest(sample=sample, steps=tuple(steps), strategy="order")
