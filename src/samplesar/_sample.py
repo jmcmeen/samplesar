@@ -226,7 +226,7 @@ class Sample:
         cls,
         observations: Iterable[Mapping[str, Any]] | None = None,
         *,
-        ranks: Iterable[str] | None = ("species",),
+        ranks: Iterable[str] | None = ("species", "subspecies", "variety", "form"),
         skip_obscured: bool = True,
         max_results: int | None = None,
         **query: Any,
@@ -243,15 +243,15 @@ class Sample:
         observations : iterable of dict, optional
             Observation records. If omitted, ``query`` is fetched.
         ranks : iterable of str or None
-            Keep only taxa at these ranks; by default species-level
-            identifications, so a genus-level record doesn't count as a
-            species. ``None`` keeps every rank.
+            Keep only taxa at these ranks; by default species and below, so
+            a genus-level record doesn't count as a species. A subspecies,
+            variety or form counts as its species. ``None`` keeps every rank.
         skip_obscured : bool
             Drop observations whose coordinates iNaturalist has obscured
             (randomised within a cell about 0.2° across), which would distort
             any hull.
         max_results : int, optional
-            Stop fetching after this many records.
+            Stop fetching after this many records (only with a query).
         **query
             Search parameters for ``get_observations``, such as
             ``place_id``, ``taxon_id``, ``user_id`` or ``quality_grade``.
@@ -263,7 +263,9 @@ class Sample:
         Raises
         ------
         ValueError
-            If no usable observations remain.
+            If no usable observations remain, both records and a query (or
+            ``max_results``) are given, or ``max_results`` or ``per_page`` is
+            below 1.
         ImportError
             If a query needs fetching and pyinaturalist isn't installed.
 
@@ -277,8 +279,8 @@ class Sample:
 
         if observations is None:
             observations = fetch_inaturalist(max_results=max_results, **query)
-        elif query:
-            raise ValueError("Give observations or a query, not both.")
+        elif query or max_results is not None:
+            raise ValueError("Give observations or a query (and max_results), not both.")
         frame = inaturalist_frame(observations, ranks=ranks, skip_obscured=skip_obscured)
         if frame.empty:
             raise ValueError(

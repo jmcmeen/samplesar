@@ -53,7 +53,8 @@ sample = samplesar.Sample.from_pyinaturalist(
 )
 ```
 
-Only species-level identifications are kept, and obscured coordinates
+Only identifications at species level or below are kept (a subspecies
+counts as its species), and obscured coordinates
 (randomised by iNaturalist within about 0.2°) are dropped, unless you ask
 otherwise (`ranks=None`, `skip_obscured=False`).
 

@@ -50,6 +50,15 @@ def test_records_become_a_sample():
     assert (row["lon"], row["lat"]) == (-82.22, 36.52)
 
 
+def test_subspecies_count_as_their_species():
+    records = [
+        record(1, name="Lithobates sphenocephalus utricularius", rank="subspecies"),
+        record(2, name="Lithobates sphenocephalus"),
+    ]
+    sample = samplesar.Sample.from_pyinaturalist(records)
+    assert sample.data["species"].tolist() == ["Lithobates sphenocephalus"] * 2
+
+
 def test_filters_can_be_relaxed():
     sample = samplesar.Sample.from_pyinaturalist(RECORDS, ranks=None, skip_obscured=False)
     assert {"Lithobates", "Hyla chrysoscelis", "Pseudacris crucifer"} <= set(sample.data["species"])
@@ -63,6 +72,8 @@ def test_nothing_usable():
 def test_records_and_a_query_together():
     with pytest.raises(ValueError, match="not both"):
         samplesar.Sample.from_pyinaturalist(RECORDS, place_id=1)
+    with pytest.raises(ValueError, match="not both"):
+        samplesar.Sample.from_pyinaturalist(RECORDS, max_results=2)
 
 
 @pytest.fixture
@@ -103,3 +114,28 @@ def test_a_query_needs_pyinaturalist(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyinaturalist", None)
     with pytest.raises(ImportError, match=r"samplesar\[inat\]"):
         samplesar.Sample.from_pyinaturalist(place_id=1)
+
+
+def test_pages_larger_than_the_api_serves_are_capped(fake_pyinaturalist):
+    sample = samplesar.Sample.from_pyinaturalist(place_id=1, per_page=500)
+    assert sample.n_observations == 450
+    assert all(c["per_page"] == 200 for c in fake_pyinaturalist)
+
+
+def test_a_fetch_resumes_from_id_above(fake_pyinaturalist):
+    sample = samplesar.Sample.from_pyinaturalist(place_id=1, id_above=300)
+    assert sample.n_observations == 150
+    assert fake_pyinaturalist[0]["id_above"] == 300
+
+
+@pytest.mark.parametrize(
+    ("option", "match"), [({"max_results": 0}, "max_results"), ({"per_page": 0}, "per_page")]
+)
+def test_sizes_below_one(fake_pyinaturalist, option, match):
+    with pytest.raises(ValueError, match=f"{match} must be at least 1"):
+        samplesar.Sample.from_pyinaturalist(place_id=1, **option)
+
+
+def test_per_page_none_means_the_default(fake_pyinaturalist):
+    samplesar.Sample.from_pyinaturalist(place_id=1, per_page=None, max_results=10)
+    assert fake_pyinaturalist[0]["per_page"] == 10

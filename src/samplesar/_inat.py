@@ -11,6 +11,8 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 PER_PAGE = 200  # the API's largest page
+SPECIES_LEVEL = ("species", "subspecies", "variety", "form")
+INFRASPECIFIC = {"subspecies", "variety", "form"}
 
 
 def _coordinates(record: Mapping[str, Any]) -> tuple[float, float] | None:
@@ -29,16 +31,26 @@ def _coordinates(record: Mapping[str, Any]) -> tuple[float, float] | None:
     return None
 
 
+def _species_name(taxon: Mapping[str, Any]) -> str:
+    """The taxon's name, with a subspecies, variety or form counted under its
+    species (the first two words of its name)."""
+    name = str(taxon["name"])
+    if taxon.get("rank") in INFRASPECIFIC:
+        return " ".join(name.split()[:2])
+    return name
+
+
 def inaturalist_frame(
     records: Iterable[Mapping[str, Any]],
-    ranks: Iterable[str] | None = ("species",),
+    ranks: Iterable[str] | None = SPECIES_LEVEL,
     skip_obscured: bool = True,
 ) -> pd.DataFrame:
     """iNaturalist observation records as ``species``, ``lon``, ``lat`` rows.
 
     Records without a taxon or coordinates are dropped, as are those whose
     taxon isn't at one of ``ranks`` (``None`` keeps every rank) and, with
-    ``skip_obscured``, those whose coordinates iNaturalist has obscured.
+    ``skip_obscured``, those whose coordinates iNaturalist has obscured. A
+    subspecies, variety or form counts as its species.
     """
     wanted = None if ranks is None else set(ranks)
     rows = []
@@ -62,7 +74,7 @@ def inaturalist_frame(
         if point is None:
             dropped["coordinates"] += 1
             continue
-        rows.append({"species": taxon["name"], "lon": point[0], "lat": point[1]})
+        rows.append({"species": _species_name(taxon), "lon": point[0], "lat": point[1]})
     if any(dropped.values()):
         logger.info("Dropped iNaturalist records: %s", dropped)
     return pd.DataFrame(rows, columns=["species", "lon", "lat"])
@@ -70,17 +82,24 @@ def inaturalist_frame(
 
 def fetch_inaturalist(max_results: int | None = None, **query: Any) -> list[dict[str, Any]]:
     """Every observation matching ``query``, paging by id past the API's
-    10,000-result limit (pyinaturalist keeps to the rate limit)."""
+    10,000-result limit (pyinaturalist keeps to the rate limit). A query's
+    ``id_above`` is where the fetch starts, so an interrupted one can resume."""
+    if max_results is not None and max_results < 1:
+        raise ValueError(f"max_results must be at least 1, got {max_results}.")
+    per_page = query.pop("per_page", None)
+    per_page = PER_PAGE if per_page is None else int(per_page)
+    if per_page < 1:
+        raise ValueError(f"per_page must be at least 1, got {per_page}.")
+    per_page = min(per_page, PER_PAGE)  # the API serves no more than this a page
     try:
         from pyinaturalist import get_observations
     except ImportError as err:
         raise ImportError(
             "Fetching from iNaturalist needs pyinaturalist: pip install 'samplesar[inat]'"
         ) from err
-    query = {k: v for k, v in query.items() if k not in ("page", "order", "order_by", "id_above")}
-    per_page = int(query.pop("per_page", PER_PAGE))
+    last_id = query.pop("id_above", None)
+    query = {k: v for k, v in query.items() if k not in ("page", "order", "order_by")}
     records: list[dict[str, Any]] = []
-    last_id = None
     while max_results is None or len(records) < max_results:
         size = per_page if max_results is None else min(per_page, max_results - len(records))
         page = get_observations(
