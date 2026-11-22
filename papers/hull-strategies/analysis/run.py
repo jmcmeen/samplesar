@@ -4,11 +4,14 @@ Usage (from the repository root):
 
     uv run python papers/hull-strategies/analysis/run.py \\
         --opendata ~/data/inaturalist-open-data/observations.parquet \\
-        [--local-sample path/to/observations.csv] [--quick]
+        [--local-sample path/to/observations.csv] \\
+        [--ecoregions path/to/us_eco_l3.zip] [--quick]
 
 ``--opendata`` is the Parquet file built by ``samplesar.sources.download_open_data``.
 ``--local-sample`` is an optional CSV of iNaturalist observations with
-``species``, ``longitude`` and ``latitude`` columns. ``--quick`` uses fewer
+``species``, ``longitude`` and ``latitude`` columns. ``--ecoregions`` is the
+US EPA's Level III ecoregions (us_eco_l3.zip, from the EPA's ecoregions
+page), for the Southern Appalachian samples. ``--quick`` uses fewer
 baseline nests and simulation replicates, for a fast check.
 
 Writes ``results/tables/*.csv`` and ``results/figures/*.png`` beside this
@@ -68,6 +71,35 @@ def regional() -> list[tuple[str, str, dict, float]]:
         ("etn_frogs", "East Tennessee, frogs", {"bbox": (-85.0, 35.0, -81.5, 37.0), "taxon_id": 20979}, 100),
         ("gsmnp_birds", "Great Smoky Mountains, birds", {"bbox": (-84.0, 35.43, -83.1, 35.79), "taxon_id": 3}, 50),
         ("monteverde_frogs", "Monteverde, Costa Rica, frogs", {"bbox": (-84.9, 10.25, -84.7, 10.40), "taxon_id": 20979}, 25),
+        # The whole country, clipped to its boundary (geoBoundaries).
+        ("costa_rica_frogs", "Costa Rica, frogs", {"boundary": ("CRI", 0), "taxon_id": 20979}, 100),
+    ]
+
+
+# The Southern Appalachians: EPA Level III Blue Ridge (66), Ridge and Valley
+# (67) and Southwestern Appalachians (68), south of the Roanoke Gap (37.3°N),
+# where the southern Blue Ridge ends; 66 and 67 run on north to Pennsylvania.
+SOUTHERN_APPALACHIAN_ECOREGIONS = ("66", "67", "68")
+ROANOKE_GAP_LAT = 37.3
+
+
+def southern_appalachians(ecoregions: Path | str):
+    """The Southern Appalachians as one WGS84 polygon, from the EPA's Level
+    III ecoregions (a local copy of us_eco_l3.zip, or its URL)."""
+    return samplesar.regions.read(
+        ecoregions,
+        samplesar.regions.ECOREGIONS["epa_l3"]["code"],
+        SOUTHERN_APPALACHIAN_ECOREGIONS,
+        clip=(-180, -90, 180, ROANOKE_GAP_LAT),
+    )
+
+
+def ecoregion_samples(ecoregions: Path | str) -> list[tuple[str, str, dict, float]]:
+    """Southern Appalachian samples: key, label, query, merge distance."""
+    region = southern_appalachians(ecoregions)
+    return [
+        ("sapp_frogs", "Southern Appalachians, frogs", {"boundary": region, "taxon_id": 20979}, 100),
+        ("sapp_salamanders", "Southern Appalachians, salamanders", {"boundary": region, "taxon_id": 26718}, 100),
     ]
 
 
@@ -80,13 +112,17 @@ def thin(sample: samplesar.Sample, max_points: int, seed: int = 0) -> samplesar.
     return sample.subset(keep)
 
 
-def load_datasets(parquet: Path | None, local: Path | None) -> list[Dataset]:
+def load_datasets(parquet: Path | None, local: Path | None, ecoregions: Path | str | None = None) -> list[Dataset]:
     datasets = []
     if local is not None:
         sample = samplesar.sources.csv(local, lon_col="longitude", lat_col="latitude")
         datasets.append(Dataset("local", "Steele Creek Park, one observer", sample, 10))
     if parquet is not None:
-        for key, label, query, merge in regional():
+        queries = regional() + (ecoregion_samples(ecoregions) if ecoregions else [])
+        for key, label, query, merge in queries:
+            if isinstance(query.get("boundary"), tuple):
+                country, level = query["boundary"]
+                query = {**query, "boundary": samplesar.regions.admin(country, level)}
             sample = samplesar.sources.open_data(parquet, **query)
             datasets.append(Dataset(key, label, sample, merge))
     return datasets
@@ -287,6 +323,81 @@ def figure_simulation(sim: pd.DataFrame, path: Path) -> None:
     plt.close(fig)
 
 
+BENCHMARK_SIZES = [250, 500, 1000, 2000, 4000]
+
+
+def machine() -> dict:
+    import platform
+
+    import shapely
+
+    cpu = platform.processor() or platform.machine()
+    try:  # macOS reports the chip here; Linux in /proc/cpuinfo
+        import subprocess
+
+        cpu = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True).stdout.strip() or cpu
+    except OSError:
+        pass
+    if Path("/proc/cpuinfo").exists():
+        for line in Path("/proc/cpuinfo").read_text().splitlines():
+            if line.startswith("model name"):
+                cpu = line.split(":", 1)[1].strip()
+                break
+    return {"cpu": cpu, "system": platform.platform(), "python": platform.python_version(),
+            "numpy": np.__version__, "shapely": shapely.__version__, "samplesar": samplesar.__version__}
+
+
+def benchmark(sizes: list[int], repeats: int) -> pd.DataFrame:
+    """Each strategy's run time (best of ``repeats``) on simulated samples of
+    ``sizes`` points: uniform points in a 2 km UTM square, 80 species."""
+    rows = []
+    for n in sizes:
+        rng = np.random.default_rng(n)
+        xy = rng.uniform(0, 2000, size=(n, 2)) + [500_000.0, 4_040_000.0]
+        df = pd.DataFrame({"species": rng.choice([f"sp{i}" for i in range(80)], n), "x": xy[:, 0], "y": xy[:, 1]})
+        sample = samplesar.sources.dataframe(df, lon_col="x", lat_col="y", crs="EPSG:32617")
+        _ = sample.xy  # the projection is computed once, outside the timings
+        for code, name, options in STRATEGIES:
+            best = np.inf
+            for _ in range(repeats):
+                start = time.perf_counter()
+                samplesar.strategies.run(sample, name, **options)
+                best = min(best, time.perf_counter() - start)
+                if best > 20:  # one long run is stable enough; don't repeat it
+                    break
+            rows.append({"strategy": code, "n_points": n, "seconds": best})
+        print(f"benchmark: {n} points done")
+    return pd.DataFrame(rows)
+
+
+def scaling(bench: pd.DataFrame) -> pd.DataFrame:
+    """Each strategy's fitted exponent b in seconds ~ n^b, from the sizes
+    where it took at least a millisecond (below that, overhead dominates)."""
+    rows = []
+    for code, group in bench.groupby("strategy", sort=False):
+        timed = group[group["seconds"] >= 1e-3]
+        b = np.polyfit(np.log(timed["n_points"]), np.log(timed["seconds"]), 1)[0] if len(timed) >= 2 else np.nan
+        largest = group.loc[group["n_points"].idxmax()]
+        rows.append({"strategy": code, "exponent": b, "n_points": int(largest["n_points"]), "seconds": largest["seconds"]})
+    return pd.DataFrame(rows)
+
+
+def figure_runtime(bench: pd.DataFrame, exponents: pd.DataFrame, path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(8, 5.5))
+    slope = exponents.set_index("strategy")["exponent"]
+    for code, group in bench.groupby("strategy", sort=False):
+        ax.plot(group["n_points"], group["seconds"], "o-", label=f"{code} (n^{slope[code]:.1f})")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("Points in the sample")
+    ax.set_ylabel("Seconds to build the nest (best of runs)")
+    ax.set_title("Run time by strategy")
+    ax.legend(fontsize=8, ncol=2)
+    fig.tight_layout()
+    fig.savefig(path, dpi=110)
+    plt.close(fig)
+
+
 def figure_compactness(nests: dict, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
     for code, nest in nests.items():
@@ -302,11 +413,25 @@ def figure_compactness(nests: dict, path: Path) -> None:
     plt.close(fig)
 
 
+def write_benchmark(tables: Path, figures: Path, quick: bool) -> None:
+    """Run the benchmark and write its tables, the machine and Fig. 7."""
+    sizes = BENCHMARK_SIZES[:3] if quick else BENCHMARK_SIZES
+    bench = benchmark(sizes, repeats=1 if quick else 3)
+    bench.to_csv(tables / "benchmark.csv", index=False)
+    exponents = scaling(bench)
+    exponents.to_csv(tables / "benchmark_scaling.csv", index=False)
+    pd.Series(machine()).to_csv(tables / "benchmark_machine.csv", header=["value"])
+    figure_runtime(bench, exponents, figures / "fig7_runtime.png")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--opendata", type=Path, help="observations.parquet from download_open_data")
     parser.add_argument("--local-sample", type=Path, help="CSV of iNaturalist observations")
+    parser.add_argument("--ecoregions", help="US EPA Level III ecoregions (us_eco_l3.zip): a local path or URL")
     parser.add_argument("--quick", action="store_true", help="fewer baselines and replicates")
+    parser.add_argument("--benchmark-only", action="store_true",
+                        help="only the run-time benchmark (simulated data; no other input needed)")
     parser.add_argument("--out", type=Path, default=RESULTS, help="where to write (default: results/)")
     args = parser.parse_args()
     warnings.simplefilter("ignore", UserWarning)  # bounds are recorded in the tables
@@ -318,10 +443,15 @@ def main() -> None:
     baseline_n = 19 if args.quick else 99
     replicates = 3 if args.quick else 20
 
+    if args.benchmark_only:
+        write_benchmark(tables, figures, args.quick)
+        print("written to", out)
+        return
     if args.opendata is None and args.local_sample is None:
         parser.error("give --opendata, --local-sample or both")
     datasets = load_datasets(args.opendata.expanduser() if args.opendata else None,
-                             args.local_sample.expanduser() if args.local_sample else None)
+                             args.local_sample.expanduser() if args.local_sample else None,
+                             args.ecoregions)
     summary, results, nests_by_dataset, labels = [], [], {}, {}
     for ds in datasets:
         raw = ds.sample
@@ -356,6 +486,7 @@ def main() -> None:
     sim.to_csv(tables / "simulations.csv", index=False)
     figure_simulation(sim, figures / "fig5_simulated_clusters.png")
     figure_compactness(nests_by_dataset[first.key], figures / "fig6_compactness.png")
+    write_benchmark(tables, figures, args.quick)
     print("written to", out)
 
 
