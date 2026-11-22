@@ -29,6 +29,9 @@ All notable changes to this project are documented here. The format is based on
   fetched through pyinaturalist (the new `inat` extra) past the API's
   10,000-result limit, keeping identifications at species level or below
   (a subspecies counts as its species) with true coordinates by default.
+- `plot_nest()`, `plot_nest_curve()` and `animate_nest()`: draw a nest's
+  points and hull at a step, its species-area curve with a power fit, and an
+  animation of it shrinking (saved as GIF or MP4).
 
 ### Changed
 

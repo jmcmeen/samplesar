@@ -67,3 +67,4 @@ nav:
       - Nests: api/nest.md
       - Strategy Registry: api/registry.md
       - Evaluation: api/evaluate.md
+      - Plotting: api/plot.md

@@ -82,6 +82,18 @@ fit = sars.sar_power(nest.sar_data())
 fit.params["z"], fit.r_squared
 ```
 
+## Plotting
+
+```python
+samplesar.plot_nest(nest, step=10)       # the points and hull at step 10
+samplesar.plot_nest_curve(nest)          # species against area, log axes, with a power fit
+animation = samplesar.animate_nest(nest)
+animation.save("nest.gif", writer="pillow")
+```
+
+matplotlib comes with sars, so plotting needs nothing extra; an MP4 needs
+ffmpeg installed.
+
 ## Saving a nest
 
 A nest can be saved and loaded, so an expensive one is built once:
