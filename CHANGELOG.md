@@ -8,8 +8,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
-- `Sample.merge_within(metres)`: merge points closer than a distance into
-  one, keeping every observation, so records at one spot (GPS jitter) don't
+- `Sample.merge_within(metres)`: merge points within a distance of each
+  other into one, keeping every observation, so records at one spot (GPS jitter) don't
   make the last steps of a hull nest measure centimetre-wide hulls.
 - `compare_nests()` has an `at_bounds` column naming the parameters that
   stopped on a bound of sars' search (such as the power model's z at 5 for a

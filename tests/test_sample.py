@@ -301,7 +301,28 @@ class TestMergeWithin:
         )
         assert smallest < 1e-6 < merged  # km²: below a square metre, then not
 
-    @pytest.mark.parametrize("bad", [0, -1, float("nan"), "5"])
+    def test_numpy_distances(self):
+        assert self.near().merge_within(np.int64(10)).n_points == 2
+
+    def test_a_long_chain_warns(self):
+        # Records every 4 m along a 500 m line, merged within 5 m: one chain.
+        x = 500_000 + np.arange(0, 500, 4.0)
+        sample = samplesar.Sample.from_df(frame(x, [4_000_000] * len(x)), crs="EPSG:32617")
+        with pytest.warns(UserWarning, match="chain over"):
+            assert sample.merge_within(5).n_points == 1
+
+    def test_a_distorting_crs_merges_at_true_distances(self):
+        from pyproj import Transformer
+
+        # Two points 8 m apart on the ground at 60°N, given in Web Mercator
+        # (where they're about 16 m apart in its units).
+        lon, lat = [10.0, 10.0 + 8 / (111_320 * np.cos(np.radians(60)))], [60.0, 60.0]
+        x, y = Transformer.from_crs(4326, 3857, always_xy=True).transform(lon, lat)
+        sample = samplesar.Sample.from_df(frame(x, y), crs=3857)
+        assert sample.merge_within(10).n_points == 1
+        assert sample.merge_within(5).n_points == 2
+
+    @pytest.mark.parametrize("bad", [0, -1, float("nan"), "5", True])
     def test_bad_distance(self, bad):
         with pytest.raises(ValueError, match="metres must be a positive number"):
             self.near().merge_within(bad)
