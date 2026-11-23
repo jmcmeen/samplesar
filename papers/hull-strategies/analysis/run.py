@@ -14,7 +14,7 @@ US EPA's Level III ecoregions (us_eco_l3.zip, from the EPA's ecoregions
 page), for the Southern Appalachian samples. ``--quick`` uses fewer
 baseline nests and simulation replicates, for a fast check.
 
-Writes ``results/tables/*.csv`` and ``results/figures/*.png`` beside this
+Writes ``results/tables/*.csv`` and ``results/figures/*.webp`` beside this
 folder (or under ``--out``). Nothing written holds coordinates of real observations: the only
 point maps are of a simulated sample.
 """
@@ -38,6 +38,7 @@ import samplesar  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE.parent / "results"
+WEBP = {"lossless": True, "method": 6}  # figures as lossless WebP: half the size of PNG
 
 # The strategies compared, S1 to S9 and the concave extension (S10).
 STRATEGIES = [
@@ -244,7 +245,7 @@ def figure_schematic(path: Path) -> None:
         ax.set_yticklabels([])
     fig.suptitle("The strategies on a simulated sample, at about half its points (removed points gray)")
     fig.tight_layout()
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=110, pil_kwargs=WEBP)
     plt.close(fig)
 
 
@@ -262,7 +263,7 @@ def figure_curves(nests_by_dataset: dict, labels: dict, path: Path) -> None:
     axes[0][0].set_ylabel("Species")
     axes[0][-1].legend(fontsize=7, markerscale=3, ncol=2)
     fig.tight_layout()
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=110, pil_kwargs=WEBP)
     plt.close(fig)
 
 
@@ -283,7 +284,7 @@ def figure_z(table: pd.DataFrame, labels: dict, path: Path) -> None:
     ax.set_title("z by strategy (hatched: stopped on sars' bound, not an estimate; cut at 1.2)")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=110, pil_kwargs=WEBP)
     plt.close(fig)
 
 
@@ -297,7 +298,7 @@ def figure_merge(sens: pd.DataFrame, path: Path) -> None:
     ax.set_title("Sensitivity of z to merging co-located records")
     ax.legend(fontsize=8, ncol=2)
     fig.tight_layout()
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=110, pil_kwargs=WEBP)
     plt.close(fig)
 
 
@@ -314,7 +315,7 @@ def figure_simulation(sim: pd.DataFrame, path: Path) -> None:
     axes[1].legend(fontsize=8, ncol=2)
     fig.suptitle("Simulated clustered effort")
     fig.tight_layout()
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=110, pil_kwargs=WEBP)
     plt.close(fig)
 
 
@@ -329,7 +330,7 @@ def figure_compactness(nests: dict, path: Path) -> None:
     ax.set_title("How each strategy shapes the hull")
     ax.legend(fontsize=8, ncol=2)
     fig.tight_layout()
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=110, pil_kwargs=WEBP)
     plt.close(fig)
 
 
@@ -374,9 +375,9 @@ def main() -> None:
     strategies = pd.concat(results, ignore_index=True)
     strategies.to_csv(tables / "strategies.csv", index=False)
 
-    figure_schematic(figures / "fig1_strategies.png")
-    figure_curves(nests_by_dataset, labels, figures / "fig2_curves.png")
-    figure_z(strategies, labels, figures / "fig3_z_by_strategy.png")
+    figure_schematic(figures / "fig1_strategies.webp")
+    figure_curves(nests_by_dataset, labels, figures / "fig2_curves.webp")
+    figure_z(strategies, labels, figures / "fig3_z_by_strategy.webp")
     # The sensitivity analysis and the compactness figure use the local
     # sample when given (as the draft describes), else the first region.
     first = next((d for d in datasets if d.key == "local"), datasets[0])
@@ -384,11 +385,11 @@ def main() -> None:
     sens = merge_sensitivity(first.sample, [0, 2, 5, 10, 25, 50])
     sens.insert(0, "dataset", first.key)
     sens.to_csv(tables / "merge_sensitivity.csv", index=False)
-    figure_merge(sens, figures / "fig4_merge_sensitivity.png")
+    figure_merge(sens, figures / "fig4_merge_sensitivity.webp")
     sim = simulations(replicates)
     sim.to_csv(tables / "simulations.csv", index=False)
-    figure_simulation(sim, figures / "fig5_simulated_clusters.png")
-    figure_compactness(nests_by_dataset[first.key], figures / "fig6_compactness.png")
+    figure_simulation(sim, figures / "fig5_simulated_clusters.webp")
+    figure_compactness(nests_by_dataset[first.key], figures / "fig6_compactness.webp")
     print("written to", out)
 
 

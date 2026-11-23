@@ -322,13 +322,13 @@ sample.
 
 ## Figures
 
-1. `results/figures/fig1_strategies.png`: each strategy on a simulated sample, at about half its points.
-2. `results/figures/fig2_curves.png`: species-area curves of every strategy, per sample.
-3. `results/figures/fig3_z_by_strategy.png`: *z* by strategy and sample.
-4. `results/figures/fig4_merge_sensitivity.png`: *z* against the merge distance, single-observer park sample.
-5. `results/figures/fig5_simulated_clusters.png`: simulated clustering, with and without merging.
-6. `results/figures/fig6_compactness.png`: hull compactness as points are removed.
-7. `results/benchmarks/<machine>/fig7_runtime.png`: run time against sample size, by strategy (one per machine benchmarked).
+1. `results/figures/fig1_strategies.webp`: each strategy on a simulated sample, at about half its points.
+2. `results/figures/fig2_curves.webp`: species-area curves of every strategy, per sample.
+3. `results/figures/fig3_z_by_strategy.webp`: *z* by strategy and sample.
+4. `results/figures/fig4_merge_sensitivity.webp`: *z* against the merge distance, single-observer park sample.
+5. `results/figures/fig5_simulated_clusters.webp`: simulated clustering, with and without merging.
+6. `results/figures/fig6_compactness.webp`: hull compactness as points are removed.
+7. `results/benchmarks/<machine>/fig7_runtime.webp`: run time against sample size, by strategy (one per machine benchmarked).
 
 ## References (to verify)
 

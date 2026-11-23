@@ -23,7 +23,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from run import RESULTS, STRATEGIES  # noqa: E402
+from run import RESULTS, STRATEGIES, WEBP  # noqa: E402
 
 import samplesar  # noqa: E402
 
@@ -98,7 +98,7 @@ def figure_runtime(bench: pd.DataFrame, exponents: pd.DataFrame, path: Path) -> 
     ax.set_title("Run time by strategy")
     ax.legend(fontsize=8, ncol=2)
     fig.tight_layout()
-    fig.savefig(path, dpi=110)
+    fig.savefig(path, dpi=110, pil_kwargs=WEBP)
     plt.close(fig)
 
 
@@ -124,7 +124,7 @@ def main() -> None:
     exponents = scaling(bench)
     exponents.to_csv(folder / "scaling.csv", index=False)
     pd.Series(about).to_csv(folder / "machine.csv", header=["value"])
-    figure_runtime(bench, exponents, folder / "fig7_runtime.png")
+    figure_runtime(bench, exponents, folder / "fig7_runtime.webp")
     print("written to", folder)
 
 
