@@ -23,6 +23,40 @@ def _lonlat(nest: Nest) -> np.ndarray:
     return points
 
 
+def _mask_lonlat(nest: Nest) -> Any:
+    """The sample's mask, or None. A sample keeps only the part of its mask
+    near its points, in longitudes unwrapped as ``_lonlat`` unwraps them."""
+    return nest.sample.mask
+
+
+def _rings(geometry: Any) -> list[np.ndarray]:
+    """Every ring (exteriors and holes) of a geometry's polygons."""
+    rings = []
+    for polygon in getattr(geometry, "geoms", [geometry]):
+        if isinstance(polygon, Polygon) and not polygon.is_empty:
+            rings.append(np.asarray(polygon.exterior.coords))
+            rings.extend(np.asarray(r.coords) for r in polygon.interiors)
+    return rings
+
+
+def _fill(ax: Axes, geometry: Any, **style: Any) -> None:
+    """Fill a geometry's polygons, leaving their holes empty."""
+    from matplotlib.patches import PathPatch
+    from matplotlib.path import Path
+    from shapely.geometry.polygon import orient
+
+    for polygon in getattr(geometry, "geoms", [geometry]):
+        if not isinstance(polygon, Polygon) or polygon.is_empty:
+            continue
+        # Exteriors counterclockwise and holes clockwise, so holes stay empty.
+        rings = _rings(orient(polygon, sign=1.0))
+        vertices = np.concatenate(rings)
+        codes = np.concatenate(
+            [[Path.MOVETO] + [Path.LINETO] * (len(r) - 2) + [Path.CLOSEPOLY] for r in rings]
+        )
+        ax.add_patch(PathPatch(Path(vertices, codes), **style))
+
+
 def _hull_ring(nest: Nest, step: int, lonlat_all: np.ndarray) -> np.ndarray | None:
     """The step's convex hull, as a closed ring of (lon, lat) points, or
     None when its points don't make a polygon."""
@@ -95,7 +129,17 @@ def nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: bool =
     own_axes = ax is None
     if ax is None:
         _, ax = plt.subplots()
-    _draw(nest, step % nest.n_steps, ax, show_removed, nest.to_frame(), _lonlat(nest), own_axes)
+    points = _lonlat(nest)
+    _draw(
+        nest,
+        step % nest.n_steps,
+        ax,
+        show_removed,
+        nest.to_frame(),
+        points,
+        own_axes,
+        _mask_lonlat(nest),
+    )
     return ax
 
 
@@ -107,17 +151,30 @@ def _draw(
     table: Any,
     points: np.ndarray,
     own_axes: bool = True,
+    mask: Any = None,
 ) -> None:
-    """Draw a step, given the nest's table and unwrapped points (computed once
-    for an animation rather than per frame)."""
+    """Draw a step, given the nest's table, unwrapped points and mask
+    (computed once for an animation rather than per frame). With a mask,
+    its outline is drawn and only the hull's part inside it is filled."""
     kept = nest.steps[step]
     if show_removed:
         gone = np.setdiff1d(np.arange(len(points)), kept)
         ax.scatter(points[gone, 0], points[gone, 1], s=12, color="0.75", label="removed")
     ax.scatter(points[kept, 0], points[kept, 1], s=16, color="C0", label="remaining", zorder=3)
+    if mask is not None:
+        for edge in _rings(mask):
+            ax.plot(edge[:, 0], edge[:, 1], color="0.45", linewidth=0.8, zorder=1)
     ring = _hull_ring(nest, step, points)
     if ring is not None:
-        ax.fill(ring[:, 0], ring[:, 1], color="C1", alpha=0.2, zorder=1)
+        hull = Polygon(ring)
+        _fill(
+            ax,
+            hull if mask is None else mask.intersection(hull),
+            color="C1",
+            alpha=0.2,
+            zorder=1,
+            linewidth=0,
+        )
         ax.plot(ring[:, 0], ring[:, 1], color="C1", linewidth=1.5, zorder=2)
     _frame_axes(ax, points, own_axes)
     ax.set_title(_caption(nest, step, table))
@@ -200,10 +257,11 @@ def animate(
     fig, ax = plt.subplots(**subplots)
     order = list(range(nest.n_steps))[::-1] if reverse else list(range(nest.n_steps))
     table, points = nest.to_frame(), _lonlat(nest)
+    mask = _mask_lonlat(nest)
 
     def draw(step: int) -> list[Any]:
         ax.clear()
-        _draw(nest, step, ax, show_removed, table, points)
+        _draw(nest, step, ax, show_removed, table, points, True, mask)
         return list(ax.get_children())
 
     # The frames are the steps themselves, in the order they're shown.

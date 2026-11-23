@@ -22,42 +22,49 @@ def diagnostics(nest: Nest) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        One row per step: ``step``, ``n_points``, ``area`` (km²),
+        One row per step: ``step``, ``n_points``, ``area`` (km², within the
+        sample's mask (see [`with_mask`][samplesar.Sample.with_mask]) if it has one),
         ``perimeter`` (km; with a distorting ``crs``, corrected by its scale
         at the sample's center, as areas are), ``compactness`` (Polsby-Popper, 4πA/P²: 1 for a
         circle, near 0 for a sliver), ``area_share`` (of the first step's
         area), ``density`` (points per km²) and ``centroid_shift`` (km from
         the first hull's centroid). Shape columns are missing where the
-        step's points don't make a polygon.
+        step's points don't make a polygon. With a mask, also
+        ``mask_share``: the share of the step's hull inside the mask. Shape
+        columns describe the whole hull; ``area_share`` and ``density`` use
+        ``area``.
     """
-    xy = nest.sample.xy
-    scale = nest.sample.area_scale
+    sample = nest.sample
+    masked = sample.mask is not None
+    xy = sample.xy
+    scale = sample.area_scale
     # A distorting crs stretches lengths by about the root of its areal scale.
     length = float(np.sqrt(scale))
     first = MultiPoint(xy[nest.steps[0]]).convex_hull
     origin = np.asarray(first.centroid.coords[0])
-    area0 = first.area / scale if isinstance(first, Polygon) else np.nan
+    area0 = sample.hull_area_of(nest.steps[0]) if isinstance(first, Polygon) else np.nan
     rows = []
     for i, idx in enumerate(nest.steps):
         hull = MultiPoint(xy[idx]).convex_hull
         polygon = isinstance(hull, Polygon)
-        area = hull.area / scale if polygon else 0.0
+        area = sample.areas_of(idx)[0] if polygon else 0.0
         perimeter = hull.length / length if polygon else np.nan
-        rows.append(
-            {
-                "step": i,
-                "n_points": len(idx),
-                "area": area,
-                "perimeter": perimeter,
-                "compactness": 4 * np.pi * hull.area / hull.length**2 if polygon else np.nan,
-                "area_share": area / area0 if polygon and area0 > 0 else np.nan,
-                "density": len(idx) / area if polygon and area > 0 else np.nan,
-                "centroid_shift": float(np.hypot(*(np.asarray(hull.centroid.coords[0]) - origin)))
-                / length
-                if len(idx)
-                else np.nan,
-            }
-        )
+        row = {
+            "step": i,
+            "n_points": len(idx),
+            "area": area,
+            "perimeter": perimeter,
+            "compactness": 4 * np.pi * hull.area / hull.length**2 if polygon else np.nan,
+            "area_share": area / area0 if polygon and area0 > 0 else np.nan,
+            "density": len(idx) / area if polygon and area > 0 else np.nan,
+            "centroid_shift": float(np.hypot(*(np.asarray(hull.centroid.coords[0]) - origin)))
+            / length
+            if len(idx)
+            else np.nan,
+        }
+        if masked:
+            row["mask_share"] = area * scale / hull.area if polygon else np.nan
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
