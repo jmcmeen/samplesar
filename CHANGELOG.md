@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-23
+
 ### Added
 
 - `strategies.hull_masked_area(sample, keep="largest")`: `hull_area`'s choice
