@@ -1,13 +1,15 @@
-# Plotting API
+# Plotting
 
-## plot_nest
+`samplesar.plot`: drawing nests (matplotlib).
 
-::: samplesar.plot_nest
+## plot.nest
 
-## plot_nest_curve
+::: samplesar.plot.nest
 
-::: samplesar.plot_nest_curve
+## plot.curve
 
-## animate_nest
+::: samplesar.plot.curve
 
-::: samplesar.animate_nest
+## plot.animate
+
+::: samplesar.plot.animate

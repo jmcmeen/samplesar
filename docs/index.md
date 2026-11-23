@@ -12,16 +12,16 @@ pip install samplesar
 ```python
 import samplesar, sars
 
-sample = samplesar.Sample.from_csv("observations.csv")   # species, lon, lat
-nest = samplesar.random_nest(sample, seed=0)
+sample = samplesar.sources.csv("observations.csv")   # species, lon, lat
+nest = samplesar.strategies.random(sample, seed=0)
 fit = sars.sar_power(nest.sar_data())
 ```
 
 - [Getting started](getting-started.md): load a sample, nest it, fit the curve.
 - [Sampling strategies](strategies.md): what each design removes, step by step.
-- [API reference](api/sample.md).
+- [API reference](api/core.md).
 
 !!! note "Areas are in km²"
     Areas are convex hull areas in km², measured on an equal-area projection
-    of the WGS84 ellipsoid centred on each sample, or in the sample's own
+    of the WGS84 ellipsoid centered on each sample, or in the sample's own
     projected coordinate system when it has one. Distances are in km.

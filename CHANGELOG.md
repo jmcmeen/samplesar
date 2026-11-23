@@ -6,6 +6,74 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `Sample.within(boundary)` and `sources.open_data(..., boundary=...)`:
+  keep only the observations inside a region's outline, from a shapely
+  polygon in WGS84 or a GeoDataFrame or GeoSeries in any CRS.
+- `regions.admin(country, level=0, name=None)`: a country's, state's or
+  county's boundary from geoBoundaries' open release, cached, for
+  `within` and `boundary=`.
+- `regions.read(source, column, values, clip=...)` and
+  `regions.ecoregion(source, codes=..., names=...)`: regions from any
+  boundary file or URL (cached), or from the US EPA's Level III and IV and
+  RESOLVE 2017 ecoregions, through the new `geo` extra (geopandas).
+- `sources.gbif()`: a sample from GBIF occurrences, records you have or a
+  query fetched through pygbif (the new `gbif` extra) up to the search API's
+  100,000-record limit, keeping present, georeferenced, species-level
+  records without geospatial issues, optionally by coordinate uncertainty
+  and boundary.
+
+- Four strategies that rank every point once, which is fast on large samples:
+  `strategies.radial` (shrinking discs around a center), `strategies.sweep`
+  (a front moving along a bearing), `strategies.density_peel` (lowest kernel
+  density first, giving kernel-smoothed boundaries) and `strategies.grow`
+  (the reverse of a region grown from a seed by nearest neighbors).
+
+- `strategies.hull_weighted`: a random hull vertex, picked with probability
+  proportional to its isolation (distance to the nearest other point) raised
+  to `power`, so isolated outliers tend to go first.
+
+- `strategies.grid_peel(sample, cell_km)`: hull peeling of the occupied grid
+  cells at a chosen scale, removing whole cells together, for multi-scale
+  removal.
+
+### Changed
+
+- **Breaking: the API is grouped by job, and the old top-level names are
+  gone** (no aliases):
+  - `samplesar.sources`: `dataframe`, `csv`, `geodataframe`, `inaturalist`,
+    `open_data` and `download_open_data` replace `Sample.from_df`,
+    `from_csv`, `from_geodataframe`, `from_pyinaturalist`, `from_open_data`
+    and `samplesar.download_open_data`.
+  - `samplesar.regions`: `admin`, `ecoregion` and `read`.
+  - `samplesar.strategies`: `random`, `from_order`, `hull_random`,
+    `hull_peel`, `hull_area`, `hull_species`, `hull_distance` and
+    `concave_peel` replace the `*_nest` functions and `nest_from_order`;
+    `run`, `available` and `register` replace `nest`, `strategies` and
+    `register_strategy`.
+  - `samplesar.evaluate`: `compare`, `baseline`, `against_baseline`,
+    `diagnostics` and `autocorrelation` replace `compare_nests`,
+    `random_baseline`, `compare_to_baseline`, `nest_diagnostics` and
+    `residual_autocorrelation`.
+  - `samplesar.plot`: `nest`, `curve` and `animate` replace `plot_nest`,
+    `plot_nest_curve` and `animate_nest`.
+
+  `Sample`, `Nest` and `hull_area` stay at the top level, as do methods such
+  as `Sample.within` and `Nest.fit`. Registered strategy names and nest
+  labels are unchanged by the regrouping.
+
+- **Breaking: US English spellings.** `Sample(centre=...)` is now
+  `Sample(center=...)`, `Sample.projection_centre` is
+  `Sample.projection_center`, and `Sample.merge_within(metres)` is
+  `merge_within(meters)`; the docs use US spellings throughout. Saved nests
+  store the sample's `center` (format version 3); files saved with `centre`
+  still load, as do nests saved with a `centre` option, read as `center`.
+
+- samplesar needs sars 0.11.5 or newer, which reports the parameters a fit
+  left on a bound (`at_bounds` in `evaluate.compare` and the baseline's
+  `at_bounds_share`).
+
 ## [0.1.3] - 2026-11-22
 
 ### Added

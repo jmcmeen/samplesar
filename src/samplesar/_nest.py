@@ -14,15 +14,15 @@ import pandas as pd
 from pyproj import CRS
 from pyproj.exceptions import CRSError
 
-from samplesar._registry import Options, register_strategy
-from samplesar._sample import Sample, hull_area, point_species
+from samplesar._registry import Options, register
+from samplesar._sample import Sample, _validate, hull_area, point_species
 
 
 @dataclass(frozen=True)
 class Nest:
     """A nested sequence of sub-samples of one [`Sample`][samplesar.Sample].
 
-    Made by a nesting strategy such as [`random_nest`][samplesar.random_nest]. Strategies differ only
+    Made by a nesting strategy such as [`strategies.random`][samplesar.strategies.random]. Strategies differ only
     in which points they drop at each step.
 
     Attributes
@@ -147,7 +147,7 @@ class Nest:
                 "lon": data["lon"].tolist(),
                 "lat": data["lat"].tolist(),
             },
-            "centre": list(self.sample.centre) if self.sample.centre is not None else None,
+            "center": list(self.sample.center) if self.sample.center is not None else None,
             "crs": self.sample.crs.to_wkt() if self.sample.crs is not None else None,
             "first": np.asarray(self.steps[0]).tolist(),
             "removed": removed,
@@ -184,18 +184,20 @@ class Nest:
                 f"Saved with nest format {version}; this samplesar reads up to "
                 f"{FORMAT_VERSION}. Upgrade samplesar to load it."
             )
-        sample = Sample.from_df(pd.DataFrame(data["observations"]))
-        centre = data.get("centre")
+        sample = Sample(_validate(pd.DataFrame(data["observations"])))
+        center = data.get("center")
+        if center is None and version < 3:
+            center = data.get("centre")  # its key before version 3
         crs = data.get("crs")
-        if centre is not None or crs is not None:
+        if center is not None or crs is not None:
             try:
                 sample = dataclasses.replace(
                     sample,
-                    centre=tuple(centre) if centre is not None else None,
+                    center=tuple(center) if center is not None else None,
                     crs=CRS.from_wkt(crs) if crs is not None else None,
                 )
             except (TypeError, ValueError, CRSError) as err:
-                raise ValueError(f"The saved centre or crs is unusable: {err}") from err
+                raise ValueError(f"The saved center or crs is unusable: {err}") from err
         remaining = _indices(data["first"])
         if remaining.size and (remaining.min() < 0 or remaining.max() >= sample.n_points):
             raise ValueError("The saved steps name points outside the saved sample.")
@@ -208,11 +210,14 @@ class Nest:
                 raise ValueError("A saved step removes a point that isn't there.")
             remaining = remaining[~np.isin(remaining, gone)]
             steps.append(remaining)
+        options = dict(data.get("options", {}))
+        if version < 3 and "centre" in options:  # radial's keyword before version 3
+            options["center"] = options.pop("centre")
         return cls(
             sample=sample,
             steps=tuple(steps),
             strategy=data.get("strategy", ""),
-            options=Options(data.get("options", {})),
+            options=Options(options),
         )
 
     def to_json(self, path: str | Path) -> None:
@@ -297,7 +302,7 @@ def check_size(sample: Sample, min_points: int) -> None:
 
 
 FORMAT = "samplesar.nest"
-FORMAT_VERSION = 2  # 2 adds the sample's centre and crs
+FORMAT_VERSION = 3  # 2 adds the sample's center and crs; 3 spells the key "center"
 
 
 def _package_version() -> str:
@@ -333,8 +338,8 @@ def _plain(name: str, value: Any) -> Any:
     )
 
 
-@register_strategy("random")
-def random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
+@register("random")
+def random(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
     """Nest a sample by removing one point at a time, uniformly at random.
 
     The baseline every other strategy is compared against.
@@ -369,11 +374,11 @@ def random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) ->
     return Nest(sample=sample, steps=tuple(steps))
 
 
-@register_strategy("order")
-def nest_from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_points: int = 3) -> Nest:
+@register("order")
+def from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_points: int = 3) -> Nest:
     """Nest a sample by removing its points in a given order.
 
-    Any ordering, from a heuristic, an optimiser or an experiment's design,
+    Any ordering, from a heuristic, an optimizer or an experiment's design,
     becomes a [`Nest`][samplesar.Nest] that the rest of the package can
     evaluate. One point goes per step, in ``order``, until ``min_points``
     remain or the order runs out; the order needn't name every point.
@@ -391,7 +396,7 @@ def nest_from_order(sample: Sample, order: Sequence[int] | np.ndarray, min_point
     Returns
     -------
     Nest
-        Registered as ``"order"``, so ``samplesar.nest(sample, "order",
+        Registered as ``"order"``, so ``samplesar.strategies.run(sample, "order",
         order=...)`` is the same.
 
     Raises

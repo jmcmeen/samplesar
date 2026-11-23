@@ -55,7 +55,7 @@ def fit_nest(nest: Nest, model: str = "power", name: str | None = None, **kwargs
     return func(data, **kwargs)
 
 
-def compare_nests(
+def compare(
     nests: Mapping[str, Nest] | Iterable[Nest], model: str = "power", **kwargs: Any
 ) -> pd.DataFrame:
     """Fit the same sars model to several nests and compare the fits.
@@ -84,8 +84,8 @@ def compare_nests(
         parameters (``c`` and ``z`` for the power model), ``r_squared``,
         ``aicc``, ``converged`` and ``at_bounds``: the parameters that
         stopped on a bound of sars' search, whose values are the bound's and
-        not estimates (empty when none; missing, ``pd.NA``, with a sars too
-        old to tell).
+        not estimates (empty when none; missing, ``pd.NA``, for a fit
+        object that doesn't report it).
 
     Warns
     -----
@@ -102,10 +102,10 @@ def compare_nests(
     Examples
     --------
     >>> nests = {  # doctest: +SKIP
-    ...     "random": samplesar.random_nest(sample, seed=0),
-    ...     "peel": samplesar.hull_peel_nest(sample),
+    ...     "random": samplesar.strategies.random(sample, seed=0),
+    ...     "peel": samplesar.strategies.hull_peel(sample),
     ... }
-    >>> samplesar.compare_nests(nests)  # doctest: +SKIP
+    >>> samplesar.evaluate.compare(nests)  # doctest: +SKIP
     """
     if not isinstance(nests, Mapping):
         named: dict[str, Nest] = {}
@@ -154,12 +154,12 @@ def compare_nests(
 
 def _at_bounds(fit: Any) -> Any:
     """The fit's parameters on a bound (sars' ``SARFit.at_bounds``), or a
-    missing value (``pd.NA``) in the table with a sars that can't tell."""
+    missing value (``pd.NA``) for a fit object that doesn't report it."""
     names = getattr(fit, "at_bounds", None)
     return pd.NA if names is None else tuple(names)
 
 
-def random_baseline(
+def baseline(
     sample: Any,
     model: str = "power",
     n: int = 99,
@@ -172,7 +172,7 @@ def random_baseline(
     Steps of one nest share most of their points, so one nest's R² and AICc
     aren't independent evidence. Compare a strategy's fit with the spread of
     fits from random nests of the same sample instead (see
-    [`compare_to_baseline`][samplesar.compare_to_baseline]).
+    [`evaluate.against_baseline`][samplesar.evaluate.against_baseline]).
 
     Parameters
     ----------
@@ -193,7 +193,7 @@ def random_baseline(
     Returns
     -------
     pd.DataFrame
-        One row per nest, as [`compare_nests`][samplesar.compare_nests]
+        One row per nest, as [`evaluate.compare`][samplesar.evaluate.compare]
         gives, indexed by seed.
 
     Raises
@@ -204,8 +204,7 @@ def random_baseline(
     """
     import inspect
 
-    from samplesar._registry import _REGISTRY
-    from samplesar._registry import nest as run
+    from samplesar._registry import _REGISTRY, run
 
     if n < 1:
         raise ValueError(f"n must be at least 1, got {n}.")
@@ -218,13 +217,13 @@ def random_baseline(
     with warnings.catch_warnings():
         # Bounds are reported per row instead; other warnings still show.
         warnings.filterwarnings("ignore", message="Parameters stopped on a bound")
-        table = compare_nests(nests, model=model)
+        table = compare(nests, model=model)
     table.index = table.index.astype(int)
     table.index.name = "seed"
     return table
 
 
-def compare_to_baseline(nest: Nest, baseline: pd.DataFrame, model: str = "power") -> pd.DataFrame:
+def against_baseline(nest: Nest, baseline: pd.DataFrame, model: str = "power") -> pd.DataFrame:
     """Where a nest's fit falls among a baseline's.
 
     Parameters
@@ -232,7 +231,7 @@ def compare_to_baseline(nest: Nest, baseline: pd.DataFrame, model: str = "power"
     nest : Nest
         The nest to place.
     baseline : pd.DataFrame
-        From [`random_baseline`][samplesar.random_baseline], for the same
+        From [`evaluate.baseline`][samplesar.evaluate.baseline], for the same
         sample and model.
     model : str
         The model the baseline was fitted with.
@@ -276,8 +275,8 @@ def compare_to_baseline(nest: Nest, baseline: pd.DataFrame, model: str = "power"
         values = values[np.isfinite(values)]
         if len(values) == 0:
             raise ValueError(f"No baseline fit has a finite {name}.")
-        centre = np.median(values)
-        extreme = np.count_nonzero(np.abs(values - centre) >= abs(value - centre))
+        center = np.median(values)
+        extreme = np.count_nonzero(np.abs(values - center) >= abs(value - center))
         rows[name] = {
             "value": value,
             "mean": values.mean(),

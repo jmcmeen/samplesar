@@ -15,10 +15,10 @@ if TYPE_CHECKING:
 
 
 def _lonlat(nest: Nest) -> np.ndarray:
-    """The sample's points with longitudes unwrapped around its centre, so a
+    """The sample's points with longitudes unwrapped around its center, so a
     sample across the antimeridian draws as one piece."""
     points = np.array(nest.sample.points, dtype=float)
-    lon0 = nest.sample.projection_centre[0]
+    lon0 = nest.sample.projection_center[0]
     points[:, 0] = (points[:, 0] - lon0 + 180.0) % 360.0 - 180.0 + lon0
     return points
 
@@ -64,7 +64,7 @@ def _frame_axes(ax: Axes, points: np.ndarray, own_axes: bool) -> None:
         ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{(x + 180) % 360 - 180:g}"))
 
 
-def plot_nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: bool = True) -> Axes:
+def nest(nest: Nest, step: int = 0, ax: Axes | None = None, show_removed: bool = True) -> Axes:
     """Draw one step of a nest: its points and convex hull.
 
     Parameters
@@ -123,7 +123,7 @@ def _draw(
     ax.set_title(_caption(nest, step, table))
 
 
-def plot_nest_curve(nest: Nest, ax: Axes | None = None, fit: bool = True) -> Axes:
+def curve(nest: Nest, ax: Axes | None = None, fit: bool = True) -> Axes:
     """Draw a nest's species-area curve on log axes.
 
     Parameters
@@ -164,7 +164,7 @@ def plot_nest_curve(nest: Nest, ax: Axes | None = None, fit: bool = True) -> Axe
     return ax
 
 
-def animate_nest(
+def animate(
     nest: Nest,
     interval: int = 200,
     show_removed: bool = True,

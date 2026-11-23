@@ -8,8 +8,8 @@ table to [sars](https://pypi.org/project/sars/) for curve fitting.
 ```python
 import samplesar, sars
 
-sample = samplesar.Sample.from_csv("observations.csv")   # species, lon, lat
-nest = samplesar.random_nest(sample, seed=0)
+sample = samplesar.sources.csv("observations.csv")   # species, lon, lat
+nest = samplesar.strategies.random(sample, seed=0)
 fit = sars.sar_power(nest.sar_data())
 ```
 

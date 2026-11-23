@@ -15,7 +15,7 @@ def frame(lons, lats, species=None):
 
 def box(lon0, lat0, d=1.0):
     lons, lats = [lon0, lon0 + d, lon0 + d, lon0], [lat0, lat0, lat0 + d, lat0 + d]
-    return samplesar.Sample.from_df(frame(lons, lats)), lons, lats
+    return samplesar.sources.dataframe(frame(lons, lats)), lons, lats
 
 
 @pytest.mark.parametrize("lat0", [0, 45, 60, 80, -50])
@@ -31,16 +31,16 @@ def test_area_shrinks_towards_the_poles():
 
 
 def test_a_sample_across_the_antimeridian():
-    across = samplesar.Sample.from_df(frame([179.5, -179.5, -179.5, 179.5], [10, 10, 11, 11]))
-    here = samplesar.Sample.from_df(frame([0, 1, 1, 0], [10, 10, 11, 11]))
+    across = samplesar.sources.dataframe(frame([179.5, -179.5, -179.5, 179.5], [10, 10, 11, 11]))
+    here = samplesar.sources.dataframe(frame([0, 1, 1, 0], [10, 10, 11, 11]))
     assert across.area == pytest.approx(here.area, rel=1e-9)
-    assert abs(across.projection_centre[0]) == pytest.approx(180)
+    assert abs(across.projection_center[0]) == pytest.approx(180)
 
 
 def test_a_subset_keeps_the_projection():
-    sample = samplesar.Sample.from_df(frame([0, 1, 1, 0, 0.2], [0, 0, 1, 1, 0.3]))
+    sample = samplesar.sources.dataframe(frame([0, 1, 1, 0, 0.2], [0, 0, 1, 1, 0.3]))
     part = sample.subset([0, 1, 4])
-    assert part.projection_centre == sample.projection_centre
+    assert part.projection_center == sample.projection_center
     np.testing.assert_allclose(part.xy, sample.xy[[0, 1, 4]])
 
 
@@ -53,10 +53,10 @@ def test_xy_and_points_are_read_only():
 
 class TestCRS:
     def test_projected_coordinates_are_measured_in_their_crs(self):
-        # A square 1 km a side in UTM zone 17N metres. UTM shrinks distances by
+        # A square 1 km a side in UTM zone 17N meters. UTM shrinks distances by
         # 0.9996 near its central meridian, so on the ground it's 1.0008 km².
         x, y = [500_000, 501_000, 501_000, 500_000], [4_000_000, 4_000_000, 4_001_000, 4_001_000]
-        sample = samplesar.Sample.from_df(frame(x, y), crs="EPSG:32617")
+        sample = samplesar.sources.dataframe(frame(x, y), crs="EPSG:32617")
         assert sample.area == pytest.approx(1 / 0.9996**2, rel=1e-5)
         geodesic = abs(
             Geod(ellps="WGS84").polygon_area_perimeter(sample.points[:, 0], sample.points[:, 1])[0]
@@ -71,7 +71,7 @@ class TestCRS:
         )
 
     def test_a_geographic_crs_is_converted_to_wgs84(self):
-        sample = samplesar.Sample.from_df(
+        sample = samplesar.sources.dataframe(
             frame([-82.0, -81.0, -81.0], [36.0, 36.0, 37.0]), crs=4269
         )
         assert sample.crs is None
@@ -79,11 +79,11 @@ class TestCRS:
 
     def test_a_bad_crs(self):
         with pytest.raises(ValueError, match="Not a coordinate reference system"):
-            samplesar.Sample.from_df(frame([0, 1, 1], [0, 0, 1]), crs="EPSG:nope")
+            samplesar.sources.dataframe(frame([0, 1, 1], [0, 0, 1]), crs="EPSG:nope")
 
     def test_a_subset_keeps_the_crs(self):
         x, y = [500_000, 501_000, 501_000, 500_000], [4_000_000, 4_000_000, 4_001_000, 4_001_000]
-        sample = samplesar.Sample.from_df(frame(x, y), crs="EPSG:32617")
+        sample = samplesar.sources.dataframe(frame(x, y), crs="EPSG:32617")
         assert sample.subset([0, 1, 2]).area == pytest.approx(sample.area / 2, rel=1e-9)
 
     def test_web_mercator_areas_are_corrected(self):
@@ -93,8 +93,8 @@ class TestCRS:
 
         lon, lat = [10.0, 10.02, 10.02, 10.0], [60.0, 60.0, 60.01, 60.01]
         x, y = Transformer.from_crs(4326, 3857, always_xy=True).transform(lon, lat)
-        mercator = samplesar.Sample.from_df(frame(x, y), crs=3857)
-        plain = samplesar.Sample.from_df(frame(lon, lat))
+        mercator = samplesar.sources.dataframe(frame(x, y), crs=3857)
+        plain = samplesar.sources.dataframe(frame(lon, lat))
         assert mercator.area_scale == pytest.approx(4.0, rel=0.01)
         # Web Mercator treats WGS84 coordinates as if on a sphere, so this is
         # only good to a few 0.1% (uncorrected it would be 4x).
@@ -105,24 +105,24 @@ class TestCRS:
 
         lon, lat = [0.0, 10.0, 10.0, 0.0], [40.0, 40.0, 60.0, 60.0]
         x, y = Transformer.from_crs(4326, 3857, always_xy=True).transform(lon, lat)
-        sample = samplesar.Sample.from_df(frame(x, y), crs=3857)
+        sample = samplesar.sources.dataframe(frame(x, y), crs=3857)
         with pytest.warns(UserWarning, match="distorts areas"):
             _ = sample.area
 
     def test_a_crs_that_isnt_for_points(self):
         with pytest.raises(ValueError, match="neither geographic nor projected"):
-            samplesar.Sample.from_df(frame([0, 1, 1], [0, 0, 1]), crs="EPSG:5703")
+            samplesar.sources.dataframe(frame([0, 1, 1], [0, 0, 1]), crs="EPSG:5703")
 
-    def test_a_numpy_centre(self):
-        sample = samplesar.Sample.from_df(frame([0, 1, 1], [35, 35, 36]))
-        moved = samplesar.Sample(sample.data, centre=(np.float64(0.5), np.float64(35.5)))
-        assert moved.centre == (0.5, 35.5) and type(moved.centre[0]) is float
+    def test_a_numpy_center(self):
+        sample = samplesar.sources.dataframe(frame([0, 1, 1], [35, 35, 36]))
+        moved = samplesar.Sample(sample.data, center=(np.float64(0.5), np.float64(35.5)))
+        assert moved.center == (0.5, 35.5) and type(moved.center[0]) is float
         assert moved.area == pytest.approx(sample.area, rel=1e-3)
 
-    def test_a_bad_centre(self):
-        sample = samplesar.Sample.from_df(frame([0, 1, 1], [35, 35, 36]))
-        with pytest.raises(ValueError, match="centre must be"):
-            samplesar.Sample(sample.data, centre=(0.0, 95.0))
+    def test_a_bad_center(self):
+        sample = samplesar.sources.dataframe(frame([0, 1, 1], [35, 35, 36]))
+        with pytest.raises(ValueError, match="center must be"):
+            samplesar.Sample(sample.data, center=(0.0, 95.0))
 
 
 class TestFromGeoDataFrame:
@@ -134,7 +134,7 @@ class TestFromGeoDataFrame:
         gdf = gpd.GeoDataFrame(
             {"taxon": list("abcd")}, geometry=gpd.points_from_xy(x, y), crs="EPSG:32617"
         )
-        sample = samplesar.Sample.from_geodataframe(gdf, species_col="taxon")
+        sample = samplesar.sources.geodataframe(gdf, species_col="taxon")
         assert sample.n_species == 4 and sample.area == pytest.approx(1 / 0.9996**2, rel=1e-5)
 
     def test_no_crs_means_lon_lat(self):
@@ -142,7 +142,7 @@ class TestFromGeoDataFrame:
         gdf = gpd.GeoDataFrame(
             {"species": list("abc")}, geometry=gpd.points_from_xy([0, 1, 1], [0, 0, 1])
         )
-        assert samplesar.Sample.from_geodataframe(gdf).crs is None
+        assert samplesar.sources.geodataframe(gdf).crs is None
 
     def test_only_points(self):
         gpd = self.geopandas
@@ -152,7 +152,7 @@ class TestFromGeoDataFrame:
             {"species": ["a", "b"]}, geometry=[Point(0, 0), LineString([(0, 0), (1, 1)])]
         )
         with pytest.raises(ValueError, match="must be a point"):
-            samplesar.Sample.from_geodataframe(gdf)
+            samplesar.sources.geodataframe(gdf)
 
     def test_missing_geometries(self):
         gpd = self.geopandas
@@ -160,13 +160,13 @@ class TestFromGeoDataFrame:
 
         gdf = gpd.GeoDataFrame({"species": ["a", "b"]}, geometry=[Point(0, 0), None])
         with pytest.raises(ValueError, match="missing or empty"):
-            samplesar.Sample.from_geodataframe(gdf)
+            samplesar.sources.geodataframe(gdf)
 
     def test_missing_species_column(self):
         gpd = self.geopandas
         gdf = gpd.GeoDataFrame({"name": ["a"]}, geometry=gpd.points_from_xy([0], [0]))
         with pytest.raises(KeyError, match="species"):
-            samplesar.Sample.from_geodataframe(gdf)
+            samplesar.sources.geodataframe(gdf)
 
 
 class TestValidation:
@@ -188,39 +188,39 @@ class TestValidation:
     )
     def test_bad_values(self, change, error, match):
         with pytest.raises(error, match=match):
-            samplesar.Sample.from_df(self.good(**change))
+            samplesar.sources.dataframe(self.good(**change))
 
     def test_missing_column(self):
         with pytest.raises(KeyError, match=r"Missing column\(s\): \['lat'\]"):
-            samplesar.Sample.from_df(self.good().drop(columns="lat"))
+            samplesar.sources.dataframe(self.good().drop(columns="lat"))
 
     def test_no_rows(self):
         with pytest.raises(ValueError, match="no observations"):
-            samplesar.Sample.from_df(self.good().iloc[:0])
+            samplesar.sources.dataframe(self.good().iloc[:0])
 
-    def test_normalises(self):
+    def test_normalizes(self):
         df = self.good(species=[1, 2, 3], lon=["0", "1", "1"], extra=["x", "y", "z"])
-        sample = samplesar.Sample.from_df(df)
+        sample = samplesar.sources.dataframe(df)
         assert list(sample.data.columns) == ["species", "lon", "lat"]
         assert sample.data["species"].tolist() == ["1", "2", "3"]
         assert sample.data["lon"].dtype == float
 
     def test_bounds_are_inclusive(self):
         df = pd.DataFrame({"species": ["a", "b"], "lon": [-180.0, 180.0], "lat": [-90.0, 90.0]})
-        assert samplesar.Sample.from_df(df).n_observations == 2
+        assert samplesar.sources.dataframe(df).n_observations == 2
 
     def test_from_csv(self, tmp_path):
         path = tmp_path / "obs.csv"
         self.good().rename(columns={"lon": "x"}).to_csv(path, index=False)
-        assert samplesar.Sample.from_csv(path, lon_col="x").n_points == 3
+        assert samplesar.sources.csv(path, lon_col="x").n_points == 3
         with pytest.raises(TypeError):
-            samplesar.Sample.from_csv(path, sep=";")
+            samplesar.sources.csv(path, sep=";")
 
 
 class TestSubset:
     def sample(self):
         # Points 0 and 1 hold two observations each.
-        return samplesar.Sample.from_df(
+        return samplesar.sources.dataframe(
             pd.DataFrame(
                 {
                     "species": ["a", "b", "a", "c", "d", "e"],
@@ -252,7 +252,7 @@ class TestDegenerateHulls:
 
     def test_collinear_points(self):
         assert samplesar.hull_area(np.array([[0, 0], [1, 1], [2, 2], [3, 3.0]])) == 0.0
-        line = samplesar.Sample.from_df(frame([0.0, 0.1, 0.2], [0.0, 0.0, 0.0]))
+        line = samplesar.sources.dataframe(frame([0.0, 0.1, 0.2], [0.0, 0.0, 0.0]))
         assert line.area == pytest.approx(0.0, abs=1e-9)
 
     def test_duplicates_dont_count(self):
@@ -266,10 +266,10 @@ class TestDegenerateHulls:
 
 class TestMergeWithin:
     def near(self):
-        # Points 0-2 within a few metres (GPS jitter at one spot); 3 is 1 km away.
+        # Points 0-2 within a few meters (GPS jitter at one spot); 3 is 1 km away.
         lons = [-82.0, -82.00001, -82.00002, -81.99]
         lats = [36.5, 36.50001, 36.5, 36.5]
-        return samplesar.Sample.from_df(frame(lons, lats, species=["a", "b", "c", "d"]))
+        return samplesar.sources.dataframe(frame(lons, lats, species=["a", "b", "c", "d"]))
 
     def test_merges_jitter_and_keeps_observations(self):
         sample = self.near()
@@ -277,29 +277,31 @@ class TestMergeWithin:
         assert merged.n_points == 2 and merged.n_observations == 4 and merged.n_species == 4
         # The group sits at its first-seen member's coordinates.
         np.testing.assert_array_equal(merged.points, [[-82.0, 36.5], [-81.99, 36.5]])
-        assert merged.projection_centre == sample.projection_centre
+        assert merged.projection_center == sample.projection_center
 
     def test_a_small_distance_merges_nothing(self):
         assert self.near().merge_within(0.1).n_points == 4
 
     def test_links_chain(self):
         x = [500_000, 500_000.8, 500_001.6, 500_100]
-        sample = samplesar.Sample.from_df(frame(x, [4_000_000] * 4), crs="EPSG:32617")
+        sample = samplesar.sources.dataframe(frame(x, [4_000_000] * 4), crs="EPSG:32617")
         assert sample.merge_within(1).n_points == 2
 
-    def test_no_more_centimetre_hulls(self):
+    def test_no_more_centimeter_hulls(self):
         rng = np.random.default_rng(0)
         spread = rng.uniform(-0.01, 0.01, size=(60, 2))
         jitter = rng.normal(0, 1e-7, size=(40, 2))  # 40 records at one spot
         pts = np.vstack([spread, jitter]) + [-82.2, 36.5]
-        sample = samplesar.Sample.from_df(
+        sample = samplesar.sources.dataframe(
             frame(pts[:, 0], pts[:, 1], [f"s{i % 30}" for i in range(100)])
         )
-        smallest = samplesar.hull_peel_nest(sample, min_points=3).sar_data()["area"].min()
+        smallest = samplesar.strategies.hull_peel(sample, min_points=3).sar_data()["area"].min()
         merged = (
-            samplesar.hull_peel_nest(sample.merge_within(5), min_points=3).sar_data()["area"].min()
+            samplesar.strategies.hull_peel(sample.merge_within(5), min_points=3)
+            .sar_data()["area"]
+            .min()
         )
-        assert smallest < 1e-6 < merged  # km²: below a square metre, then not
+        assert smallest < 1e-6 < merged  # km²: below a square meter, then not
 
     def test_numpy_distances(self):
         assert self.near().merge_within(np.int64(10)).n_points == 2
@@ -307,7 +309,7 @@ class TestMergeWithin:
     def test_a_long_chain_warns(self):
         # Records every 4 m along a 500 m line, merged within 5 m: one chain.
         x = 500_000 + np.arange(0, 500, 4.0)
-        sample = samplesar.Sample.from_df(frame(x, [4_000_000] * len(x)), crs="EPSG:32617")
+        sample = samplesar.sources.dataframe(frame(x, [4_000_000] * len(x)), crs="EPSG:32617")
         with pytest.warns(UserWarning, match="chain over"):
             assert sample.merge_within(5).n_points == 1
 
@@ -318,11 +320,59 @@ class TestMergeWithin:
         # (where they're about 16 m apart in its units).
         lon, lat = [10.0, 10.0 + 8 / (111_320 * np.cos(np.radians(60)))], [60.0, 60.0]
         x, y = Transformer.from_crs(4326, 3857, always_xy=True).transform(lon, lat)
-        sample = samplesar.Sample.from_df(frame(x, y), crs=3857)
+        sample = samplesar.sources.dataframe(frame(x, y), crs=3857)
         assert sample.merge_within(10).n_points == 1
         assert sample.merge_within(5).n_points == 2
 
     @pytest.mark.parametrize("bad", [0, -1, float("nan"), "5", True])
     def test_bad_distance(self, bad):
-        with pytest.raises(ValueError, match="metres must be a positive number"):
+        with pytest.raises(ValueError, match="meters must be a positive number"):
             self.near().merge_within(bad)
+
+
+class TestWithin:
+    def sample(self):
+        lons = [0.1, 0.5, 0.9, 1.5, 1.0]
+        lats = [0.1, 0.5, 0.9, 0.5, 0.5]  # the last sits on the square's edge
+        return samplesar.sources.dataframe(frame(lons, lats, species=list("abcde")))
+
+    def test_a_polygon(self):
+        from shapely.geometry import box
+
+        inside = self.sample().within(box(0, 0, 1, 1))
+        assert sorted(inside.data["species"]) == ["a", "b", "c", "e"]
+
+    def test_a_geodataframe_in_another_crs(self):
+        gpd = pytest.importorskip("geopandas")
+        from shapely.geometry import box
+
+        region = gpd.GeoDataFrame(geometry=[box(0, 0, 1, 1)], crs=4326).to_crs(3857)
+        kept = set(self.sample().within(region).data["species"])
+        # The edge point (e) may fall either side after the CRS round trip.
+        assert {"a", "b", "c"} <= kept and "d" not in kept
+
+    def test_a_multipolygon(self):
+        from shapely.geometry import MultiPolygon, box
+
+        two = MultiPolygon([box(0, 0, 0.3, 0.3), box(1.4, 0.4, 1.6, 0.6)])
+        assert sorted(self.sample().within(two).data["species"]) == ["a", "d"]
+
+    def test_not_a_polygon(self):
+        from shapely.geometry import Point
+
+        with pytest.raises(ValueError, match="polygon"):
+            self.sample().within(Point(0, 0))
+
+    def test_nothing_inside(self):
+        from shapely.geometry import box
+
+        with pytest.raises(ValueError, match="No observations"):
+            self.sample().within(box(10, 10, 11, 11))
+
+
+def test_within_keeps_an_explicit_center():
+    from shapely.geometry import box
+
+    sample = samplesar.sources.dataframe(frame([0.1, 0.5, 0.9, 1.5], [0.1, 0.5, 0.9, 0.5]))
+    pinned = samplesar.Sample(sample.data, center=(0.0, 0.0))
+    assert pinned.within(box(0, 0, 1, 1)).center == (0.0, 0.0)

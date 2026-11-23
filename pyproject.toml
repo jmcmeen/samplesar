@@ -32,7 +32,7 @@ dependencies = [
   "shapely>=2.0",
   "pyproj>=3.5",
   "scipy>=1.9.2",
-  "sars>=0.7.10",
+  "sars>=0.11.5",
 ]
 
 [project.optional-dependencies]
@@ -42,7 +42,7 @@ dev = [
   "pytest-xdist[psutil]",
   "mypy",
   "pandas-stubs",
-  "geopandas>=0.14",  # Sample.from_geodataframe tests; not a runtime dependency
+  "geopandas>=0.14",  # sources.geodataframe and regions tests; the geo extra at run time
   "duckdb>=1.1",  # open-data tests; the opendata extra at run time
   "ruff>=0.17,<0.18",  # pinned: minor releases change formatting; upgrade on purpose
 ]
@@ -51,6 +51,12 @@ inat = [
 ]
 opendata = [
   "duckdb>=1.1",
+]
+geo = [
+  "geopandas>=0.14",
+]
+gbif = [
+  "pygbif>=0.6",
 ]
 docs = [
   "mkdocs-material>=9.5",
@@ -92,7 +98,7 @@ warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
 # No type information published for these.
-module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*", "duckdb.*", "scipy.*"]
+module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*", "duckdb.*", "scipy.*", "geopandas.*", "pygbif.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

@@ -39,7 +39,7 @@ RECORDS = [
 
 
 def test_records_become_a_sample():
-    sample = samplesar.Sample.from_pyinaturalist(RECORDS)
+    sample = samplesar.sources.inaturalist(RECORDS)
     assert sorted(sample.data["species"]) == [
         "Anaxyrus americanus",
         "Anaxyrus fowleri",
@@ -55,31 +55,31 @@ def test_subspecies_count_as_their_species():
         record(1, name="Lithobates sphenocephalus utricularius", rank="subspecies"),
         record(2, name="Lithobates sphenocephalus"),
     ]
-    sample = samplesar.Sample.from_pyinaturalist(records)
+    sample = samplesar.sources.inaturalist(records)
     assert sample.data["species"].tolist() == ["Lithobates sphenocephalus"] * 2
 
 
 def test_filters_can_be_relaxed():
-    sample = samplesar.Sample.from_pyinaturalist(RECORDS, ranks=None, skip_obscured=False)
+    sample = samplesar.sources.inaturalist(RECORDS, ranks=None, skip_obscured=False)
     assert {"Lithobates", "Hyla chrysoscelis", "Pseudacris crucifer"} <= set(sample.data["species"])
 
 
 def test_nothing_usable():
     with pytest.raises(ValueError, match="No usable iNaturalist observations"):
-        samplesar.Sample.from_pyinaturalist([record(1, rank="genus")])
+        samplesar.sources.inaturalist([record(1, rank="genus")])
 
 
 def test_records_and_a_query_together():
     with pytest.raises(ValueError, match="not both"):
-        samplesar.Sample.from_pyinaturalist(RECORDS, place_id=1)
+        samplesar.sources.inaturalist(RECORDS, place_id=1)
     with pytest.raises(ValueError, match="not both"):
-        samplesar.Sample.from_pyinaturalist(RECORDS, max_results=2)
+        samplesar.sources.inaturalist(RECORDS, max_results=2)
 
 
 @pytest.fixture
 def fake_pyinaturalist(monkeypatch):
     """A pyinaturalist whose get_observations serves 450 records, 200 a page,
-    honouring id_above, and logs each call's parameters."""
+    honoring id_above, and logs each call's parameters."""
     pool = [record(i) for i in range(1, 451)]
     calls = []
 
@@ -96,7 +96,7 @@ def fake_pyinaturalist(monkeypatch):
 
 
 def test_fetches_every_page_by_id(fake_pyinaturalist):
-    sample = samplesar.Sample.from_pyinaturalist(place_id=130630, page=3)
+    sample = samplesar.sources.inaturalist(place_id=130630, page=3)
     assert sample.n_observations == 450
     assert [c.get("id_above") for c in fake_pyinaturalist] == [None, 200, 400]
     assert all(c["order_by"] == "id" and c["order"] == "asc" for c in fake_pyinaturalist)
@@ -104,7 +104,7 @@ def test_fetches_every_page_by_id(fake_pyinaturalist):
 
 
 def test_max_results(fake_pyinaturalist):
-    sample = samplesar.Sample.from_pyinaturalist(place_id=1, max_results=250)
+    sample = samplesar.sources.inaturalist(place_id=1, max_results=250)
     assert sample.n_observations == 250
     # The last page asks only for what's still needed.
     assert [c["per_page"] for c in fake_pyinaturalist] == [200, 50]
@@ -113,17 +113,17 @@ def test_max_results(fake_pyinaturalist):
 def test_a_query_needs_pyinaturalist(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyinaturalist", None)
     with pytest.raises(ImportError, match=r"samplesar\[inat\]"):
-        samplesar.Sample.from_pyinaturalist(place_id=1)
+        samplesar.sources.inaturalist(place_id=1)
 
 
 def test_pages_larger_than_the_api_serves_are_capped(fake_pyinaturalist):
-    sample = samplesar.Sample.from_pyinaturalist(place_id=1, per_page=500)
+    sample = samplesar.sources.inaturalist(place_id=1, per_page=500)
     assert sample.n_observations == 450
     assert all(c["per_page"] == 200 for c in fake_pyinaturalist)
 
 
 def test_a_fetch_resumes_from_id_above(fake_pyinaturalist):
-    sample = samplesar.Sample.from_pyinaturalist(place_id=1, id_above=300)
+    sample = samplesar.sources.inaturalist(place_id=1, id_above=300)
     assert sample.n_observations == 150
     assert fake_pyinaturalist[0]["id_above"] == 300
 
@@ -133,9 +133,9 @@ def test_a_fetch_resumes_from_id_above(fake_pyinaturalist):
 )
 def test_sizes_below_one(fake_pyinaturalist, option, match):
     with pytest.raises(ValueError, match=f"{match} must be at least 1"):
-        samplesar.Sample.from_pyinaturalist(place_id=1, **option)
+        samplesar.sources.inaturalist(place_id=1, **option)
 
 
 def test_per_page_none_means_the_default(fake_pyinaturalist):
-    samplesar.Sample.from_pyinaturalist(place_id=1, per_page=None, max_results=10)
+    samplesar.sources.inaturalist(place_id=1, per_page=None, max_results=10)
     assert fake_pyinaturalist[0]["per_page"] == 10

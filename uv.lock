@@ -20,6 +20,15 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "appdirs"
+version = "1.4.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/d8/05696357e0311f5b5c316d7b95f46c669dd9c15aaeecbb48c7d0aeb88c40/appdirs-1.4.4.tar.gz", hash = "sha256:7d5d0167b2b1ba821647616af46a749d1c653740dd0d2415100fe26e27afdf41", size = 13470, upload-time = "2020-05-11T07:59:51.037Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/00/2344469e2084fb287c2e0b57b72910309874c3245463acd6cf5e3db69324/appdirs-1.4.4-py2.py3-none-any.whl", hash = "sha256:a841dacd6b99318a741b166adb07e19ee71a274450e68237b4650ca1055ab128", size = 9566, upload-time = "2020-05-11T07:59:49.499Z" },
+]
+
+[[package]]
 name = "ast-serialize"
 version = "0.13.1"
 source = { registry = "https://pypi.org/simple" }
@@ -843,6 +852,27 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/e1/3a32904bac7c3460e23a86e9e1529b40d0969a69bd4edefa31e2d2f1bae7/fonttools-4.67.0-cp315-cp315t-win32.whl", hash = "sha256:77e0d4096a2ac60aebe43928b5382766df2d148577db8e8ff79b6a50879a6c06", size = 2479606, upload-time = "2026-10-14T13:20:21.996Z" },
     { url = "https://files.pythonhosted.org/packages/fa/c5/8834cfb95383059addca24f591379d152f137689ff63766736c26b0f9b25/fonttools-4.67.0-cp315-cp315t-win_amd64.whl", hash = "sha256:8c58a8a9ad447bead6f91e5f50b23c0e4988538cdbd9bf2f68952b39f5900a84", size = 2527993, upload-time = "2026-10-14T13:20:23.949Z" },
     { url = "https://files.pythonhosted.org/packages/3d/61/4161946319472aaa9b897bd18ad5108a5b10f5ebaa503d921a001ac4fff9/fonttools-4.67.0-py3-none-any.whl", hash = "sha256:4304f03ed7f4ba000a8dcc941ad854bfa52e2f3b6112b8f099b6f431cf98e701", size = 1213142, upload-time = "2026-10-14T13:20:26.258Z" },
+]
+
+[[package]]
+name = "geojson-rewind"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1f/bb/6f9ca8311baad6e2111101ff1625a46d66fc46ffe828126d06fd314d22ee/geojson_rewind-1.2.1.tar.gz", hash = "sha256:1b7b8b3714eb1f0cfccdba023444f0073be2c9ce148d72c69fd097ea7743da60", size = 3996, upload-time = "2025-10-22T18:21:23.956Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/3a/a8eec7f3288b485c1b679f5f83a8e2be756748137f99a656f2669bf16159/geojson_rewind-1.2.1-py3-none-any.whl", hash = "sha256:0336c1940d070686edf254d8783fe7c9acc5c6b107a0a87b8c628cd28c0651d1", size = 5203, upload-time = "2025-10-22T18:21:22.724Z" },
+]
+
+[[package]]
+name = "geomet"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/8c/dde022aa6747b114f6b14a7392871275dea8867e2bd26cddb80cc6d66620/geomet-1.1.0.tar.gz", hash = "sha256:51e92231a0ef6aaa63ac20c443377ba78a303fd2ecd179dc3567de79f3c11605", size = 28732, upload-time = "2023-11-14T15:43:36.764Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/af/90/3bc780df088d439714af8295196a4332a26559ae66fd99865e36f92efa9e/geomet-1.1.0-py3-none-any.whl", hash = "sha256:4372fe4e286a34acc6f2e9308284850bd8c4aa5bc12065e2abbd4995900db12f", size = 31522, upload-time = "2023-11-14T15:43:35.305Z" },
 ]
 
 [[package]]
@@ -2116,6 +2146,23 @@ wheels = [
 ]
 
 [[package]]
+name = "pygbif"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "appdirs" },
+    { name = "geojson-rewind" },
+    { name = "geomet" },
+    { name = "matplotlib" },
+    { name = "requests" },
+    { name = "requests-cache" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0f/83/78979d012c439337e1e5f89b535297b6a97e5123ca45161d3887fb47de9a/pygbif-0.7.0.tar.gz", hash = "sha256:f287fab6a70d5e2f26ce0dc7ad6e3d47113c4c86d40d0b8f631596283d8bbf35", size = 85050, upload-time = "2026-10-07T08:11:17.053Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/07/1fab26ca16ee996133c1d1cbc551f9fb8239c733cd98151768f2c3236b29/pygbif-0.7.0-py3-none-any.whl", hash = "sha256:aef540ea80943bbc6eb03c554047d477d9022d18d47fadb1d0d5ab254a7f9614", size = 101385, upload-time = "2026-10-07T08:11:15.881Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.21.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2649,6 +2696,12 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
 ]
+gbif = [
+    { name = "pygbif" },
+]
+geo = [
+    { name = "geopandas" },
+]
 inat = [
     { name = "pyinaturalist" },
 ]
@@ -2661,27 +2714,29 @@ requires-dist = [
     { name = "duckdb", marker = "extra == 'dev'", specifier = ">=1.1" },
     { name = "duckdb", marker = "extra == 'opendata'", specifier = ">=1.1" },
     { name = "geopandas", marker = "extra == 'dev'", specifier = ">=0.14" },
+    { name = "geopandas", marker = "extra == 'geo'", specifier = ">=0.14" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy", specifier = ">=1.23.2" },
     { name = "pandas", specifier = ">=1.5" },
     { name = "pandas-stubs", marker = "extra == 'dev'" },
+    { name = "pygbif", marker = "extra == 'gbif'", specifier = ">=0.6" },
     { name = "pyinaturalist", marker = "extra == 'inat'", specifier = ">=0.19" },
     { name = "pyproj", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pytest-xdist", extras = ["psutil"], marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17,<0.18" },
-    { name = "sars", specifier = ">=0.7.10" },
+    { name = "sars", specifier = ">=0.11.5" },
     { name = "scipy", specifier = ">=1.9.2" },
     { name = "shapely", specifier = ">=2.0" },
 ]
-provides-extras = ["dev", "docs", "inat", "opendata"]
+provides-extras = ["dev", "docs", "gbif", "geo", "inat", "opendata"]
 
 [[package]]
 name = "sars"
-version = "0.11.4"
+version = "0.11.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
@@ -2691,9 +2746,9 @@ dependencies = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/6e/2e5f94b2df6d6b76aef9565676f29f35af08d2d2a7da0170f86f52c98a85/sars-0.11.4.tar.gz", hash = "sha256:5b643889ea1a1656397ee902a4fffedf7e4952cd667c5f09b711131cb575411c", size = 1383074, upload-time = "2026-11-22T16:14:22.698Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b1/ae/ae639ef33802e146d2d21c5af1fe7e2e1db451bc8ea6005bbe75e7247bae/sars-0.11.6.tar.gz", hash = "sha256:ae937638408b55bba3c55ad00885c34820e8a3bc9308b0c23b794049c67e65fe", size = 1385548, upload-time = "2026-11-22T19:51:20.351Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/d8/e153e6949364744aa640fa970045a85c00f8f85f6bc8ab90b637e35d4f2f/sars-0.11.4-py3-none-any.whl", hash = "sha256:06031c3dd93d663cae446e8901f56ef6fc47c3477f0ef2fe7483101b60aabe87", size = 160981, upload-time = "2026-11-22T16:14:21.204Z" },
+    { url = "https://files.pythonhosted.org/packages/96/41/0e29f92777c43a9deeaf0f296dc67ea8686ca7448dfc2dd3750e246d21c7/sars-0.11.6-py3-none-any.whl", hash = "sha256:1b9342106ef3aefae3d2ce35494ee0d974f11db6302dc40b376d4479763a602a", size = 161898, upload-time = "2026-11-22T19:51:19.199Z" },
 ]
 
 [[package]]

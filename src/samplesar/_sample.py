@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import numbers
 import warnings
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
 from functools import cached_property
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -24,7 +22,7 @@ WGS84 = CRS.from_epsg(4326)
 
 
 def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
-    """Check and normalise the columns; with a CRS, convert its coordinates
+    """Check and normalize the columns; with a CRS, convert its coordinates
     (in the ``lon`` and ``lat`` columns) to WGS84 longitude and latitude."""
     missing = [c for c in COLUMNS if c not in df.columns]
     if missing:
@@ -67,9 +65,9 @@ def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
 class Sample:
     """A set of georeferenced species observations.
 
-    Build one with [`from_df`][samplesar.Sample.from_df] or
-    [`from_csv`][samplesar.Sample.from_csv] rather than directly: they check
-    and normalise the columns.
+    Build one with [`sources.dataframe`][samplesar.sources.dataframe] or
+    [`sources.csv`][samplesar.sources.csv] rather than directly: they check
+    and normalize the columns.
 
     Attributes
     ----------
@@ -78,293 +76,29 @@ class Sample:
         ``lat`` (float, decimal degrees). Several observations may share a
         point. Treat it as read-only: the points and other derived values
         are computed once, so build a new sample rather than editing it.
-    centre : tuple of float, optional
+    center : tuple of float, optional
         The (lon, lat) the points are projected about for areas and
         distances (see [`xy`][samplesar.Sample.xy]), when there's no
-        ``crs``. By default the centre of the sample's points; a
+        ``crs``. By default the center of the sample's points; a
         [`subset`][samplesar.Sample.subset] keeps its parent's, so their
         areas are comparable.
     crs : pyproj.CRS, optional
         A projected coordinate reference system to measure areas and
         distances in, such as the UTM zone the sample was laid out in. Set by
-        [`from_df`][samplesar.Sample.from_df] when the coordinates come in
+        [`sources.dataframe`][samplesar.sources.dataframe] when the coordinates come in
         one.
     """
 
     data: pd.DataFrame
-    centre: tuple[float, float] | None = None
+    center: tuple[float, float] | None = None
     crs: CRS | None = None
 
     def __post_init__(self) -> None:
-        if self.centre is not None:
-            lon, lat = (float(v) for v in self.centre)
+        if self.center is not None:
+            lon, lat = (float(v) for v in self.center)
             if not (np.isfinite(lon) and np.isfinite(lat) and -90 <= lat <= 90):
-                raise ValueError(f"centre must be a (lon, lat) in degrees, got {self.centre!r}.")
-            object.__setattr__(self, "centre", (lon, lat))
-
-    @classmethod
-    def from_df(
-        cls,
-        df: pd.DataFrame,
-        species_col: str = "species",
-        lon_col: str = "lon",
-        lat_col: str = "lat",
-        crs: Any = None,
-    ) -> Sample:
-        """Build a sample from a DataFrame.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            One row per observation. Other columns are dropped.
-        species_col : str
-            The column holding the species name.
-        lon_col : str
-            The column holding the longitude in decimal degrees, or the x
-            (easting) coordinate when ``crs`` is projected.
-        lat_col : str
-            The column holding the latitude in decimal degrees, or the y
-            (northing) coordinate when ``crs`` is projected.
-        crs : str, int or pyproj.CRS, optional
-            The coordinates' reference system, as pyproj accepts it
-            (``"EPSG:32617"``, ``32617``, a WKT string). By default WGS84
-            longitude and latitude. Coordinates in another geographic system
-            are converted to WGS84. Coordinates in a projected system are
-            converted to WGS84 for ``data``, and areas and distances are
-            measured in that system, so a grid laid out in it stays straight.
-
-        Returns
-        -------
-        Sample
-
-        Raises
-        ------
-        KeyError
-            If a column is missing.
-        ValueError
-            If there are no rows, a species is missing, a coordinate is
-            missing, not numeric or out of range, or ``crs`` isn't a
-            coordinate reference system.
-        """
-        renamed = df.rename(columns={species_col: "species", lon_col: "lon", lat_col: "lat"})
-        parsed = _parse_crs(crs)
-        projected = parsed if parsed is not None and parsed.is_projected else None
-        return cls(_validate(renamed, parsed), crs=projected)
-
-    @classmethod
-    def from_geodataframe(cls, gdf: Any, species_col: str = "species") -> Sample:
-        """Build a sample from a GeoDataFrame of point observations.
-
-        The geometries' coordinates and the frame's CRS are read directly, so
-        geopandas isn't a requirement of samplesar; the frame just needs a
-        point ``geometry`` and a ``crs``.
-
-        Parameters
-        ----------
-        gdf : geopandas.GeoDataFrame
-            One point per observation. A frame without a CRS is taken to be
-            in WGS84 longitude and latitude.
-        species_col : str
-            The column holding the species name.
-
-        Returns
-        -------
-        Sample
-
-        Raises
-        ------
-        ValueError
-            If a geometry isn't a point, or as [`from_df`][samplesar.Sample.from_df].
-        KeyError
-            If the species column is missing.
-        """
-        geometry = gdf.geometry
-        if (geometry.isna() | geometry.is_empty).any():
-            raise ValueError("Some geometries are missing or empty; every row needs a point.")
-        kinds = set(geometry.geom_type)
-        if kinds - {"Point"}:
-            raise ValueError(f"Every geometry must be a point; found {', '.join(sorted(kinds))}.")
-        if species_col not in gdf.columns:
-            raise KeyError(f"Missing column {species_col!r}.")
-        frame = pd.DataFrame(
-            {
-                "species": np.asarray(gdf[species_col]),
-                "lon": np.asarray(geometry.x),
-                "lat": np.asarray(geometry.y),
-            }
-        )
-        return cls.from_df(frame, crs=gdf.crs)
-
-    @classmethod
-    def from_csv(cls, path: str | Path, **kwargs: str) -> Sample:
-        """Build a sample from a CSV file.
-
-        Parameters
-        ----------
-        path : str or Path
-            The CSV file, one row per observation.
-        **kwargs : str
-            ``species_col``, ``lon_col`` and ``lat_col``, as in
-            [`from_df`][samplesar.Sample.from_df]. Nothing else is passed to
-            the CSV reader.
-
-        Returns
-        -------
-        Sample
-
-        Raises
-        ------
-        KeyError
-            If a column is missing.
-        ValueError
-            As in [`from_df`][samplesar.Sample.from_df].
-        TypeError
-            If a keyword other than the three column names is given.
-        """
-        return cls.from_df(pd.read_csv(path), **kwargs)
-
-    @classmethod
-    def from_pyinaturalist(
-        cls,
-        observations: Iterable[Mapping[str, Any]] | None = None,
-        *,
-        ranks: Iterable[str] | None = ("species", "subspecies", "variety", "form"),
-        skip_obscured: bool = True,
-        max_results: int | None = None,
-        **query: Any,
-    ) -> Sample:
-        """Build a sample from iNaturalist observations.
-
-        Either pass observation records already fetched (the ``results`` of
-        pyinaturalist's ``get_observations``, or the API's JSON), or give a
-        query and they're fetched through pyinaturalist (``pip install
-        'samplesar[inat]'``), paging past the API's 10,000-result limit.
-
-        Parameters
-        ----------
-        observations : iterable of dict, optional
-            Observation records. If omitted, ``query`` is fetched.
-        ranks : iterable of str or None
-            Keep only taxa at these ranks; by default species and below, so
-            a genus-level record doesn't count as a species. A subspecies,
-            variety or form counts as its species. ``None`` keeps every rank.
-        skip_obscured : bool
-            Drop observations whose coordinates iNaturalist has obscured
-            (randomised within a cell about 0.2° across), which would distort
-            any hull.
-        max_results : int, optional
-            Stop fetching after this many records (only with a query).
-        **query
-            Search parameters for ``get_observations``, such as
-            ``place_id``, ``taxon_id``, ``user_id`` or ``quality_grade``.
-
-        Returns
-        -------
-        Sample
-
-        Raises
-        ------
-        ValueError
-            If no usable observations remain, both records and a query (or
-            ``max_results``) are given, or ``max_results`` or ``per_page`` is
-            below 1.
-        ImportError
-            If a query needs fetching and pyinaturalist isn't installed.
-
-        Examples
-        --------
-        >>> sample = samplesar.Sample.from_pyinaturalist(  # doctest: +SKIP
-        ...     place_id=130630, taxon_id=20978, quality_grade="research"
-        ... )
-        """
-        from samplesar._inat import fetch_inaturalist, inaturalist_frame
-
-        if observations is None:
-            observations = fetch_inaturalist(max_results=max_results, **query)
-        elif query or max_results is not None:
-            raise ValueError("Give observations or a query (and max_results), not both.")
-        frame = inaturalist_frame(observations, ranks=ranks, skip_obscured=skip_obscured)
-        if frame.empty:
-            raise ValueError(
-                "No usable iNaturalist observations (see the filters on ranks and obscured)."
-            )
-        return cls.from_df(frame)
-
-    @classmethod
-    def from_open_data(
-        cls,
-        path: str | Path,
-        *,
-        bbox: tuple[float, float, float, float] | None = None,
-        taxon_id: int | None = None,
-        quality_grade: str | Iterable[str] | None = "research",
-        ranks: Iterable[str] | None = ("species", "subspecies", "variety", "form"),
-        since: date | str | None = None,
-        until: date | str | None = None,
-        max_accuracy: float | None = None,
-    ) -> Sample:
-        """Build a sample from a local copy of iNaturalist's open data.
-
-        Queries the Parquet file [`download_open_data`][samplesar.download_open_data]
-        builds, with DuckDB (``pip install 'samplesar[opendata]'``), so a
-        region or taxon comes back in moments without the API.
-
-        Parameters
-        ----------
-        path : str or Path
-            ``observations.parquet``.
-        bbox : tuple of float, optional
-            (west, south, east, north) in degrees; west greater than east
-            crosses the antimeridian.
-        taxon_id : int, optional
-            An iNaturalist taxon: it and everything under it (by ancestry),
-            so ``20979`` is every frog.
-        quality_grade : str, iterable of str or None
-            By default research grade only; ``None`` keeps every grade.
-        ranks : iterable of str or None
-            By default species and below, a subspecies, variety or form
-            counting as its species; ``None`` keeps every rank.
-        since, until : date or str, optional
-            Observed on or after, and on or before, these dates (ISO).
-        max_accuracy : float, optional
-            Keep observations whose positional accuracy is given and at most
-            this many metres. The export doesn't mark obscured observations,
-            whose public coordinates are randomised; this is the filter
-            available.
-
-        Returns
-        -------
-        Sample
-
-        Raises
-        ------
-        ValueError
-            If no observations match, ``bbox`` isn't (west, south, east,
-            north), or ``quality_grade`` or ``ranks`` is empty.
-        ImportError
-            If DuckDB isn't installed.
-
-        Examples
-        --------
-        >>> frogs = samplesar.Sample.from_open_data(  # doctest: +SKIP
-        ...     "observations.parquet", bbox=(-85.0, 35.0, -81.5, 37.0), taxon_id=20979
-        ... )
-        """
-        from samplesar._opendata import open_data_frame
-
-        frame = open_data_frame(
-            path,
-            bbox=bbox,
-            taxon_id=taxon_id,
-            quality_grade=quality_grade,
-            ranks=ranks,
-            since=since,
-            until=until,
-            max_accuracy=max_accuracy,
-        )
-        if frame.empty:
-            raise ValueError("No observations in the open data match these filters.")
-        return cls.from_df(frame)
+                raise ValueError(f"center must be a (lon, lat) in degrees, got {self.center!r}.")
+            object.__setattr__(self, "center", (lon, lat))
 
     @property
     def n_observations(self) -> int:
@@ -392,24 +126,24 @@ class Sample:
         return len(self.points)
 
     @property
-    def projection_centre(self) -> tuple[float, float]:
+    def projection_center(self) -> tuple[float, float]:
         """The (lon, lat) the points are projected about when there's no
-        ``crs``: ``centre`` if given, else the centre of the points (their
-        mean direction, so a sample across the antimeridian is centred
+        ``crs``: ``center`` if given, else the center of the points (their
+        mean direction, so a sample across the antimeridian is centered
         correctly)."""
-        if self.centre is not None:
-            return self.centre
-        return centre_of(self.points)
+        if self.center is not None:
+            return self.center
+        return center_of(self.points)
 
     @property
     def projection(self) -> CRS:
         """The projected CRS areas and distances are measured in: ``crs`` if
         set, else a Lambert azimuthal equal-area projection on the WGS84
-        ellipsoid, centred on
-        [`projection_centre`][samplesar.Sample.projection_centre]."""
+        ellipsoid, centered on
+        [`projection_center`][samplesar.Sample.projection_center]."""
         if self.crs is not None:
             return self.crs
-        lon, lat = self.projection_centre
+        lon, lat = self.projection_center
         return CRS.from_proj4(
             f"+proj=laea +lat_0={lat:.12f} +lon_0={lon:.12f} +ellps=WGS84 +units=m"
         )
@@ -417,7 +151,7 @@ class Sample:
     @cached_property
     def area_scale(self) -> float:
         """How much [`projection`][samplesar.Sample.projection] enlarges areas
-        at [`projection_centre`][samplesar.Sample.projection_centre]; areas
+        at [`projection_center`][samplesar.Sample.projection_center]; areas
         are divided by it.
 
         1 for the default equal-area projection, about 1 for UTM within its
@@ -430,7 +164,7 @@ class Sample:
         if self.crs is None:
             return 1.0
         proj = Proj(self.crs)
-        lon, lat = self.projection_centre
+        lon, lat = self.projection_center
         scale = float(proj.get_factors(lon, lat).areal_scale)
         across = np.asarray(proj.get_factors(self.points[:, 0], self.points[:, 1]).areal_scale)
         if across.size and (across.max() / across.min() > 1.01):
@@ -454,8 +188,8 @@ class Sample:
         projection = self.projection
         to_plane = Transformer.from_crs(WGS84, projection, always_xy=True)
         x, y = to_plane.transform(self.points[:, 0], self.points[:, 1])
-        metres = projection.axis_info[0].unit_conversion_factor
-        xy = np.column_stack([x, y]) * metres / 1000.0
+        meters = projection.axis_info[0].unit_conversion_factor
+        xy = np.column_stack([x, y]) * meters / 1000.0
         xy.flags.writeable = False
         return xy
 
@@ -471,23 +205,23 @@ class Sample:
         """
         return hull_area(self.xy) / self.area_scale
 
-    def merge_within(self, metres: float) -> Sample:
+    def merge_within(self, meters: float) -> Sample:
         """Merge points within a distance of each other into one, keeping every observation.
 
         Records made at one spot (a trailhead, a feeder, a car park) differ
         only by GPS jitter. Left apart, they make the last steps of a hull
-        nest measure hulls centimetres across, which aren't area but dominate
-        the species-area curve. Points at most ``metres`` apart are linked
+        nest measure hulls centimeters across, which aren't area but dominate
+        the species-area curve. Points at most ``meters`` apart are linked
         (on [`xy`][samplesar.Sample.xy], with a distorting ``crs`` corrected
-        by its scale at the sample's centre), and each linked group becomes
+        by its scale at the sample's center), and each linked group becomes
         one point at its first-seen member's coordinates, holding all the
         group's observations. Linking chains: three points 0.8 apart with
-        ``metres=1`` become one, and a warning says when a chain spans more
-        than ten times ``metres``, since its observations then move far.
+        ``meters=1`` become one, and a warning says when a chain spans more
+        than ten times ``meters``, since its observations then move far.
 
         Parameters
         ----------
-        metres : float
+        meters : float
             Merge points at most this far apart (positive).
 
         Returns
@@ -498,13 +232,13 @@ class Sample:
         Raises
         ------
         ValueError
-            If ``metres`` isn't a positive number.
+            If ``meters`` isn't a positive number.
         """
-        if isinstance(metres, bool) or not isinstance(metres, numbers.Real):
-            raise ValueError(f"metres must be a positive number, got {metres!r}.")
-        metres = float(metres)
-        if not (np.isfinite(metres) and metres > 0):
-            raise ValueError(f"metres must be a positive number, got {metres!r}.")
+        if isinstance(meters, bool) or not isinstance(meters, numbers.Real):
+            raise ValueError(f"meters must be a positive number, got {meters!r}.")
+        meters = float(meters)
+        if not (np.isfinite(meters) and meters > 0):
+            raise ValueError(f"meters must be a positive number, got {meters!r}.")
         from scipy.sparse import coo_matrix
         from scipy.sparse.csgraph import connected_components
         from scipy.spatial import cKDTree
@@ -512,7 +246,7 @@ class Sample:
         n = self.n_points
         # xy is in the projection's km; a distorting crs stretches lengths by
         # about the square root of its areal scale.
-        radius = metres / 1000.0 * np.sqrt(self.area_scale)
+        radius = meters / 1000.0 * np.sqrt(self.area_scale)
         pairs = cKDTree(self.xy).query_pairs(radius, output_type="ndarray")
         graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(n, n))
         _, group = connected_components(graph, directed=False)
@@ -525,7 +259,7 @@ class Sample:
         if spans and max(spans) > 10 * radius:
             warnings.warn(
                 f"Linked points chain over {max(spans) * 1000 / np.sqrt(self.area_scale):.0f} m, "
-                f"more than ten times {metres:g} m, so some observations move far; a "
+                f"more than ten times {meters:g} m, so some observations move far; a "
                 "smaller distance keeps them nearer.",
                 stacklevel=2,
             )
@@ -533,7 +267,37 @@ class Sample:
         rows = pd.MultiIndex.from_arrays([self.points[:, 0], self.points[:, 1]]).get_indexer(keys)
         data = self.data.copy()
         data["lon"], data["lat"] = target[rows, 0], target[rows, 1]
-        return Sample(data, centre=self.projection_centre, crs=self.crs)
+        return Sample(data, center=self.projection_center, crs=self.crs)
+
+    def within(self, boundary: Any) -> Sample:
+        """The observations inside a region (or on its edge).
+
+        Parameters
+        ----------
+        boundary : polygon
+            A shapely polygon or multipolygon in WGS84 longitude and
+            latitude, or a GeoDataFrame or GeoSeries of them in any CRS (it
+            is converted and dissolved), such as
+            [`regions.admin`][samplesar.regions.admin] returns.
+
+        Returns
+        -------
+        Sample
+            With the same ``crs`` and ``center``; without an explicit
+            ``center``, its projection is centered on the points kept, as for
+            a new sample.
+
+        Raises
+        ------
+        ValueError
+            If ``boundary`` isn't polygonal, or no observation lies inside it.
+        """
+        from samplesar._boundary import as_geometry, inside
+
+        keep = inside(as_geometry(boundary), self.data["lon"], self.data["lat"])
+        if not keep.any():
+            raise ValueError("No observations lie inside the boundary.")
+        return Sample(self.data[keep].reset_index(drop=True), center=self.center, crs=self.crs)
 
     def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at some of the sample's points.
@@ -551,7 +315,7 @@ class Sample:
         keep = self.points[list(point_indices)]
         mask = pd.MultiIndex.from_frame(self.data[["lon", "lat"]]).isin([tuple(p) for p in keep])
         data = self.data.loc[mask].reset_index(drop=True)
-        return Sample(data, centre=self.projection_centre, crs=self.crs)
+        return Sample(data, center=self.projection_center, crs=self.crs)
 
     def __repr__(self) -> str:
         return (
@@ -574,9 +338,9 @@ def _parse_crs(crs: Any) -> CRS | None:
     return parsed
 
 
-def centre_of(points: np.ndarray) -> tuple[float, float]:
-    """The centre of (lon, lat) points, as the mean of their directions from
-    the Earth's centre."""
+def center_of(points: np.ndarray) -> tuple[float, float]:
+    """The center of (lon, lat) points, as the mean of their directions from
+    the Earth's center."""
     lon, lat = np.radians(np.asarray(points, dtype=float)).T
     x, y, z = (
         (np.cos(lat) * np.cos(lon)).mean(),
@@ -588,6 +352,10 @@ def centre_of(points: np.ndarray) -> tuple[float, float]:
 
 def hull_area(points: np.ndarray) -> float:
     """Convex hull area of a set of points, in their own units.
+
+    Not to be confused with the strategy
+    [`strategies.hull_area`][samplesar.strategies.hull_area], which nests a
+    sample.
 
     For a sample's area in km², pass its projected points,
     [`Sample.xy`][samplesar.Sample.xy] (as [`Sample.area`][samplesar.Sample.area]

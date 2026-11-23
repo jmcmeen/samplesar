@@ -10,8 +10,9 @@ import shapely
 from shapely.geometry import MultiPoint, Polygon
 
 from samplesar._nest import Nest, check_size
-from samplesar._registry import register_strategy
-from samplesar._sample import Sample, hull_area, point_species
+from samplesar._registry import register
+from samplesar._sample import Sample, point_species
+from samplesar._sample import hull_area as convex_area
 
 
 def _hull(points: np.ndarray, idx: np.ndarray) -> shapely.Geometry:
@@ -28,7 +29,7 @@ def _tolerance(hull: Polygon) -> float:
 
 
 def _off_line(corners: np.ndarray, before: np.ndarray, after: np.ndarray) -> np.ndarray:
-    """Each corner's distance from the line through its two neighbours."""
+    """Each corner's distance from the line through its two neighbors."""
     edge = after - before
     cross = np.abs(edge[:, 0] * (corners - before)[:, 1] - edge[:, 1] * (corners - before)[:, 0])
     return cross / np.maximum(np.hypot(edge[:, 0], edge[:, 1]), 1e-300)
@@ -36,14 +37,14 @@ def _off_line(corners: np.ndarray, before: np.ndarray, after: np.ndarray) -> np.
 
 def _true_corners(ring: np.ndarray, tolerance: float) -> np.ndarray:
     """The ring's corners without those within ``tolerance`` of the line
-    through their neighbours: edge points that rounding pushed outward. If
+    through their neighbors: edge points that rounding pushed outward. If
     what's left is a sliver (points collinear but for rounding), its two far
     ends."""
     corners = ring
     while len(corners) > 3:
         off = _off_line(corners, np.roll(corners, 1, axis=0), np.roll(corners, -1, axis=0))
         # One corner per pass, the flattest, so each later decision is made
-        # against the corner's current neighbours, not ones already dropped.
+        # against the corner's current neighbors, not ones already dropped.
         flattest = int(np.argmin(off))
         if off[flattest] > tolerance:
             break
@@ -100,11 +101,11 @@ def _remove_one(
     return Nest(sample=sample, steps=tuple(steps))
 
 
-@register_strategy("hull_random")
-def hull_random_nest(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
+@register("hull_random")
+def hull_random(sample: Sample, min_points: int = 3, seed: int | None = None) -> Nest:
     """Nest a sample by removing a random vertex of its convex hull at each step.
 
-    Like `random_nest`, but only points on the outside can go, so the sample
+    Like `strategies.random`, but only points on the outside can go, so the sample
     shrinks from its edges inwards.
 
     Parameters
@@ -129,8 +130,100 @@ def hull_random_nest(sample: Sample, min_points: int = 3, seed: int | None = Non
     return _remove_one(sample, min_points, lambda _, vertices: int(rng.choice(vertices)))
 
 
-@register_strategy("hull_peel")
-def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
+class _Isolation:
+    """Each hull vertex's distance to its nearest other remaining point (km),
+    from one KD-tree of all the points: the nearest few neighbors are looked
+    up and the first still remaining is taken, falling back to a tree of the
+    remaining points only when all of those are gone."""
+
+    LOOK = 16
+
+    def __init__(self, points: np.ndarray) -> None:
+        from scipy.spatial import cKDTree
+
+        self.points = points
+        self.tree = cKDTree(points)
+        self.alive = np.ones(len(points), dtype=bool)
+
+    def __call__(self, remaining: np.ndarray, vertices: np.ndarray) -> np.ndarray:
+        from scipy.spatial import cKDTree
+
+        self.alive[:] = False
+        self.alive[remaining] = True
+        k = min(self.LOOK + 1, len(self.points))
+        distance, index = self.tree.query(self.points[vertices], k=k)
+        distance, index = distance.reshape(len(vertices), k), index.reshape(len(vertices), k)
+        usable = self.alive[index] & (index != vertices[:, None])
+        found = usable.any(axis=1)
+        out = np.empty(len(vertices))
+        out[found] = distance[found, usable[found].argmax(axis=1)]
+        if not found.all():
+            near, _ = cKDTree(self.points[remaining]).query(self.points[vertices[~found]], k=2)
+            out[~found] = near[:, 1]
+        return out
+
+
+def isolation_weights(isolation: np.ndarray, power: float) -> np.ndarray:
+    """Probabilities proportional to ``isolation ** power``, computed on
+    isolation scaled to its maximum so a large power neither underflows nor
+    overflows; equal when every vertex shares its position with another."""
+    top = float(isolation.max())
+    if top <= 0:
+        return np.full(len(isolation), 1.0 / len(isolation))
+    weight = (isolation / top) ** power
+    return weight / weight.sum()
+
+
+@register("hull_weighted")
+def hull_weighted(
+    sample: Sample, power: float = 1.0, min_points: int = 3, seed: int | None = None
+) -> Nest:
+    """Nest a sample by removing a random hull vertex, weighted by its isolation.
+
+    Each vertex of the current hull is picked with probability proportional
+    to its distance from the nearest other remaining point, raised to
+    ``power``. Isolated outliers (vagrants, georeferencing errors, one-off
+    trips) then tend to go first, while clustered edges last longer. A power
+    of 0 is `strategies.hull_random` (the same nest for the same seed); a
+    large power approaches always removing the most isolated vertex.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    power : float
+        The exponent on each vertex's isolation; at least 0.
+    min_points : int
+        Stop when this many points remain.
+    seed : int, optional
+        Seed for the random choices, for a reproducible nest.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``power`` is negative or not finite, or ``min_points`` is below 1
+        or the sample has fewer points.
+    """
+    if not (np.isfinite(power) and power >= 0):
+        raise ValueError(f"power must be a finite number of at least 0, got {power}.")
+    rng = np.random.default_rng(seed)
+    isolation = _Isolation(np.asarray(sample.xy))
+
+    def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
+        if power == 0 or len(remaining) < 2:
+            return int(rng.choice(vertices))
+        weight = isolation_weights(isolation(remaining, vertices), power)
+        return int(rng.choice(vertices, p=weight))
+
+    return _remove_one(sample, min_points, choose)
+
+
+@register("hull_peel")
+def hull_peel(sample: Sample, min_points: int = 3) -> Nest:
     """Nest a sample by peeling off its whole convex hull at each step.
 
     Each step removes every point on the hull's boundary, the vertices and
@@ -175,7 +268,76 @@ def hull_peel_nest(sample: Sample, min_points: int = 3) -> Nest:
     return Nest(sample=sample, steps=tuple(steps))
 
 
-def _centre_distance(points: np.ndarray, vertices: np.ndarray) -> np.ndarray:
+def grid_cells(xy: np.ndarray, cell_km: float) -> np.ndarray:
+    """Each point's grid cell, as an index into the occupied cells: square
+    cells of ``cell_km`` anchored at the points' south-west corner. A point
+    on a cell edge, to within rounding, is in the cell above or to its right."""
+    corner = xy.min(axis=0)
+    ij = np.floor((xy - corner) / cell_km + 1e-9).astype(np.int64)
+    _, cell = np.unique(ij, axis=0, return_inverse=True)
+    return np.asarray(cell).ravel()
+
+
+@register("grid_peel")
+def grid_peel(sample: Sample, cell_km: float, min_points: int = 3) -> Nest:
+    """Nest a sample by peeling the convex layers of its occupied grid cells.
+
+    Points are snapped to square cells of ``cell_km``, anchored at the
+    sample's south-west corner in its projected km. Each cell is represented
+    by the mean of its points, and each step peels the cells on the convex
+    hull of the remaining cells, removing every point in them together. Small cells behave like
+    `strategies.hull_peel`; large cells give a few coarse steps that ignore
+    detail within a cell, so a range of sizes shows how much the curve
+    depends on the scale of removal. It stops before a layer would leave
+    fewer than ``min_points`` points.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    cell_km : float
+        The side of a grid cell, in km.
+    min_points : int
+        Stop rather than leave fewer than this many points.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``cell_km`` isn't positive, ``min_points`` is below 1 or the
+        sample has fewer points, or no layer of cells can be peeled.
+    """
+    check_size(sample, min_points)
+    if not (np.isfinite(cell_km) and cell_km > 0):
+        raise ValueError(f"cell_km must be positive, got {cell_km}.")
+    xy = np.asarray(sample.xy)
+    cell = grid_cells(xy, cell_km)
+    n_cells = int(cell.max()) + 1
+    centers = np.zeros((n_cells, 2))
+    np.add.at(centers, cell, xy)  # each cell's center: the mean of its points
+    centers /= np.bincount(cell, minlength=n_cells)[:, None]
+    cells_left = np.arange(n_cells)
+    remaining = np.arange(sample.n_points)
+    steps = [remaining.copy()]
+    while True:
+        cells_left = cells_left[~np.isin(cells_left, _on_boundary(centers, cells_left))]
+        inside = remaining[np.isin(cell[remaining], cells_left)]
+        if len(inside) < min_points:
+            break
+        remaining = inside
+        steps.append(remaining.copy())
+    if len(steps) == 1:
+        raise ValueError(
+            f"No layer of {cell_km} km cells can be peeled: fewer than {min_points} points "
+            "lie in cells strictly inside the hull of the occupied cells."
+        )
+    return Nest(sample=sample, steps=tuple(steps))
+
+
+def _center_distance(points: np.ndarray, vertices: np.ndarray) -> np.ndarray:
     """Each vertex's distance from the centroid of the vertices (km)."""
     corners = points[vertices]
     return np.hypot(*(corners - corners.mean(axis=0)).T)
@@ -191,17 +353,20 @@ def _near_max(values: np.ndarray) -> np.ndarray:
 
 def _pick(vertices: np.ndarray, score: np.ndarray, distance: np.ndarray) -> int:
     """The vertex with the highest score; ties (to within rounding) go to the
-    one farthest from the centre, then to the lowest point index."""
+    one farthest from the center, then to the lowest point index."""
     tied = np.flatnonzero(_near_max(score))
     farthest = tied[_near_max(distance[tied])]
     return int(vertices[farthest].min())
 
 
-@register_strategy("hull_area")
-def hull_area_nest(
+@register("hull_area")
+def hull_area(
     sample: Sample, keep: Literal["largest", "smallest"] = "largest", min_points: int = 3
 ) -> Nest:
     """Nest a sample by removing the hull vertex that changes its area least or most.
+
+    Not to be confused with [`samplesar.hull_area`][samplesar.hull_area],
+    which measures a set of points.
 
     At each step every vertex of the current convex hull is tried, and the
     one whose removal leaves the largest hull (``keep="largest"``, the
@@ -236,14 +401,14 @@ def hull_area_nest(
     points = sample.xy
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
-        areas = np.array([hull_area(points[remaining[remaining != v]]) for v in vertices])
-        return _pick(vertices, sign * areas, _centre_distance(points, vertices))
+        areas = np.array([convex_area(points[remaining[remaining != v]]) for v in vertices])
+        return _pick(vertices, sign * areas, _center_distance(points, vertices))
 
     return _remove_one(sample, min_points, choose)
 
 
-@register_strategy("hull_species")
-def hull_species_nest(
+@register("hull_species")
+def hull_species(
     sample: Sample, keep: Literal["most", "fewest"] = "most", min_points: int = 3
 ) -> Nest:
     """Nest a sample by removing the hull vertex that loses the fewest or most species.
@@ -288,24 +453,24 @@ def hull_species_nest(
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
         lost = np.array([np.count_nonzero(holders[species[v]] == 1) for v in vertices])
-        drop = _pick(vertices, -sign * lost, _centre_distance(points, vertices))
+        drop = _pick(vertices, -sign * lost, _center_distance(points, vertices))
         holders[species[drop]] -= 1
         return drop
 
     return _remove_one(sample, min_points, choose)
 
 
-@register_strategy("hull_distance")
-def hull_distance_nest(
+@register("hull_distance")
+def hull_distance(
     sample: Sample, remove: Literal["farthest", "closest"] = "farthest", min_points: int = 3
 ) -> Nest:
-    """Nest a sample by removing the hull vertex farthest from, or closest to, its centre.
+    """Nest a sample by removing the hull vertex farthest from, or closest to, its center.
 
-    The centre is the centroid of the current hull's vertices, and distances
+    The center is the centroid of the current hull's vertices, and distances
     are in km on the sample's projection (see
     [`Sample.xy`][samplesar.Sample.xy]). ``remove="farthest"`` trims the
     outlying corners first; ``remove="closest"`` removes the vertex nearest
-    the centre, leaving the outliers to last. Ties, to within floating-point
+    the center, leaving the outliers to last. Ties, to within floating-point
     rounding, go to the lowest point index.
 
     Parameters
@@ -333,17 +498,17 @@ def hull_distance_nest(
     points = sample.xy
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
-        distance = _centre_distance(points, vertices)
+        distance = _center_distance(points, vertices)
         return _pick(vertices, sign * distance, np.zeros(len(vertices)))
 
     return _remove_one(sample, min_points, choose)
 
 
-@register_strategy("concave_peel")
-def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nest:
+@register("concave_peel")
+def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nest:
     """Nest a sample by peeling off its concave hull at each step.
 
-    Like [`hull_peel_nest`][samplesar.hull_peel_nest], but each step removes
+    Like [`strategies.hull_peel`][samplesar.strategies.hull_peel], but each step removes
     the points on the boundary of a concave hull, which follows the sample's
     outline instead of spanning its gaps: suited to L-shaped or scattered
     samples (a valley, a coastline, a trail network). The concave hull is
@@ -355,7 +520,7 @@ def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -
     sample : Sample
         The sample to nest.
     ratio : float
-        Between 0 and 1: 1 is the convex hull (the same as ``hull_peel_nest``),
+        Between 0 and 1: 1 is the convex hull (the same as ``strategies.hull_peel``),
         smaller values follow the outline more tightly.
     min_points : int
         Stop rather than leave fewer than this many points.
@@ -377,7 +542,7 @@ def concave_peel_nest(sample: Sample, ratio: float = 0.3, min_points: int = 3) -
         raise ValueError(f"ratio must be between 0 and 1, got {ratio!r}.")
     if shapely.geos_version < (3, 11):
         raise RuntimeError(
-            f"concave_peel_nest needs GEOS 3.11 or newer for shapely's concave_hull; this "
+            f"strategies.concave_peel needs GEOS 3.11 or newer for shapely's concave_hull; this "
             f"shapely uses GEOS {'.'.join(map(str, shapely.geos_version))}."
         )
     check_size(sample, min_points)

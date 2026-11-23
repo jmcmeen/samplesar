@@ -8,11 +8,12 @@ import samplesar
 from samplesar._hull import hull_vertices
 
 STRATEGIES = [
-    samplesar.hull_random_nest,
-    samplesar.hull_peel_nest,
-    samplesar.hull_area_nest,
-    samplesar.hull_species_nest,
-    samplesar.hull_distance_nest,
+    samplesar.strategies.hull_random,
+    samplesar.strategies.hull_weighted,
+    samplesar.strategies.hull_peel,
+    samplesar.strategies.hull_area,
+    samplesar.strategies.hull_species,
+    samplesar.strategies.hull_distance,
 ]
 
 
@@ -20,7 +21,7 @@ def make_sample(points, species=None, crs=None):
     points = np.asarray(points, dtype=float)
     if species is None:
         species = [f"sp{i % 5}" for i in range(len(points))]
-    return samplesar.Sample.from_df(
+    return samplesar.sources.dataframe(
         pd.DataFrame({"species": species, "lon": points[:, 0], "lat": points[:, 1]}), crs=crs
     )
 
@@ -39,7 +40,7 @@ UTM_17N = "EPSG:32617"
 
 
 def grid(k, spacing=100.0):
-    """A k-by-k grid of points laid out in UTM zone 17N, in metres."""
+    """A k-by-k grid of points laid out in UTM zone 17N, in meters."""
     xs, ys = np.meshgrid(np.arange(k), np.arange(k))
     return np.column_stack([xs.ravel(), ys.ravel()]) * spacing + [500_000.0, 4_000_000.0]
 
@@ -84,7 +85,7 @@ def test_a_row_collinear_but_for_rounding_has_two_ends():
 
 
 def test_a_real_bend_is_kept():
-    # A corner well off the line through its neighbours stays a vertex.
+    # A corner well off the line through its neighbors stays a vertex.
     points = np.array([[0, 0], [1, -1e-3], [2, 0], [2, 2], [0, 2]], dtype=float)
     assert list(hull_vertices(points, np.arange(5))) == [0, 1, 2, 3, 4]
 
@@ -96,7 +97,7 @@ def test_hull_vertices_of_collinear_points_are_the_ends():
 
 class TestHullRandomNest:
     def test_nested_one_point_at_a_time(self, sample):
-        nest = samplesar.hull_random_nest(sample, seed=1)
+        nest = samplesar.strategies.hull_random(sample, seed=1)
         assert nest.n_steps == sample.n_points - 3 + 1
         assert all(
             len(after) == len(before) - 1
@@ -106,44 +107,44 @@ class TestHullRandomNest:
 
     def test_only_hull_vertices_are_removed(self, sample):
         points = sample.xy
-        for before, gone in removed(samplesar.hull_random_nest(sample, seed=2)):
+        for before, gone in removed(samplesar.strategies.hull_random(sample, seed=2)):
             assert gone[0] in hull_vertices(points, before)
 
     def test_seed_is_reproducible(self, sample):
-        a = samplesar.hull_random_nest(sample, seed=7)
-        b = samplesar.hull_random_nest(sample, seed=7)
-        c = samplesar.hull_random_nest(sample, seed=8)
+        a = samplesar.strategies.hull_random(sample, seed=7)
+        b = samplesar.strategies.hull_random(sample, seed=7)
+        c = samplesar.strategies.hull_random(sample, seed=8)
         assert all(np.array_equal(x, y) for x, y in zip(a.steps, b.steps, strict=True))
         assert any(not np.array_equal(x, y) for x, y in zip(a.steps, c.steps, strict=True))
 
     def test_interior_point_outlasts_the_corners(self):
-        # A centre point is never a vertex while three or more corners remain.
+        # A center point is never a vertex while three or more corners remain.
         corners = [[0, 0], [1, 0], [1, 1], [0, 1]]
-        nest = samplesar.hull_random_nest(make_sample([*corners, [0.5, 0.5]]), seed=0)
+        nest = samplesar.strategies.hull_random(make_sample([*corners, [0.5, 0.5]]), seed=0)
         assert 4 in nest.steps[-1]
 
     def test_min_points(self, sample):
-        nest = samplesar.hull_random_nest(sample, min_points=10, seed=0)
+        nest = samplesar.strategies.hull_random(sample, min_points=10, seed=0)
         assert len(nest.steps[-1]) == 10
 
     def test_runs_down_to_one_point(self, sample):
-        nest = samplesar.hull_random_nest(sample, min_points=1, seed=0)
+        nest = samplesar.strategies.hull_random(sample, min_points=1, seed=0)
         assert len(nest.steps[-1]) == 1
 
 
 class TestHullPeelNest:
     def test_peels_a_grid_ring_by_ring(self):
-        nest = samplesar.hull_peel_nest(make_sample(grid(7), crs=UTM_17N), min_points=1)
+        nest = samplesar.strategies.hull_peel(make_sample(grid(7), crs=UTM_17N), min_points=1)
         assert [len(s) for s in nest.steps] == [49, 25, 9, 1]
         assert_nested(nest)
 
     def test_stops_before_leaving_too_few(self):
-        nest = samplesar.hull_peel_nest(make_sample(grid(7), crs=UTM_17N))
+        nest = samplesar.strategies.hull_peel(make_sample(grid(7), crs=UTM_17N))
         assert [len(s) for s in nest.steps] == [49, 25, 9]
 
     def test_each_step_removes_the_whole_boundary(self, sample):
         points = sample.xy
-        for before, gone in removed(samplesar.hull_peel_nest(sample)):
+        for before, gone in removed(samplesar.strategies.hull_peel(sample)):
             vertices = set(hull_vertices(points, before))
             assert vertices <= set(gone)
             # What's left is strictly inside: none of it is a vertex of the old hull.
@@ -154,7 +155,7 @@ class TestHullPeelNest:
         # all of them are on it, so peeling would leave nothing.
         square = [[0, 0], [4, 0], [4, 4], [0, 4]]
         line = [[1, 2], [2, 2], [3, 2]]
-        nest = samplesar.hull_peel_nest(make_sample([*square, *line]), min_points=1)
+        nest = samplesar.strategies.hull_peel(make_sample([*square, *line]), min_points=1)
         assert [len(s) for s in nest.steps] == [7, 3]
 
 
@@ -191,7 +192,7 @@ def test_peeling_points_all_on_the_hull_is_an_error():
     angles = np.linspace(0, 2 * np.pi, 10, endpoint=False)
     circle = make_sample(np.column_stack([np.cos(angles), np.sin(angles)]))
     with pytest.raises(ValueError, match="No layer can be peeled"):
-        samplesar.hull_peel_nest(circle)
+        samplesar.strategies.hull_peel(circle)
 
 
 def brute_force_choice(sample, before, score):
@@ -200,7 +201,7 @@ def brute_force_choice(sample, before, score):
     scores and distances compared to 9 significant figures."""
     points = sample.xy
     vertices = hull_vertices(points, before)
-    centre = points[vertices].mean(axis=0)
+    center = points[vertices].mean(axis=0)
 
     def rounded(x):
         return float(f"{x:.9g}")
@@ -209,24 +210,24 @@ def brute_force_choice(sample, before, score):
         vertices,
         key=lambda v: (
             -rounded(score(before[before != v])),
-            -rounded(np.hypot(*(points[v] - centre))),
+            -rounded(np.hypot(*(points[v] - center))),
             v,
         ),
     )
 
 
-def at_real_coordinates(offsets, centre=(-80.1, 35.2)):
+def at_real_coordinates(offsets, center=(-80.1, 35.2)):
     """Offsets (in degrees) placed around a real location. A shape mirrored
-    east-west about its centre stays mirrored once projected, so mirror pairs
+    east-west about its center stays mirrored once projected, so mirror pairs
     tie exactly in theory but differ in their last bits in floating point."""
-    return np.asarray(offsets, dtype=float) + centre
+    return np.asarray(offsets, dtype=float) + center
 
 
 class TestHullAreaNest:
     @pytest.mark.parametrize("keep", ["largest", "smallest"])
     def test_matches_brute_force(self, sample, keep):
         sign = 1 if keep == "largest" else -1
-        nest = samplesar.hull_area_nest(sample, keep=keep)
+        nest = samplesar.strategies.hull_area(sample, keep=keep)
         assert nest.n_steps == sample.n_points - 3 + 1
         assert_nested(nest)
         for before, gone in removed(nest):
@@ -240,22 +241,22 @@ class TestHullAreaNest:
         # loses almost nothing, so "largest" takes it first; "smallest" takes a
         # corner whose loss halves the square.
         points = np.array([[0, 0], [1, 0], [1, 1], [0, 1], [0.05, 0.05]]) * 0.01
-        largest = samplesar.hull_area_nest(make_sample(points), keep="largest")
+        largest = samplesar.strategies.hull_area(make_sample(points), keep="largest")
         assert 0 not in largest.steps[1]
-        smallest = samplesar.hull_area_nest(make_sample(points), keep="smallest").to_frame()
+        smallest = samplesar.strategies.hull_area(make_sample(points), keep="smallest").to_frame()
         assert smallest["area"][1] / smallest["area"][0] < 0.6
 
     def test_ties_go_to_the_lowest_index(self):
-        # The four corners of a square centred on (0, 0), where the projection
+        # The four corners of a square centered on (0, 0), where the projection
         # is symmetric, are interchangeable.
         square = make_sample(np.array([[-1, -1], [1, -1], [1, 1], [-1, 1]]) * 0.01)
-        assert list(samplesar.hull_area_nest(square).steps[1]) == [1, 2, 3]
+        assert list(samplesar.strategies.hull_area(square).steps[1]) == [1, 2, 3]
 
     def test_area_ties_go_to_the_farthest_vertex(self):
         # Dropping vertex 2 or 3 leaves the same area (1.0); 3 is farther from
         # the vertices' centroid, so it goes, though its index is higher.
         quad = make_sample(np.array([[0, 0], [0, 2], [1, 1], [1, 0]]) * 0.001)
-        nest = samplesar.hull_area_nest(quad, keep="largest")
+        nest = samplesar.strategies.hull_area(quad, keep="largest")
         assert list(nest.steps[1]) == [0, 1, 2]
 
     @pytest.mark.parametrize("keep", ["largest", "smallest"])
@@ -273,8 +274,8 @@ class TestHullAreaNest:
         ]
         sample = make_sample(at_real_coordinates(hexagon))
         sign = 1 if keep == "largest" else -1
-        nest = samplesar.hull_area_nest(sample, keep=keep)
-        again = samplesar.hull_area_nest(sample, keep=keep)
+        nest = samplesar.strategies.hull_area(sample, keep=keep)
+        again = samplesar.strategies.hull_area(sample, keep=keep)
         assert all(np.array_equal(a, b) for a, b in zip(nest.steps, again.steps, strict=True))
         for before, gone in removed(nest):
             expected = brute_force_choice(
@@ -284,7 +285,7 @@ class TestHullAreaNest:
 
     def test_rejects_unknown_keep(self, sample):
         with pytest.raises(ValueError, match="keep must be"):
-            samplesar.hull_area_nest(sample, keep="biggest")
+            samplesar.strategies.hull_area(sample, keep="biggest")
 
 
 def species_at(sample, rest):
@@ -307,7 +308,7 @@ class TestHullSpeciesNest:
     def test_matches_brute_force(self, request, which, keep):
         sample = request.getfixturevalue(which)
         sign = 1 if keep == "most" else -1
-        nest = samplesar.hull_species_nest(sample, keep=keep)
+        nest = samplesar.strategies.hull_species(sample, keep=keep)
         assert nest.n_steps == sample.n_points - 3 + 1
         assert_nested(nest)
         for before, gone in removed(nest):
@@ -325,25 +326,25 @@ class TestHullSpeciesNest:
                 "lat": [0.0, 0.0, 0.0, 1.0, 1.0, 0.5],
             }
         )
-        sample = samplesar.Sample.from_df(df)
+        sample = samplesar.sources.dataframe(df)
         # Points: (0,0) holds a and b, (1,0) a, (1,1) c, (0,1) c, (0.5,0.5) d.
         # Dropping (1,0) or (1,1) or (0,1) loses nothing; (0,0) loses b.
-        # Points 1, 2 and 3 tie on species and on distance from the centre, so
+        # Points 1, 2 and 3 tie on species and on distance from the center, so
         # the lowest index goes.
-        most = samplesar.hull_species_nest(sample, keep="most")
+        most = samplesar.strategies.hull_species(sample, keep="most")
         assert list(most.steps[1]) == [0, 2, 3, 4]
-        fewest = samplesar.hull_species_nest(sample, keep="fewest")
+        fewest = samplesar.strategies.hull_species(sample, keep="fewest")
         assert list(fewest.steps[1]) == [1, 2, 3, 4]
 
     @pytest.mark.parametrize("keep", ["most", "fewest"])
     def test_reproducible(self, shared_points_sample, keep):
-        here = samplesar.hull_species_nest(shared_points_sample, keep=keep)
-        again = samplesar.hull_species_nest(shared_points_sample, keep=keep)
+        here = samplesar.strategies.hull_species(shared_points_sample, keep=keep)
+        again = samplesar.strategies.hull_species(shared_points_sample, keep=keep)
         assert all(np.array_equal(a, b) for a, b in zip(here.steps, again.steps, strict=True))
 
     def test_rejects_unknown_keep(self, sample):
         with pytest.raises(ValueError, match="keep must be"):
-            samplesar.hull_species_nest(sample, keep="many")
+            samplesar.strategies.hull_species(sample, keep="many")
 
 
 class TestHullDistanceNest:
@@ -351,50 +352,52 @@ class TestHullDistanceNest:
     def test_matches_brute_force(self, sample, remove):
         sign = 1 if remove == "farthest" else -1
         points = sample.xy
-        nest = samplesar.hull_distance_nest(sample, remove=remove)
+        nest = samplesar.strategies.hull_distance(sample, remove=remove)
         assert nest.n_steps == sample.n_points - 3 + 1
         assert_nested(nest)
         for before, gone in removed(nest):
             vertices = hull_vertices(points, before)
-            centre = points[vertices].mean(axis=0)
+            center = points[vertices].mean(axis=0)
             expected = min(
                 vertices,
-                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - centre)):.9g}"), v),
+                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - center)):.9g}"), v),
             )
             assert gone[0] == expected
 
     def test_known_answer(self):
         # A square with one corner pulled far out: "farthest" takes it first.
         points = [[0, 0], [1, 0], [1, 1], [0, 1], [5, 5], [0.5, 0.5]]
-        far = samplesar.hull_distance_nest(make_sample(points))
+        far = samplesar.strategies.hull_distance(make_sample(points))
         assert 4 not in far.steps[1]
-        near = samplesar.hull_distance_nest(make_sample(points), remove="closest")
+        near = samplesar.strategies.hull_distance(make_sample(points), remove="closest")
         assert 4 in near.steps[-1]
 
     def test_ties_go_to_the_lowest_index(self):
         square = make_sample(np.array([[-1, -1], [1, -1], [1, 1], [-1, 1]]) * 0.01)
-        assert list(samplesar.hull_distance_nest(square).steps[1]) == [1, 2, 3]
+        assert list(samplesar.strategies.hull_distance(square).steps[1]) == [1, 2, 3]
 
     @pytest.mark.parametrize("remove", ["farthest", "closest"])
     def test_ties_hold_at_real_coordinates(self, remove):
         # A square mirrored east-west at a real location: the two southern
         # corners tie on distance (to the last bits), so the lower index goes.
         square = [[-0.005, -0.005], [0.005, -0.005], [0.005, 0.005], [-0.005, 0.005], [0.001, 0.0]]
-        nest = samplesar.hull_distance_nest(make_sample(at_real_coordinates(square)), remove=remove)
+        nest = samplesar.strategies.hull_distance(
+            make_sample(at_real_coordinates(square)), remove=remove
+        )
         points = nest.sample.xy
         for before, gone in removed(nest):
             vertices = hull_vertices(points, before)
-            centre = points[vertices].mean(axis=0)
+            center = points[vertices].mean(axis=0)
             sign = 1 if remove == "farthest" else -1
             expected = min(
                 vertices,
-                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - centre)):.9g}"), v),
+                key=lambda v: (-sign * float(f"{np.hypot(*(points[v] - center)):.9g}"), v),
             )
             assert gone[0] == expected
 
     def test_rejects_unknown_remove(self, sample):
         with pytest.raises(ValueError, match="remove must be"):
-            samplesar.hull_distance_nest(sample, remove="outer")
+            samplesar.strategies.hull_distance(sample, remove="outer")
 
 
 class TestConcavePeelNest:
@@ -408,15 +411,15 @@ class TestConcavePeelNest:
 
     def test_nested_and_registered(self):
         sample = self.l_shape()
-        nest = samplesar.concave_peel_nest(sample, ratio=0.2, min_points=1)
+        nest = samplesar.strategies.concave_peel(sample, ratio=0.2, min_points=1)
         assert_nested(nest)
         assert nest.label == "concave_peel(ratio=0.2, min_points=1)"
-        by_name = samplesar.nest(sample, "concave_peel", ratio=0.2, min_points=1)
+        by_name = samplesar.strategies.run(sample, "concave_peel", ratio=0.2, min_points=1)
         assert all(np.array_equal(a, b) for a, b in zip(nest.steps, by_name.steps, strict=True))
 
     def test_ratio_one_is_hull_peeling(self, sample):
-        concave = samplesar.concave_peel_nest(sample, ratio=1.0)
-        convex = samplesar.hull_peel_nest(sample)
+        concave = samplesar.strategies.concave_peel(sample, ratio=1.0)
+        convex = samplesar.strategies.hull_peel(sample)
         assert [len(s) for s in concave.steps] == [len(s) for s in convex.steps]
 
     def test_follows_the_outline(self):
@@ -424,9 +427,9 @@ class TestConcavePeelNest:
         # only the three points inside it (indices 36 to 38) remain. The
         # convex hull's first layer leaves far more.
         sample = self.l_shape()
-        concave = samplesar.concave_peel_nest(sample, ratio=0.05, min_points=1)
+        concave = samplesar.strategies.concave_peel(sample, ratio=0.05, min_points=1)
         assert list(concave.steps[1]) == [36, 37, 38]
-        convex = samplesar.hull_peel_nest(sample, min_points=1)
+        convex = samplesar.strategies.hull_peel(sample, min_points=1)
         assert len(convex.steps[1]) > 3
 
     def test_each_layer_is_the_concave_hull_boundary(self):
@@ -436,7 +439,7 @@ class TestConcavePeelNest:
         from shapely.geometry import MultiPoint
 
         sample = self.l_shape()
-        nest = samplesar.concave_peel_nest(sample, ratio=0.5, min_points=1)
+        nest = samplesar.strategies.concave_peel(sample, ratio=0.5, min_points=1)
         xy = sample.xy
         for before, gone in removed(nest):
             hull = shapely.concave_hull(MultiPoint(xy[before]), ratio=0.5)
@@ -449,4 +452,163 @@ class TestConcavePeelNest:
     @pytest.mark.parametrize("ratio", [-0.1, 1.5])
     def test_bad_ratio(self, sample, ratio):
         with pytest.raises(ValueError, match="ratio must be between 0 and 1"):
-            samplesar.concave_peel_nest(sample, ratio=ratio)
+            samplesar.strategies.concave_peel(sample, ratio=ratio)
+
+
+def test_hull_weighted_with_power_zero_is_hull_random(sample):
+    weighted = samplesar.strategies.hull_weighted(sample, power=0, seed=3)
+    plain = samplesar.strategies.hull_random(sample, seed=3)
+    assert all(np.array_equal(a, b) for a, b in zip(weighted.steps, plain.steps, strict=True))
+
+
+def test_hull_weighted_removes_a_far_outlier_first():
+    """A square of close points and one vertex 50 km away: with power 2 the
+    outlier carries almost all the weight, so it goes first for nearly
+    every seed."""
+    square = grid(4, spacing=100.0)
+    far = square[:1] + [50_000.0, 50_000.0]
+    sample = make_sample(np.vstack([square, far]), crs=UTM_17N)
+    outlier = int(np.argmax(sample.xy.sum(axis=1)))
+    firsts = [
+        int(np.setdiff1d(*samplesar.strategies.hull_weighted(sample, power=2, seed=s).steps[:2])[0])
+        for s in range(50)
+    ]
+    assert firsts.count(outlier) >= 49
+
+
+def test_hull_weighted_only_removes_hull_vertices(sample):
+    nest = samplesar.strategies.hull_weighted(sample, power=1, seed=0)
+    for before, after in zip(nest.steps, nest.steps[1:], strict=False):
+        (gone,) = np.setdiff1d(before, after)
+        assert gone in hull_vertices(sample.xy, before)
+
+
+@pytest.mark.parametrize("power", [-1.0, float("inf"), float("nan")])
+def test_hull_weighted_bad_power(sample, power):
+    with pytest.raises(ValueError, match="power"):
+        samplesar.strategies.hull_weighted(sample, power=power)
+
+
+def test_hull_weighted_is_reproducible_with_a_power(sample):
+    one = samplesar.strategies.hull_weighted(sample, power=2, seed=11)
+    two = samplesar.strategies.hull_weighted(sample, power=2, seed=11)
+    assert all(np.array_equal(a, b) for a, b in zip(one.steps, two.steps, strict=True))
+
+
+def test_hull_weighted_first_choice_follows_the_weights():
+    """Brute force on a small sample: over many seeds, the first vertex
+    removed is drawn in proportion to its isolation squared."""
+    from scipy.spatial.distance import cdist
+
+    rng = np.random.default_rng(5)
+    points = np.vstack([rng.uniform(0, 1000, (8, 2)), [[3000.0, 0.0], [0.0, 2500.0]]])
+    sample = make_sample(points + [500_000.0, 4_000_000.0], crs=UTM_17N)
+    xy = np.asarray(sample.xy)
+    vertices = hull_vertices(xy, np.arange(sample.n_points))
+    d = cdist(xy[vertices], xy)
+    d[d == 0] = np.inf
+    expected = d.min(axis=1) ** 2 / (d.min(axis=1) ** 2).sum()
+    n = 3000
+    firsts = [
+        int(
+            np.setdiff1d(
+                *samplesar.strategies.hull_weighted(sample, power=2, seed=s, min_points=9).steps[:2]
+            )[0]
+        )
+        for s in range(n)
+    ]
+    observed = np.array([firsts.count(int(v)) for v in vertices]) / n
+    assert observed == pytest.approx(expected, abs=0.03)
+
+
+def test_hull_weighted_with_a_huge_power_takes_the_most_isolated():
+    """Isolation below 1 km raised to a power of 400 underflows unless it's
+    scaled first; scaled, the most isolated vertex always goes."""
+    pts = grid(4, spacing=100.0)
+    pts = np.vstack([pts, pts[:1] + [-250.0, -250.0]])
+    sample = make_sample(pts, crs=UTM_17N)
+    corner = int(np.argmin(sample.xy.sum(axis=1)))
+    for s in range(10):
+        nest = samplesar.strategies.hull_weighted(sample, power=400, seed=s)
+        assert int(np.setdiff1d(*nest.steps[:2])[0]) == corner
+
+
+@pytest.mark.parametrize("look", [16, 1])
+def test_isolation_matches_brute_force(sample, monkeypatch, look):
+    from scipy.spatial.distance import cdist
+
+    from samplesar._hull import _Isolation
+
+    monkeypatch.setattr(_Isolation, "LOOK", look)  # 1 forces the fallback
+    xy = np.asarray(sample.xy)
+    isolation = _Isolation(xy)
+    remaining = np.arange(0, sample.n_points, 3)  # most points gone: forces the fallback too
+    vertices = hull_vertices(xy, remaining)
+    d = cdist(xy[vertices], xy[remaining])
+    d[d == 0] = np.inf
+    assert isolation(remaining, vertices) == pytest.approx(d.min(axis=1))
+
+
+def test_grid_peel_with_small_cells_is_hull_peel():
+    sample = make_sample(grid(6), crs=UTM_17N)
+    cells = samplesar.strategies.grid_peel(sample, cell_km=0.01)
+    points = samplesar.strategies.hull_peel(sample)
+    assert all(np.array_equal(a, b) for a, b in zip(cells.steps, points.steps, strict=True))
+
+
+def test_grid_peel_known_layers():
+    """A 6x6 grid at 100 m in 200 m cells is 3x3 cells of 4 points: one
+    layer of 8 cells comes off, leaving the 4 points of the middle cell."""
+    sample = make_sample(grid(6), crs=UTM_17N)
+    nest = samplesar.strategies.grid_peel(sample, cell_km=0.2)
+    assert [len(s) for s in nest.steps] == [36, 4]
+    middle = sample.xy[nest.steps[-1]] - sample.xy.min(axis=0)
+    assert np.all((middle > 0.19) & (middle < 0.31))
+
+
+def test_grid_peel_removes_whole_cells(sample):
+    from samplesar._hull import grid_cells
+
+    nest = samplesar.strategies.grid_peel(sample, cell_km=1.0, min_points=1)
+    cell = grid_cells(np.asarray(sample.xy), 1.0)
+    assert_nested(nest)
+    for before, after in zip(nest.steps, nest.steps[1:], strict=False):
+        gone = set(cell[np.setdiff1d(before, after)])
+        assert not gone & set(cell[after])
+
+
+@pytest.mark.parametrize(("cell_km", "match"), [(0.0, "positive"), (1e6, "No layer")])
+def test_grid_peel_errors(sample, cell_km, match):
+    with pytest.raises(ValueError, match=match):
+        samplesar.strategies.grid_peel(sample, cell_km=cell_km)
+
+
+def test_grid_peel_is_reproducible_and_respects_min_points(sample):
+    one = samplesar.strategies.grid_peel(sample, cell_km=0.5, min_points=5)
+    two = samplesar.strategies.grid_peel(sample, cell_km=0.5, min_points=5)
+    assert all(np.array_equal(a, b) for a, b in zip(one.steps, two.steps, strict=True))
+    assert len(one.steps[-1]) >= 5
+    with pytest.raises(ValueError, match="min_points"):
+        samplesar.strategies.grid_peel(sample, cell_km=0.5, min_points=0)
+
+
+def test_grid_peel_layers_by_brute_force(sample):
+    """Each step removes exactly the cells whose point-mean lies on the
+    convex hull of the remaining cells' means (checked with shapely)."""
+    import shapely
+
+    from samplesar._hull import grid_cells
+
+    xy = np.asarray(sample.xy)
+    cell = grid_cells(xy, 0.8)
+    means = np.array([xy[cell == c].mean(axis=0) for c in range(cell.max() + 1)])
+    nest = samplesar.strategies.grid_peel(sample, cell_km=0.8, min_points=1)
+    for before, after in zip(nest.steps, nest.steps[1:], strict=False):
+        cells = np.unique(cell[before])
+        hull = shapely.convex_hull(shapely.multipoints(means[cells]))
+        on_hull = {
+            int(c)
+            for c in cells
+            if hull.boundary.distance(shapely.Point(means[c])) <= 1e-9 * max(1.0, hull.length)
+        }
+        assert set(np.unique(cell[np.setdiff1d(before, after)]).tolist()) == on_hull

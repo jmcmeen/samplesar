@@ -63,8 +63,9 @@ nav:
   - Getting Started: getting-started.md
   - Sampling Strategies: strategies.md
   - API Reference:
-      - Samples: api/sample.md
-      - Nests: api/nest.md
-      - Strategy Registry: api/registry.md
+      - Samples and nests: api/core.md
+      - Sources: api/sources.md
+      - Regions: api/regions.md
+      - Strategies: api/strategies.md
       - Evaluation: api/evaluate.md
       - Plotting: api/plot.md

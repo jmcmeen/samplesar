@@ -45,7 +45,7 @@ make check          # lint, format check, type check and tests, as CI runs them
    git switch -c fix/short-description --no-track upstream/main
    ```
 
-3. Make the change and add or update tests. New behaviour needs a test; a bug
+3. Make the change and add or update tests. New behavior needs a test; a bug
    fix needs a test that fails without the fix.
 4. Add a line under `[Unreleased]` in `CHANGELOG.md` (Keep a Changelog
    sections: Added, Changed, Deprecated, Removed, Fixed).

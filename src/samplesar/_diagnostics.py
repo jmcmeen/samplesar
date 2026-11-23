@@ -11,7 +11,7 @@ from shapely.geometry import MultiPoint, Polygon
 from samplesar._nest import Nest
 
 
-def nest_diagnostics(nest: Nest) -> pd.DataFrame:
+def diagnostics(nest: Nest) -> pd.DataFrame:
     """Shape and spread of each step's convex hull.
 
     Parameters
@@ -24,7 +24,7 @@ def nest_diagnostics(nest: Nest) -> pd.DataFrame:
     pd.DataFrame
         One row per step: ``step``, ``n_points``, ``area`` (km²),
         ``perimeter`` (km; with a distorting ``crs``, corrected by its scale
-        at the sample's centre, as areas are), ``compactness`` (Polsby-Popper, 4πA/P²: 1 for a
+        at the sample's center, as areas are), ``compactness`` (Polsby-Popper, 4πA/P²: 1 for a
         circle, near 0 for a sliver), ``area_share`` (of the first step's
         area), ``density`` (points per km²) and ``centroid_shift`` (km from
         the first hull's centroid). Shape columns are missing where the
@@ -61,10 +61,10 @@ def nest_diagnostics(nest: Nest) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def residual_autocorrelation(nest: Nest, model: str = "power", **kwargs: Any) -> dict[str, float]:
+def autocorrelation(nest: Nest, model: str = "power", **kwargs: Any) -> dict[str, float]:
     """How far a fit's residuals along a nest are from independent.
 
-    Neighbouring steps share all but one point, so their residuals tend to
+    Neighboring steps share all but one point, so their residuals tend to
     run together. Strong autocorrelation means the fit's standard errors, R²
     and AICc treat the steps as more independent evidence than they are.
 
@@ -96,10 +96,10 @@ def residual_autocorrelation(nest: Nest, model: str = "power", **kwargs: Any) ->
     residuals = data["species"].to_numpy(dtype=float) - np.asarray(
         fit.predict(data["area"].to_numpy(dtype=float)), dtype=float
     )
-    centred = residuals - residuals.mean()
-    denominator = float(np.sum(centred**2))
+    centered = residuals - residuals.mean()
+    denominator = float(np.sum(centered**2))
     if denominator == 0:
         return {"lag1": np.nan, "durbin_watson": np.nan, "n": len(residuals)}
-    lag1 = float(np.sum(centred[1:] * centred[:-1]) / denominator)
+    lag1 = float(np.sum(centered[1:] * centered[:-1]) / denominator)
     durbin_watson = float(np.sum(np.diff(residuals) ** 2) / np.sum(residuals**2))
     return {"lag1": lag1, "durbin_watson": durbin_watson, "n": len(residuals)}

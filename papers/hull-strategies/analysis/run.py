@@ -4,11 +4,14 @@ Usage (from the repository root):
 
     uv run python papers/hull-strategies/analysis/run.py \\
         --opendata ~/data/inaturalist-open-data/observations.parquet \\
-        [--local-sample path/to/observations.csv] [--quick]
+        [--local-sample path/to/observations.csv] \\
+        [--ecoregions path/to/us_eco_l3.zip] [--quick]
 
-``--opendata`` is the Parquet file built by ``samplesar.download_open_data``.
+``--opendata`` is the Parquet file built by ``samplesar.sources.download_open_data``.
 ``--local-sample`` is an optional CSV of iNaturalist observations with
-``species``, ``longitude`` and ``latitude`` columns. ``--quick`` uses fewer
+``species``, ``longitude`` and ``latitude`` columns. ``--ecoregions`` is the
+US EPA's Level III ecoregions (us_eco_l3.zip, from the EPA's ecoregions
+page), for the Southern Appalachian samples. ``--quick`` uses fewer
 baseline nests and simulation replicates, for a fast check.
 
 Writes ``results/tables/*.csv`` and ``results/figures/*.png`` beside this
@@ -68,6 +71,35 @@ def regional() -> list[tuple[str, str, dict, float]]:
         ("etn_frogs", "East Tennessee, frogs", {"bbox": (-85.0, 35.0, -81.5, 37.0), "taxon_id": 20979}, 100),
         ("gsmnp_birds", "Great Smoky Mountains, birds", {"bbox": (-84.0, 35.43, -83.1, 35.79), "taxon_id": 3}, 50),
         ("monteverde_frogs", "Monteverde, Costa Rica, frogs", {"bbox": (-84.9, 10.25, -84.7, 10.40), "taxon_id": 20979}, 25),
+        # The whole country, clipped to its boundary (geoBoundaries).
+        ("costa_rica_frogs", "Costa Rica, frogs", {"boundary": ("CRI", 0), "taxon_id": 20979}, 100),
+    ]
+
+
+# The Southern Appalachians: EPA Level III Blue Ridge (66), Ridge and Valley
+# (67) and Southwestern Appalachians (68), south of the Roanoke Gap (37.3°N),
+# where the southern Blue Ridge ends; 66 and 67 run on north to Pennsylvania.
+SOUTHERN_APPALACHIAN_ECOREGIONS = ("66", "67", "68")
+ROANOKE_GAP_LAT = 37.3
+
+
+def southern_appalachians(ecoregions: Path | str):
+    """The Southern Appalachians as one WGS84 polygon, from the EPA's Level
+    III ecoregions (a local copy of us_eco_l3.zip, or its URL)."""
+    return samplesar.regions.read(
+        ecoregions,
+        samplesar.regions.ECOREGIONS["epa_l3"]["code"],
+        SOUTHERN_APPALACHIAN_ECOREGIONS,
+        clip=(-180, -90, 180, ROANOKE_GAP_LAT),
+    )
+
+
+def ecoregion_samples(ecoregions: Path | str) -> list[tuple[str, str, dict, float]]:
+    """Southern Appalachian samples: key, label, query, merge distance."""
+    region = southern_appalachians(ecoregions)
+    return [
+        ("sapp_frogs", "Southern Appalachians, frogs", {"boundary": region, "taxon_id": 20979}, 100),
+        ("sapp_salamanders", "Southern Appalachians, salamanders", {"boundary": region, "taxon_id": 26718}, 100),
     ]
 
 
@@ -80,26 +112,30 @@ def thin(sample: samplesar.Sample, max_points: int, seed: int = 0) -> samplesar.
     return sample.subset(keep)
 
 
-def load_datasets(parquet: Path | None, local: Path | None) -> list[Dataset]:
+def load_datasets(parquet: Path | None, local: Path | None, ecoregions: Path | str | None = None) -> list[Dataset]:
     datasets = []
     if local is not None:
-        sample = samplesar.Sample.from_csv(local, lon_col="longitude", lat_col="latitude")
+        sample = samplesar.sources.csv(local, lon_col="longitude", lat_col="latitude")
         datasets.append(Dataset("local", "Steele Creek Park, one observer", sample, 10))
     if parquet is not None:
-        for key, label, query, merge in regional():
-            sample = samplesar.Sample.from_open_data(parquet, **query)
+        queries = regional() + (ecoregion_samples(ecoregions) if ecoregions else [])
+        for key, label, query, merge in queries:
+            if isinstance(query.get("boundary"), tuple):
+                country, level = query["boundary"]
+                query = {**query, "boundary": samplesar.regions.admin(country, level)}
+            sample = samplesar.sources.open_data(parquet, **query)
             datasets.append(Dataset(key, label, sample, merge))
     return datasets
 
 
 def simulated_community(rng: np.random.Generator, cluster_share: float) -> samplesar.Sample:
-    """A 2 km square (in UTM zone 17N metres) with 400 records of 80
+    """A 2 km square (in UTM zone 17N meters) with 400 records of 80
     species. Each species occurs within a circular range of radius 200 to
     1,000 m; a record takes one of the species whose range covers its point,
     or any species at random where none does. ``cluster_share`` of the
     records are made at one spot, with 2 m of GPS error, as at a trailhead."""
     n, n_species, side = 400, 80, 2000.0
-    centres = rng.uniform(0, side, size=(n_species, 2))
+    centers = rng.uniform(0, side, size=(n_species, 2))
     radii = rng.uniform(200, 1000, size=n_species)
     clustered = int(n * cluster_share)
     spot = np.array([side / 2, side / 2])
@@ -108,28 +144,23 @@ def simulated_community(rng: np.random.Generator, cluster_share: float) -> sampl
     )
     species = []
     for p in points:
-        present = np.flatnonzero(np.hypot(*(centres - p).T) <= radii)
+        present = np.flatnonzero(np.hypot(*(centers - p).T) <= radii)
         species.append(f"sp{rng.choice(present) if len(present) else rng.integers(n_species)}")
     origin = np.array([500_000.0, 4_040_000.0])
     df = pd.DataFrame({"species": species, "x": points[:, 0] + origin[0], "y": points[:, 1] + origin[1]})
-    return samplesar.Sample.from_df(df, lon_col="x", lat_col="y", crs="EPSG:32617")
+    return samplesar.sources.dataframe(df, lon_col="x", lat_col="y", crs="EPSG:32617")
 
 
-POWER_Z_BOUND = 5.0  # sars searches the power model's z within ±5
 
 
 def at_bounds(fit) -> str:
-    """The parameters stopped on a bound: sars' SARFit.at_bounds where the
-    installed sars has it, else z at the power model's bound."""
-    names = getattr(fit, "at_bounds", None)
-    if names is None:
-        names = ("z",) if abs(fit.params["z"]) >= POWER_Z_BOUND * (1 - 1e-6) else ()
-    return ",".join(names)
+    """The parameters stopped on a bound of the fit (sars' SARFit.at_bounds)."""
+    return ",".join(fit.at_bounds)
 
 
 def fit_row(nest: samplesar.Nest) -> dict:
     fit = nest.fit()
-    auto = samplesar.residual_autocorrelation(nest)
+    auto = samplesar.evaluate.autocorrelation(nest)
     return {
         "n_steps": nest.n_steps,
         "n_fitted": len(nest.sar_data()),
@@ -144,13 +175,13 @@ def fit_row(nest: samplesar.Nest) -> dict:
 
 def run_strategies(sample: samplesar.Sample, baseline_n: int) -> tuple[pd.DataFrame, dict]:
     rows, nests = [], {}
-    baseline = samplesar.random_baseline(sample, n=baseline_n, strategy="hull_random", seed=1000)
+    baseline = samplesar.evaluate.baseline(sample, n=baseline_n, strategy="hull_random", seed=1000)
     for code, name, options in STRATEGIES:
         start = time.perf_counter()
         try:
-            nest = samplesar.nest(sample, name, **options)
+            nest = samplesar.strategies.run(sample, name, **options)
             row = {"strategy": code, "label": nest.label, **fit_row(nest)}
-            placed = samplesar.compare_to_baseline(nest, baseline)
+            placed = samplesar.evaluate.against_baseline(nest, baseline)
             row["z_baseline_mean"] = placed.loc["z", "mean"]
             row["z_baseline_q025"] = placed.loc["z", "q025"]
             row["z_baseline_q975"] = placed.loc["z", "q975"]
@@ -165,18 +196,18 @@ def run_strategies(sample: samplesar.Sample, baseline_n: int) -> tuple[pd.DataFr
 
 def merge_sensitivity(sample: samplesar.Sample, distances: list[float]) -> pd.DataFrame:
     rows = []
-    for metres in distances:
-        merged = sample if metres == 0 else sample.merge_within(metres)
+    for meters in distances:
+        merged = sample if meters == 0 else sample.merge_within(meters)
         merged = thin(merged, MAX_POINTS)
         for code, name, options in STRATEGIES:
             try:
-                nest = samplesar.nest(merged, name, **options)
+                nest = samplesar.strategies.run(merged, name, **options)
                 fit = nest.fit()
-                rows.append({"merge_m": metres, "n_points": merged.n_points, "strategy": code,
+                rows.append({"merge_m": meters, "n_points": merged.n_points, "strategy": code,
                              "z": fit.params["z"], "at_bounds": at_bounds(fit),
                              "min_area_km2": nest.sar_data()["area"].min()})
             except ValueError:
-                rows.append({"merge_m": metres, "n_points": merged.n_points, "strategy": code})
+                rows.append({"merge_m": meters, "n_points": merged.n_points, "strategy": code})
     return pd.DataFrame(rows)
 
 
@@ -189,7 +220,7 @@ def simulations(replicates: int) -> pd.DataFrame:
                 used = sample if merge == 0 else sample.merge_within(merge)
                 for code, name, options in STRATEGIES:
                     try:
-                        z = samplesar.nest(used, name, **options).fit().params["z"]
+                        z = samplesar.strategies.run(used, name, **options).fit().params["z"]
                     except ValueError:
                         z = np.nan
                     rows.append({"cluster_share": share, "replicate": rep, "merge_m": merge,
@@ -203,15 +234,15 @@ def figure_schematic(path: Path) -> None:
     sample = simulated_community(np.random.default_rng(7), 0.0)
     fig, axes = plt.subplots(2, 5, figsize=(20, 8.5))
     for ax, (code, name, options) in zip(axes.flat, STRATEGIES, strict=True):
-        nest = samplesar.nest(sample, name, **options)
+        nest = samplesar.strategies.run(sample, name, **options)
         half = min(range(nest.n_steps), key=lambda i: abs(len(nest.steps[i]) - sample.n_points / 2))
-        samplesar.plot_nest(nest, half, ax=ax)
+        samplesar.plot.nest(nest, half, ax=ax)
         ax.set_title(f"{code}: {nest.label}", fontsize=10)
         ax.set_xlabel("")
         ax.set_ylabel("")
         ax.set_xticklabels([])
         ax.set_yticklabels([])
-    fig.suptitle("The strategies on a simulated sample, at about half its points (removed points grey)")
+    fig.suptitle("The strategies on a simulated sample, at about half its points (removed points gray)")
     fig.tight_layout()
     fig.savefig(path, dpi=110)
     plt.close(fig)
@@ -290,7 +321,7 @@ def figure_simulation(sim: pd.DataFrame, path: Path) -> None:
 def figure_compactness(nests: dict, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
     for code, nest in nests.items():
-        d = samplesar.nest_diagnostics(nest)
+        d = samplesar.evaluate.diagnostics(nest)
         share = 1 - d["n_points"] / d["n_points"].iloc[0]
         ax.plot(share, d["compactness"], label=code, linewidth=1)
     ax.set_xlabel("Share of points removed")
@@ -306,6 +337,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--opendata", type=Path, help="observations.parquet from download_open_data")
     parser.add_argument("--local-sample", type=Path, help="CSV of iNaturalist observations")
+    parser.add_argument("--ecoregions", help="US EPA Level III ecoregions (us_eco_l3.zip): a local path or URL")
     parser.add_argument("--quick", action="store_true", help="fewer baselines and replicates")
     parser.add_argument("--out", type=Path, default=RESULTS, help="where to write (default: results/)")
     args = parser.parse_args()
@@ -321,7 +353,8 @@ def main() -> None:
     if args.opendata is None and args.local_sample is None:
         parser.error("give --opendata, --local-sample or both")
     datasets = load_datasets(args.opendata.expanduser() if args.opendata else None,
-                             args.local_sample.expanduser() if args.local_sample else None)
+                             args.local_sample.expanduser() if args.local_sample else None,
+                             args.ecoregions)
     summary, results, nests_by_dataset, labels = [], [], {}, {}
     for ds in datasets:
         raw = ds.sample
