@@ -13,6 +13,14 @@ All notable changes to this project are documented here. The format is based on
   coast a vertex whose loss gives up a wide stretch of sea and little land
   costs little. It needs a mask.
 
+### Changed
+
+- `Nest.to_frame` (and so `sar_data`, `fit` and the plots) keeps each step's
+  hull and species counts from the step before instead of recomputing them,
+  so nests that remove one point at a time take seconds instead of a minute:
+  on 13,500 points, 6.5 s instead of 46 s for `radial`, and 0.3 s instead of
+  44 s for `random`. The values agree with before to floating-point rounding.
+
 ## [0.2.0] - 2026-11-23
 
 ### Added

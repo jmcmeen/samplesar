@@ -82,20 +82,23 @@ class Nest:
         sample = self.sample
         masked = sample.mask is not None
         species, n_species = point_species(self.sample)
-        # How many of the step's points hold each species, updated by the
-        # points each step drops (or adds), not recounted.
+        # How many of the step's points hold each species, and the step's
+        # hull, updated from the points each step drops (or adds) rather than
+        # recomputed from every point at every step.
         holders = np.zeros(n_species, dtype=int)
-        previous = np.empty(0, dtype=int)
+        present = np.zeros(sample.n_points, dtype=bool)
+        areas = _StepAreas(sample)
         rows = []
         for i, idx in enumerate(self.steps):
-            for change, sign in (
-                (np.setdiff1d(previous, idx), -1),
-                (np.setdiff1d(idx, previous), 1),
-            ):
+            idx = np.asarray(idx, dtype=int)
+            now = np.zeros(sample.n_points, dtype=bool)
+            now[idx] = True
+            gone, added = present & ~now, now & ~present
+            present = now
+            for change, sign in ((np.flatnonzero(gone), -1), (np.flatnonzero(added), 1)):
                 if len(change):
                     np.add.at(holders, np.concatenate([species[p] for p in change]), sign)
-            previous = np.asarray(idx)
-            area, whole = sample.areas_of(idx)
+            area, whole = areas.update(idx, gone, added)
             row = {
                 "step": i,
                 "n_points": len(idx),
@@ -294,6 +297,70 @@ class Nest:
         from samplesar._evaluate import fit_nest
 
         return fit_nest(self, model, **kwargs)
+
+
+class _StepAreas:
+    """Each step's hull areas (within the mask, and whole), in km², kept from
+    the step before. The hull is reused when no vertex leaves and nothing is
+    added; when vertices leave, it's rebuilt from the surviving vertices and
+    the points outside their polygon, since every other point stays inside."""
+
+    def __init__(self, sample: Sample) -> None:
+        self.sample = sample
+        self.xy = sample.xy
+        self.vertices: np.ndarray | None = None  # point indices, in hull order
+        self.areas = (0.0, 0.0)
+
+    def update(self, idx: np.ndarray, gone: np.ndarray, added: np.ndarray) -> tuple[float, float]:
+        if self.vertices is not None and not added.any():
+            if not gone[self.vertices].any():
+                return self.areas
+            candidates = self._outside(idx, self.vertices[~gone[self.vertices]])
+        else:
+            candidates = idx
+        self.vertices = _hull_vertices(self.xy, candidates)
+        if self.vertices is None:  # fewer than three points, or all in a line
+            self.areas = self.sample.areas_of(idx)
+        else:
+            hull = shapely.Polygon(self.xy[self.vertices])
+            scale = self.sample.area_scale
+            whole = hull.area / scale
+            masked = (
+                whole
+                if self.sample.mask is None
+                else self.sample._mask_tiles.area_within(hull) / scale
+            )
+            self.areas = (masked, whole)
+        return self.areas
+
+    def _outside(self, idx: np.ndarray, kept: np.ndarray) -> np.ndarray:
+        """The surviving vertices and the points not strictly inside their polygon."""
+        if len(kept) < 3:
+            return idx
+        polygon = shapely.Polygon(self.xy[kept])
+        if not polygon.area > 0:
+            return idx
+        shapely.prepare(polygon)
+        inside = shapely.contains_xy(polygon, self.xy[idx, 0], self.xy[idx, 1])
+        return np.union1d(idx[~inside], kept)
+
+
+def _hull_vertices(xy: np.ndarray, idx: np.ndarray) -> np.ndarray | None:
+    """The convex hull's vertices, as indices into ``xy`` in hull order, or
+    None when the points make no polygon (or qhull can't tell).
+
+    qhull's precision rules differ from GEOS's (``areas_of``) only at rounding
+    level: a corner within rounding of a straight edge may count as a vertex
+    in one and not the other, which changes an area by no more than rounding.
+    """
+    if len(idx) < 3:
+        return None
+    from scipy.spatial import ConvexHull, QhullError
+
+    try:
+        return idx[ConvexHull(xy[idx]).vertices]
+    except QhullError:
+        return None
 
 
 def _short(value: Any) -> str:
