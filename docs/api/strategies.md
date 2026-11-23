@@ -30,6 +30,10 @@
 
 ::: samplesar.strategies.hull_area
 
+## strategies.hull_masked_area
+
+::: samplesar.strategies.hull_masked_area
+
 ## strategies.hull_species
 
 ::: samplesar.strategies.hull_species

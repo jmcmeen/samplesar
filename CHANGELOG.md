@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `strategies.hull_masked_area(sample, keep="largest")`: `hull_area`'s choice
+  of hull vertex, made by each hull's area within the sample's mask, so on a
+  coast a vertex whose loss gives up a wide stretch of sea and little land
+  costs little. It needs a mask.
+
 ## [0.2.0] - 2026-11-23
 
 ### Added

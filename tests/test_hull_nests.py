@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+import shapely
 
 import samplesar
 from samplesar._hull import hull_vertices
@@ -286,6 +287,63 @@ class TestHullAreaNest:
     def test_rejects_unknown_keep(self, sample):
         with pytest.raises(ValueError, match="keep must be"):
             samplesar.strategies.hull_area(sample, keep="biggest")
+
+
+# A coastline for the 40-point sample: land with an inlet reaching in from the east.
+COAST = shapely.box(-82.35, 36.45, -82.15, 36.65).difference(
+    shapely.box(-82.25, 36.53, -82.1, 36.57)
+)
+
+
+class TestHullMaskedAreaNest:
+    @pytest.mark.parametrize("keep", ["largest", "smallest"])
+    def test_matches_brute_force(self, sample, keep):
+        masked = sample.with_mask(COAST)
+        sign = 1 if keep == "largest" else -1
+        nest = samplesar.strategies.hull_masked_area(masked, keep=keep)
+        assert nest.n_steps == sample.n_points - 3 + 1
+        assert_nested(nest)
+        for before, gone in removed(nest):
+            expected = brute_force_choice(
+                masked, before, lambda rest: sign * masked.hull_area_of(rest)
+            )
+            assert gone[0] == expected
+
+    def test_known_answer(self):
+        # A square of land with a point far out to sea: losing that point costs
+        # most of the hull but almost no land, so hull_masked_area takes it
+        # first, while hull_area keeps it and takes a corner.
+        points = np.array([[0, 0], [1, 0], [1, 1], [0, 1], [0.5, 0.5], [3, 0.5]]) * 0.01
+        land = shapely.box(-0.001, -0.001, 0.011, 0.011)
+        sample = make_sample(points)
+        masked = samplesar.strategies.hull_masked_area(sample.with_mask(land))
+        assert 5 not in masked.steps[1]
+        assert 5 in samplesar.strategies.hull_area(sample).steps[1]
+
+    def test_a_mask_covering_every_hull_chooses_as_hull_area(self, sample):
+        everywhere = sample.with_mask(shapely.box(-83, 36, -82, 37))
+        masked = samplesar.strategies.hull_masked_area(everywhere)
+        plain = samplesar.strategies.hull_area(sample)
+        assert all(np.array_equal(a, b) for a, b in zip(masked.steps, plain.steps, strict=True))
+
+    def test_the_mask_changes_the_choices(self, sample):
+        masked = samplesar.strategies.hull_masked_area(sample.with_mask(COAST))
+        plain = samplesar.strategies.hull_area(sample)
+        assert any(not np.array_equal(a, b) for a, b in zip(masked.steps, plain.steps, strict=True))
+
+    def test_is_reproducible(self, sample):
+        masked = sample.with_mask(COAST)
+        first = samplesar.strategies.hull_masked_area(masked, keep="smallest")
+        again = samplesar.strategies.run(masked, "hull_masked_area", keep="smallest")
+        assert all(np.array_equal(a, b) for a, b in zip(first.steps, again.steps, strict=True))
+
+    def test_needs_a_mask(self, sample):
+        with pytest.raises(ValueError, match="needs a sample with a mask"):
+            samplesar.strategies.hull_masked_area(sample)
+
+    def test_rejects_unknown_keep(self, sample):
+        with pytest.raises(ValueError, match="keep must be"):
+            samplesar.strategies.hull_masked_area(sample.with_mask(COAST), keep="biggest")
 
 
 def species_at(sample, rest):

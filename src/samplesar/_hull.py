@@ -407,6 +407,60 @@ def hull_area(
     return _remove_one(sample, min_points, choose)
 
 
+@register("hull_masked_area")
+def hull_masked_area(
+    sample: Sample, keep: Literal["largest", "smallest"] = "largest", min_points: int = 3
+) -> Nest:
+    """Nest a sample by removing the hull vertex that changes its area within the mask least or most.
+
+    [`hull_area`][samplesar.strategies.hull_area] measured within the sample's
+    mask (see [`Sample.with_mask`][samplesar.Sample.with_mask]): every vertex
+    of the current hull is tried, and the one whose removal leaves the
+    largest hull area inside the mask (``keep="largest"``) or the smallest
+    (``keep="smallest"``) goes. On a coast, a vertex whose loss gives up a
+    wide stretch of sea and little land costs little here, where
+    ``hull_area`` counts the sea as well; the two choose alike once every
+    hull lies inside the mask. Ties go as in ``hull_area``: to within
+    floating-point rounding, to the vertex farthest from the centroid of the
+    hull's vertices, then to the lowest point index.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest, with a mask.
+    keep : {"largest", "smallest"}
+        Which remaining hull to keep at each step, by its area within the mask.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If the sample has no mask (without one this is ``hull_area``),
+        ``keep`` is unknown, ``min_points`` is below 1 or the sample has fewer
+        points.
+    """
+    if sample.mask is None:
+        raise ValueError(
+            "hull_masked_area needs a sample with a mask (Sample.with_mask, or "
+            "within(..., mask=True)); without one, use hull_area."
+        )
+    if keep not in ("largest", "smallest"):
+        raise ValueError(f"keep must be 'largest' or 'smallest', got {keep!r}")
+    sign = 1.0 if keep == "largest" else -1.0
+    points = sample.xy
+
+    def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
+        areas = np.array([sample.hull_area_of(remaining[remaining != v]) for v in vertices])
+        return _pick(vertices, sign * areas, _center_distance(points, vertices))
+
+    return _remove_one(sample, min_points, choose)
+
+
 @register("hull_species")
 def hull_species(
     sample: Sample, keep: Literal["most", "fewest"] = "most", min_points: int = 3
