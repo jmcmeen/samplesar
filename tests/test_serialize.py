@@ -81,9 +81,9 @@ def test_steps_that_are_not_nested_cannot_be_saved(sample):
         ({"first": [0, 0, 1]}, "repeats a point"),
         ({"first": [0.5, 1]}, "whole-number point indices"),
         ({"version": "2"}, "whole number"),
-        ({"center": [1]}, "center or crs is unusable"),
-        ({"center": None, "centre": [1], "version": 2}, "center or crs is unusable"),
-        ({"crs": "garbage"}, "center or crs is unusable"),
+        ({"center": [1]}, "center, crs or mask is unusable"),
+        ({"center": None, "centre": [1], "version": 2}, "center, crs or mask is unusable"),
+        ({"crs": "garbage"}, "center, crs or mask is unusable"),
         ({"observations": None, "first": None}, None),
     ],
 )

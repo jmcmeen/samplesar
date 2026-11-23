@@ -69,3 +69,6 @@ nav:
       - Strategies: api/strategies.md
       - Evaluation: api/evaluate.md
       - Plotting: api/plot.md
+
+exclude_docs: |
+  assets/*.py

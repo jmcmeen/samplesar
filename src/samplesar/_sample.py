@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import shapely
 from pyproj import CRS, Proj, Transformer
 from pyproj.exceptions import ProjError
 from shapely.geometry import MultiPoint
@@ -19,6 +20,7 @@ COLUMNS = ("species", "lon", "lat")
 
 
 WGS84 = CRS.from_epsg(4326)
+MASK_SEGMENT_DEGREES = 0.05  # a mask's longest edge before projecting
 
 
 def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
@@ -87,11 +89,22 @@ class Sample:
         distances in, such as the UTM zone the sample was laid out in. Set by
         [`sources.dataframe`][samplesar.sources.dataframe] when the coordinates come in
         one.
+    mask : shapely.Polygon or shapely.MultiPolygon, optional
+        The ground areas are measured within, in WGS84 longitude and
+        latitude: land, say, so a hull reaching over the sea counts only its
+        land. Set by [`with_mask`][samplesar.Sample.with_mask] or
+        ``within(boundary, mask=True)``, and kept by subsets. Only its part
+        near the points is kept (within a box padded by half their extent
+        and a degree), with longitudes unwrapped about the projection
+        center, so it may run past ±180 for a sample across the
+        antimeridian. It changes areas only; which points a strategy
+        removes is unchanged.
     """
 
     data: pd.DataFrame
     center: tuple[float, float] | None = None
     crs: CRS | None = None
+    mask: Any = None
 
     def __post_init__(self) -> None:
         if self.center is not None:
@@ -99,6 +112,15 @@ class Sample:
             if not (np.isfinite(lon) and np.isfinite(lat) and -90 <= lat <= 90):
                 raise ValueError(f"center must be a (lon, lat) in degrees, got {self.center!r}.")
             object.__setattr__(self, "center", (lon, lat))
+        if self.mask is not None:
+            from samplesar._boundary import as_geometry, near, polygonal
+
+            mask = polygonal(shapely.make_valid(as_geometry(self.mask)))
+            # Only the part near the points matters; cutting it there keeps
+            # the far side of the globe out of the projection, and the saved
+            # nest small.
+            mask = near(mask, self.points, self.projection_center[0])
+            object.__setattr__(self, "mask", mask)
 
     @property
     def n_observations(self) -> int:
@@ -193,9 +215,109 @@ class Sample:
         xy.flags.writeable = False
         return xy
 
+    @cached_property
+    def _mask_plane(self) -> shapely.Geometry:
+        """The whole mask in km on the projection (a subset with the same
+        projection inherits it rather than projecting it again)."""
+        from samplesar._boundary import polygonal
+
+        to_plane = Transformer.from_crs(WGS84, self.projection, always_xy=True)
+        km = self.projection.axis_info[0].unit_conversion_factor / 1000.0
+        # Short edges, so straight lines in degrees stay true once projected.
+        dense = shapely.segmentize(self.mask, MASK_SEGMENT_DEGREES)
+
+        def project(coords: np.ndarray) -> np.ndarray:
+            x, y = to_plane.transform(coords[:, 0], coords[:, 1])
+            return np.column_stack([x, y]) * km
+
+        projected = shapely.transform(dense, project)
+        if not np.isfinite(shapely.get_coordinates(projected)).all():
+            raise ValueError(
+                f"Part of the mask can't be projected to {self.projection.name}; cut it to "
+                "the sample's region first (regions.read's clip, say)."
+            )
+        return polygonal(shapely.make_valid(projected))
+
+    @cached_property
+    def mask_xy(self) -> shapely.Geometry | None:
+        """The mask (see [`with_mask`][samplesar.Sample.with_mask]) in km on
+        [`projection`][samplesar.Sample.projection], cut to the convex hull of
+        all the points (every step's hull lies inside it); None without a
+        mask. Computed once.
+
+        Raises
+        ------
+        ValueError
+            If part of the mask can't be projected to ``crs``.
+        """
+        if self.mask is None:
+            return None
+        from samplesar._boundary import polygonal
+
+        hull = MultiPoint(self.xy).convex_hull
+        clipped = polygonal(self._mask_plane.intersection(hull))
+        shapely.prepare(clipped)
+        return clipped
+
+    def _derived(self, data: pd.DataFrame) -> Sample:
+        """A sample of some of these observations, on the same projection and
+        mask, reusing the projected mask if it's been computed."""
+        child = Sample(data, center=self.projection_center, crs=self.crs, mask=self.mask)
+        if "_mask_plane" in self.__dict__:
+            child.__dict__["_mask_plane"] = self.__dict__["_mask_plane"]
+        return child
+
+    def hull_area_of(self, point_indices: Sequence[int] | np.ndarray) -> float:
+        """The area, in km², of the convex hull of some of the sample's points,
+        within the mask (see [`with_mask`][samplesar.Sample.with_mask]) if there is one.
+
+        Measured as [`area`][samplesar.Sample.area] is.
+
+        Parameters
+        ----------
+        point_indices : sequence of int or np.ndarray
+            Rows of [`points`][samplesar.Sample.points].
+
+        Returns
+        -------
+        float
+            Zero for fewer than three points, collinear points, or a hull
+            wholly outside the mask.
+        """
+        return self.areas_of(point_indices)[0]
+
+    def areas_of(self, point_indices: Sequence[int] | np.ndarray) -> tuple[float, float]:
+        """The area of some points' convex hull within the mask, and the
+        whole hull's area, both in km² (the same without a mask).
+
+        Parameters
+        ----------
+        point_indices : sequence of int or np.ndarray
+            Rows of [`points`][samplesar.Sample.points].
+
+        Returns
+        -------
+        tuple of float
+        """
+        xy = self.xy[np.asarray(point_indices, dtype=int)]
+        if len(xy) < 3:
+            return 0.0, 0.0
+        hull = MultiPoint(xy).convex_hull
+        whole = float(hull.area) / self.area_scale
+        if self.mask is None or whole == 0:
+            return whole, whole
+        return self._mask_tiles.area_within(hull) / self.area_scale, whole
+
+    @cached_property
+    def _mask_tiles(self) -> _Tiles:
+        mask = self.mask_xy
+        assert mask is not None
+        return _Tiles(mask)
+
     @property
     def area(self) -> float:
-        """Area of the convex hull of the points, in km².
+        """Area of the convex hull of the points, in km², within the
+        mask (see [`with_mask`][samplesar.Sample.with_mask]) if there is one.
 
         Measured on [`xy`][samplesar.Sample.xy] and divided by
         [`area_scale`][samplesar.Sample.area_scale]: true areas on the
@@ -203,7 +325,40 @@ class Sample:
         distortion. Zero when fewer than three distinct, non-collinear points
         remain.
         """
-        return hull_area(self.xy) / self.area_scale
+        return self.hull_area_of(np.arange(self.n_points))
+
+    def with_mask(self, mask: Any) -> Sample:
+        """The same sample, with its areas measured within a region.
+
+        A convex hull can span ground that isn't habitat: sea along a coast,
+        an inlet, a lake, the bay of a concave island. Its area then
+        overstates the area sampled, most at the large end of a nest. With a
+        mask, every area (the sample's, and each step's in
+        [`Nest.to_frame`][samplesar.Nest.to_frame], ``sar_data`` and ``fit``)
+        is the area of the hull's intersection with the mask, on the same
+        equal-area projection. Nests are unchanged: strategies choose points
+        by their hulls as before.
+
+        Parameters
+        ----------
+        mask : polygon or None
+            A shapely polygon or multipolygon in WGS84 longitude and
+            latitude, or a GeoDataFrame or GeoSeries in any CRS (converted
+            and dissolved), such as [`regions.admin`][samplesar.regions.admin]
+            returns; None removes the mask. Observations outside it are kept
+            (use [`within`][samplesar.Sample.within] to drop them).
+
+        Returns
+        -------
+        Sample
+            With the same observations, ``center`` and ``crs``.
+
+        Raises
+        ------
+        ValueError
+            If ``mask`` isn't polygonal or is empty.
+        """
+        return Sample(self.data, center=self.center, crs=self.crs, mask=mask)
 
     def merge_within(self, meters: float) -> Sample:
         """Merge points within a distance of each other into one, keeping every observation.
@@ -267,9 +422,9 @@ class Sample:
         rows = pd.MultiIndex.from_arrays([self.points[:, 0], self.points[:, 1]]).get_indexer(keys)
         data = self.data.copy()
         data["lon"], data["lat"] = target[rows, 0], target[rows, 1]
-        return Sample(data, center=self.projection_center, crs=self.crs)
+        return self._derived(data)
 
-    def within(self, boundary: Any) -> Sample:
+    def within(self, boundary: Any, mask: bool = False) -> Sample:
         """The observations inside a region (or on its edge).
 
         Parameters
@@ -279,6 +434,11 @@ class Sample:
             latitude, or a GeoDataFrame or GeoSeries of them in any CRS (it
             is converted and dissolved), such as
             [`regions.admin`][samplesar.regions.admin] returns.
+        mask : bool
+            Also measure areas within the region (see
+            [`with_mask`][samplesar.Sample.with_mask]), so a hull reaching
+            beyond it counts only its part inside. By default the sample's
+            mask, if any, is kept.
 
         Returns
         -------
@@ -294,10 +454,16 @@ class Sample:
         """
         from samplesar._boundary import as_geometry, inside
 
-        keep = inside(as_geometry(boundary), self.data["lon"], self.data["lat"])
+        region = as_geometry(boundary)
+        keep = inside(region, self.data["lon"], self.data["lat"])
         if not keep.any():
             raise ValueError("No observations lie inside the boundary.")
-        return Sample(self.data[keep].reset_index(drop=True), center=self.center, crs=self.crs)
+        return Sample(
+            self.data[keep].reset_index(drop=True),
+            center=self.center,
+            crs=self.crs,
+            mask=region if mask else self.mask,
+        )
 
     def subset(self, point_indices: Sequence[int] | np.ndarray) -> Sample:
         """The observations at some of the sample's points.
@@ -315,12 +481,56 @@ class Sample:
         keep = self.points[list(point_indices)]
         mask = pd.MultiIndex.from_frame(self.data[["lon", "lat"]]).isin([tuple(p) for p in keep])
         data = self.data.loc[mask].reset_index(drop=True)
-        return Sample(data, center=self.projection_center, crs=self.crs)
+        return self._derived(data)
 
     def __repr__(self) -> str:
         return (
             f"Sample(n_observations={self.n_observations}, n_points={self.n_points}, "
-            f"n_species={self.n_species}, area={self.area:.6g})"
+            f"n_species={self.n_species}, area={self.area:.6g}"
+            + (", masked" if self.mask is not None else "")
+            + ")"
+        )
+
+
+class _Tiles:
+    """A mask cut into a grid of tiles, so the area of a polygon within it
+    costs one intersection per tile along the polygon's edge, not one with
+    the whole mask (a coastline of many thousand vertices)."""
+
+    GRID = 32  # tiles across the mask's longer side
+
+    def __init__(self, mask: shapely.Geometry) -> None:
+        self.mask = mask
+        west, south, east, north = mask.bounds if not mask.is_empty else (0, 0, 0, 0)
+        from samplesar._boundary import polygonal
+
+        size = max(east - west, north - south) / self.GRID
+        tiles: list[shapely.Geometry] = []
+        if size > 0:
+            # Edges from the counts, so the last tiles reach the far bounds.
+            xs = np.linspace(west, east, max(1, round((east - west) / size)) + 1)
+            ys = np.linspace(south, north, max(1, round((north - south) / size)) + 1)
+            for x0, x1 in zip(xs, xs[1:], strict=False):
+                for y0, y1 in zip(ys, ys[1:], strict=False):
+                    tile = polygonal(mask.intersection(shapely.box(x0, y0, x1, y1)))
+                    if tile.area > 0:
+                        tiles.append(tile)
+        self.tiles = np.array(tiles, dtype=object)
+        self.areas = shapely.area(self.tiles) if tiles else np.empty(0)
+        self.tree = shapely.STRtree(self.tiles)
+
+    def area_within(self, polygon: shapely.Geometry) -> float:
+        """The area of ``polygon`` inside the mask, in the mask's units."""
+        if shapely.contains(self.mask, polygon):
+            return float(polygon.area)
+        near = self.tree.query(polygon)
+        if not len(near):
+            return 0.0
+        shapely.prepare(polygon)
+        inside = shapely.contains_properly(polygon, self.tiles[near])
+        edge = self.tiles[near[~inside]]
+        return float(
+            self.areas[near[inside]].sum() + shapely.area(shapely.intersection(edge, polygon)).sum()
         )
 
 

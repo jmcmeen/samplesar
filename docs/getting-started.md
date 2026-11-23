@@ -131,6 +131,27 @@ salamanders = samplesar.sources.open_data(
 geoBoundaries' files carry
 their own licenses (CC BY 4.0 or ODbL) and need attribution when published.
 
+## Areas within a mask
+
+A convex hull can reach over ground that isn't habitat: the sea along a
+coast, an inlet, a lake, the bay of a concave island. For all iNaturalist frog
+records in Costa Rica, a quarter of the full hull is sea. A mask measures every
+area within a region instead, the hull's intersection with it, on the same
+equal-area projection; which points a strategy removes doesn't change. In
+plots, the orange outline is the hull and only the shaded part counts toward
+the area:
+
+![The same hull without a mask (left: the whole hull counts) and with one (right: the inlet is left out)](assets/mask.webp)
+
+```python
+land = frogs.with_mask(costa_rica)        # or frogs.within(costa_rica, mask=True)
+nest = samplesar.strategies.hull_peel(land)
+nest.to_frame()      # area is the land in each hull; hull_area the whole hull
+```
+
+Any polygon works as a mask, even the world's land: the sample keeps only the
+part near its points.
+
 ## A nest
 
 A nesting strategy shrinks the sample one step at a time. Each step keeps a

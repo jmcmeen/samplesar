@@ -6,6 +6,29 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- Masks: `Sample.with_mask(region)` and `Sample.within(boundary, mask=True)`
+  measure every area within a region (land, say), as the area of each hull's
+  intersection with it, so a hull reaching over the sea or a lake counts only
+  the ground inside. `Sample.area`, `Nest.to_frame`, `sar_data`, `fit` and
+  `evaluate.diagnostics` use it; `to_frame` adds the whole hull's area as
+  `hull_area`, and `diagnostics` the share inside as `mask_share`. Subsets
+  keep the mask, saved nests store it (nest format 4), and `plot.nest` and
+  `plot.animate` draw its outline and fill only the hull inside it. Nests
+  themselves are unchanged.
+- `Sample.hull_area_of(points)` and `Sample.areas_of(points)`: the area of some points' hull, within the
+  mask if there is one (and, from `areas_of`, the whole hull's area too).
+
+### Changed
+
+- The README is rewritten: what a nested SAR is, how areas are measured,
+  masks (with a figure), the strategies, data sources and evaluation.
+- This release is 0.2.0 because 0.1.4 broke the API without a minor
+  release: the modules regrouped by job (`sources`, `regions`,
+  `strategies`, `evaluate`, `plot`) and the US spellings (`center`,
+  `meters`) replaced the old names. See 0.1.4 below.
+
 ## [0.1.4] - 2026-11-23
 
 ### Added

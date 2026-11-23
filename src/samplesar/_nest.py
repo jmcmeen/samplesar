@@ -11,11 +11,13 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import shapely
 from pyproj import CRS
 from pyproj.exceptions import CRSError
+from shapely.errors import GEOSException
 
 from samplesar._registry import Options, register
-from samplesar._sample import Sample, _validate, hull_area, point_species
+from samplesar._sample import Sample, _validate, point_species
 
 
 @dataclass(frozen=True)
@@ -73,9 +75,12 @@ class Nest:
         -------
         pd.DataFrame
             One row per step: ``step``, ``n_points``, ``area`` (convex hull,
-            km²) and ``species`` (distinct species remaining).
+            km², within the sample's mask (see [`with_mask`][samplesar.Sample.with_mask]) if it
+            has one) and ``species`` (distinct species remaining). With a
+            mask, also ``hull_area``: the whole hull's area, km².
         """
-        points = self.sample.xy
+        sample = self.sample
+        masked = sample.mask is not None
         species, n_species = point_species(self.sample)
         # How many of the step's points hold each species, updated by the
         # points each step drops (or adds), not recounted.
@@ -90,14 +95,16 @@ class Nest:
                 if len(change):
                     np.add.at(holders, np.concatenate([species[p] for p in change]), sign)
             previous = np.asarray(idx)
-            rows.append(
-                {
-                    "step": i,
-                    "n_points": len(idx),
-                    "area": hull_area(points[idx]) / self.sample.area_scale,
-                    "species": int(np.count_nonzero(holders)),
-                }
-            )
+            area, whole = sample.areas_of(idx)
+            row = {
+                "step": i,
+                "n_points": len(idx),
+                "area": area,
+                "species": int(np.count_nonzero(holders)),
+            }
+            if masked:
+                row["hull_area"] = whole
+            rows.append(row)
         return pd.DataFrame(rows)
 
     def sar_data(self) -> pd.DataFrame:
@@ -106,7 +113,8 @@ class Nest:
         Returns
         -------
         pd.DataFrame
-            ``area`` (convex hull, km²) and ``species`` columns,
+            ``area`` (convex hull, km², within the sample's mask if it has
+            one) and ``species`` columns,
             one row per step, without the zero-area steps at the end.
         """
         frame = self.to_frame()
@@ -115,7 +123,7 @@ class Nest:
     def to_dict(self) -> dict[str, Any]:
         """The nest as plain data, ready for JSON.
 
-        Holds the observations, the strategy and its options, and the steps,
+        Holds the observations (with their center, crs and mask), the strategy and its options, and the steps,
         stored as the points each step removes rather than in full. Options
         that are tuples or arrays are stored as lists.
 
@@ -136,9 +144,12 @@ class Nest:
                 raise ValueError("Only a nest whose steps are nested can be saved.")
             removed.append(np.setdiff1d(before, after).tolist())
         data = self.sample.data
-        return {
+        mask = self.sample.mask
+        saved = {
             "format": FORMAT,
-            "version": FORMAT_VERSION,
+            # A nest without a mask is saved as version 3, which older
+            # releases still read.
+            "version": FORMAT_VERSION if mask is not None else 3,
             "samplesar": _package_version(),
             "strategy": self.strategy,
             "options": {k: _plain(k, v) for k, v in self.options.items()},
@@ -152,6 +163,9 @@ class Nest:
             "first": np.asarray(self.steps[0]).tolist(),
             "removed": removed,
         }
+        if mask is not None:
+            saved["mask"] = shapely.to_wkt(mask, rounding_precision=-1)
+        return saved
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Nest:
@@ -189,15 +203,17 @@ class Nest:
         if center is None and version < 3:
             center = data.get("centre")  # its key before version 3
         crs = data.get("crs")
-        if center is not None or crs is not None:
+        mask = data.get("mask")
+        if center is not None or crs is not None or mask is not None:
             try:
                 sample = dataclasses.replace(
                     sample,
                     center=tuple(center) if center is not None else None,
                     crs=CRS.from_wkt(crs) if crs is not None else None,
+                    mask=shapely.from_wkt(mask) if mask is not None else None,
                 )
-            except (TypeError, ValueError, CRSError) as err:
-                raise ValueError(f"The saved center or crs is unusable: {err}") from err
+            except (TypeError, ValueError, CRSError, GEOSException) as err:
+                raise ValueError(f"The saved center, crs or mask is unusable: {err}") from err
         remaining = _indices(data["first"])
         if remaining.size and (remaining.min() < 0 or remaining.max() >= sample.n_points):
             raise ValueError("The saved steps name points outside the saved sample.")
@@ -302,7 +318,8 @@ def check_size(sample: Sample, min_points: int) -> None:
 
 
 FORMAT = "samplesar.nest"
-FORMAT_VERSION = 3  # 2 adds the sample's center and crs; 3 spells the key "center"
+# 2 adds the sample's center and crs; 3 spells the key "center"; 4 adds the mask
+FORMAT_VERSION = 4
 
 
 def _package_version() -> str:
