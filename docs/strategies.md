@@ -102,6 +102,14 @@ vertex and keeps the largest remaining hull: the vertex whose loss costs the
 least area goes first, so the area falls as slowly as the points allow.
 `keep="smallest"` does the opposite, cutting the area as fast as possible.
 
+### By area change within a mask
+
+`strategies.hull_masked_area(sample, keep="largest", min_points=3)` makes the
+same choice by each hull's area within the sample's mask (`Sample.with_mask`),
+so on a coast a vertex whose loss gives up a wide stretch of sea and little
+land costs little. It needs a mask, and chooses as `hull_area` does once
+every hull lies inside it.
+
 ### By species change
 
 `strategies.hull_species(sample, keep="most", min_points=3)` removes the vertex
