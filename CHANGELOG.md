@@ -56,6 +56,10 @@ All notable changes to this project are documented here. The format is based on
   rests on whose loss shrinks it most.
 - `strategies.density_peel` takes `method="voronoi"`: density as one over
   the area of each point's Voronoi cell, with no bandwidth to choose.
+- `Sample.thin(km, seed=None)`: thins the sample to at most one point per
+  grid cell, to even out sampling effort before nesting.
+- `strategies.concave_peel` takes `ratio=(start, end)`: the ratio changes
+  as the sample shrinks, in proportion to the points removed.
 - `regions.admin_units(country, level)` and `regions.read_units(source,
   column)`: many named regions at once, each as its own polygon.
 

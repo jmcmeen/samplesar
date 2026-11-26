@@ -571,6 +571,58 @@ class Sample:
         data["lon"], data["lat"] = target[rows, 0], target[rows, 1]
         return self._derived(data)
 
+    def thin(self, km: float, seed: int | None = None) -> Sample:
+        """Thin the sample to at most one point per grid cell, evening out effort.
+
+        Observation data pile up where people go: a trailhead can hold more
+        points than the rest of a valley. A nest of such a sample spends most
+        of its steps inside the pile. Thinning lays square cells of ``km``
+        over the points (anchored at their south-west corner, on
+        [`xy`][samplesar.Sample.xy]) and keeps one point in each occupied
+        cell, so no neighborhood has more than its share. Unlike
+        [`merge_within`][samplesar.Sample.merge_within], the points not kept
+        are dropped with their observations, as spatial thinning of
+        occurrence records usually is: species seen only at dropped points
+        are lost.
+
+        Parameters
+        ----------
+        km : float
+            The side of a cell, in km (positive).
+        seed : int, optional
+            Keep a random point of each cell, reproducibly. By default the
+            point nearest its cell's center is kept (ties to the lowest
+            index).
+
+        Returns
+        -------
+        Sample
+            With the same projection and mask as this one.
+
+        Raises
+        ------
+        ValueError
+            If ``km`` isn't a positive number.
+        """
+        if isinstance(km, bool) or not isinstance(km, numbers.Real):
+            raise ValueError(f"km must be a positive number, got {km!r}.")
+        km = float(km)
+        if not (np.isfinite(km) and km > 0):
+            raise ValueError(f"km must be a positive number, got {km!r}.")
+        xy = np.asarray(self.xy)
+        corner = xy.min(axis=0)
+        ij = np.floor((xy - corner) / km + 1e-9).astype(np.int64)
+        _, cell = np.unique(ij, axis=0, return_inverse=True)
+        cell = np.asarray(cell).ravel()
+        if seed is None:
+            off = xy - (corner + (ij + 0.5) * km)
+            rank = np.hypot(off[:, 0], off[:, 1])
+        else:
+            rank = np.random.default_rng(seed).random(len(xy))
+        order = np.lexsort((np.arange(len(xy)), rank, cell))
+        kept = order[np.unique(cell[order], return_index=True)[1]]
+        return self.subset(np.sort(kept))
+
     def within(self, boundary: Any, mask: bool = False) -> Sample:
         """The observations inside a region (or on its edge).
 

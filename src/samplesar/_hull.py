@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import numbers
 from collections.abc import Callable
 from typing import Literal
 
@@ -560,7 +561,9 @@ def hull_distance(
 
 
 @register("concave_peel")
-def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nest:
+def concave_peel(
+    sample: Sample, ratio: float | tuple[float, float] = 0.3, min_points: int = 3
+) -> Nest:
     """Nest a sample by peeling off its concave hull at each step.
 
     Like [`strategies.hull_peel`][samplesar.strategies.hull_peel], but each step removes
@@ -574,9 +577,12 @@ def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nes
     ----------
     sample : Sample
         The sample to nest.
-    ratio : float
+    ratio : float or tuple of float
         Between 0 and 1: 1 is the convex hull (the same as ``strategies.hull_peel``),
-        smaller values follow the outline more tightly.
+        smaller values follow the outline more tightly. A pair
+        ``(start, end)`` changes it as the sample shrinks, in proportion to
+        the points removed: ``(0.6, 0.1)`` peels loosely at first and
+        tightly at the end, when few points are left to outline.
     min_points : int
         Stop rather than leave fewer than this many points.
 
@@ -587,14 +593,21 @@ def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nes
     Raises
     ------
     ValueError
-        If ``ratio`` is outside 0 to 1, ``min_points`` is below 1, the sample
-        has fewer points, or no layer can be peeled.
+        If ``ratio`` (or either end of a pair) isn't a number from 0 to 1,
+        ``min_points`` is below 1, the sample has fewer points, or no layer
+        can be peeled.
     RuntimeError
         If shapely is built on a GEOS older than 3.11 (the PyPI wheels of
         shapely 2.0 and later aren't).
     """
-    if not 0 <= ratio <= 1:
-        raise ValueError(f"ratio must be between 0 and 1, got {ratio!r}.")
+    ends = tuple(ratio) if isinstance(ratio, tuple | list) else (ratio, ratio)
+    if len(ends) != 2 or any(
+        isinstance(v, bool) or not isinstance(v, numbers.Real) or not 0 <= v <= 1 for v in ends
+    ):
+        raise ValueError(
+            f"ratio must be between 0 and 1 (a number, or a (start, end) pair), got {ratio!r}."
+        )
+    start, end = float(ends[0]), float(ends[1])
     if shapely.geos_version < (3, 11):
         raise RuntimeError(
             f"strategies.concave_peel needs GEOS 3.11 or newer for shapely's concave_hull; this "
@@ -605,7 +618,10 @@ def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nes
     remaining = np.arange(sample.n_points)
     steps = [remaining.copy()]
     while True:
-        hull = shapely.concave_hull(MultiPoint(points[remaining]), ratio=ratio)
+        # The share of the points to be removed that already are.
+        done = (sample.n_points - len(remaining)) / max(sample.n_points - min_points, 1)
+        now = start + (end - start) * min(done, 1.0)
+        hull = shapely.concave_hull(MultiPoint(points[remaining]), ratio=now)
         if isinstance(hull, Polygon):
             distance = shapely.distance(hull.exterior, shapely.points(points[remaining]))
             on = remaining[distance <= _tolerance(hull)]

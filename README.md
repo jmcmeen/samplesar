@@ -106,6 +106,8 @@ name through `strategies.run(sample, "hull_peel")`:
 - `samplesar.regions` gives polygons to restrict a sample to (`Sample.within`)
   or to mask its areas: countries, states and counties from geoBoundaries,
   US EPA and RESOLVE ecoregions, or any boundary file or URL.
+- `Sample.thin(km)` keeps one point per grid cell, to even out sampling
+  effort before nesting.
 - `Sample.merge_within(meters)` merges records made at one spot (a
   trailhead, a feeder) that differ only by GPS jitter. Left apart, they make
   the last steps of a hull nest measure hulls centimeters across.

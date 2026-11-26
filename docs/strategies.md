@@ -88,6 +88,12 @@ its gaps: suited to L-shaped or scattered samples. `ratio` runs from 1 (the
 convex hull, as `strategies.hull_peel`) down towards 0 (tighter). Areas are still
 convex hull areas.
 
+A pair, `ratio=(0.6, 0.1)`, changes the ratio as the sample shrinks, in
+proportion to the points removed: loose while there are many points to
+outline, tight at the end. shapely's ratio is already relative to the
+spacing of the points left, so a single value is the default; the pair is
+for testing how much a curve depends on it.
+
 ## Choosing a vertex
 
 The next strategies each remove one hull vertex per step, chosen by a rule
@@ -292,6 +298,23 @@ part goes at its own pace and all reach their last step together; with
 early. A part with no more than `min_points` points stays whole. For one
 curve per part instead of one curve for all, nest each part yourself:
 `strategies.hull_peel(sample.subset(np.flatnonzero(labels == 0)))`.
+
+## Thinning before nesting
+
+Observation data pile up where people go. `sample.thin(km)` keeps one point
+in each occupied grid cell of that size (the one nearest the cell's center,
+or with `seed` a random one), so no neighborhood holds more than its share
+and a nest doesn't spend most of its steps inside one trailhead:
+
+```python
+even = sample.thin(1.0)                      # at most one point per km²
+nest = samplesar.strategies.hull_peel(even)
+```
+
+The points not kept are dropped with their observations, as spatial
+thinning of occurrence records usually is, so species seen only at dropped
+points are lost. To keep every observation and only merge points a few
+meters apart, use `Sample.merge_within`.
 
 ## Comparing strategies
 
