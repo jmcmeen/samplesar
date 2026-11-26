@@ -262,10 +262,11 @@ them together.
 `by` chooses the split, and `strategies.partition(sample, parts, by)` returns
 it on its own, as one label per point:
 
-- `"kmeans"` (the default): k-means clusters of the projected points;
-  `seed` makes it reproducible.
-- `"grid"`: equal rectangles over the points' bounding box, `parts` of them
-  in the most nearly square layout, or `parts=(columns, rows)`.
+- `"kmeans"` (the default): k-means clusters of the projected points. Give
+  a `seed`: without one the clusters can differ from run to run.
+- `"grid"`: equal rectangles over the points' bounding box, in the most
+  nearly square layout with at least `parts` cells, or
+  `parts=(columns, rows)`.
 - labels you give, one per point.
 - (longitude, latitude) seeds: each point joins its nearest seed.
 - polygons (shapely, or a GeoSeries or GeoDataFrame): ecoregions, islands,

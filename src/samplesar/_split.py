@@ -11,10 +11,9 @@ import numpy as np
 import shapely
 
 from samplesar import _registry
-from samplesar._nest import Nest, check_size
-from samplesar._ranked import _to_xy
+from samplesar._nest import Nest, NoStepError, check_size
 from samplesar._registry import register
-from samplesar._sample import Sample
+from samplesar._sample import WGS84, Sample
 
 
 def _renumber(labels: np.ndarray) -> np.ndarray:
@@ -61,16 +60,19 @@ def partition(
           part is compact and the parts follow where the observations are.
         - ``"grid"``: equal rectangles over the points' bounding box on the
           sample's projection, the most nearly square layout with at least
-          ``parts`` cells (or ``parts=(columns, rows)``).
+          ``parts`` cells, so 3 gives 2 by 2 and 5 gives 3 by 2 (or
+          ``parts=(columns, rows)``).
         - a one-dimensional array of labels, one per row of
           ``sample.points``: your own split.
         - an array of (longitude, latitude) seeds, shape (n, 2): each point
           joins its nearest seed (the seeds' Voronoi cells).
         - a sequence of shapely polygons in WGS84, or a GeoSeries or
-          GeoDataFrame of them (ecoregions, islands, counties): each point
-          joins the first polygon that holds it.
+          GeoDataFrame of them (ecoregions, islands, counties; one without
+          a CRS is taken to be in WGS84): each point joins the first
+          polygon that holds it.
     seed : int, optional
-        Seed for k-means' starting centers, for a reproducible split.
+        Seed for k-means' starting centers. Without one the clusters, and
+        so the split, can differ from run to run.
 
     Returns
     -------
@@ -112,8 +114,11 @@ def partition(
         labels = np.full(n, -1)
         lon, lat = sample.points[:, 0], sample.points[:, 1]
         for i, polygon in enumerate(by):
-            inside = shapely.intersects_xy(polygon, lon, lat) & (labels < 0)
-            labels[inside] = i
+            free = np.flatnonzero(labels < 0)
+            if not len(free):
+                break
+            shapely.prepare(polygon)
+            labels[free[shapely.intersects_xy(polygon, lon[free], lat[free])]] = i
         if (labels < 0).any():
             raise ValueError(
                 f"{int((labels < 0).sum())} of the sample's {n} points lie in none of the "
@@ -126,13 +131,22 @@ def partition(
         given = np.empty(0, dtype=object)
     if given.ndim == 1 and given.shape == (n,) and given.dtype.kind in "iub":
         return _renumber(given)
+    if given.ndim == 1 and given.shape == (n,) and given.dtype.kind == "f":
+        if not (np.isfinite(given).all() and (given == np.round(given)).all()):
+            raise ValueError("Labels must be whole numbers or text, one per point, none missing.")
+        return _renumber(given.astype(int))
     if given.ndim == 1 and given.shape == (n,) and given.dtype.kind in "OUS":
         return _renumber(np.unique(given.astype(str), return_inverse=True)[1])
     if given.ndim == 2 and given.shape[1] == 2 and given.dtype.kind in "if" and len(given):
         if not (np.abs(given[:, 0]) <= 180).all() or not (np.abs(given[:, 1]) <= 90).all():
             raise ValueError("Seeds must be (longitude, latitude) pairs in degrees.")
-        seeds = np.array([_to_xy(sample, lon, lat) for lon, lat in given])
+        from pyproj import Transformer
         from scipy.spatial import cKDTree
+
+        projection = sample.projection
+        to_plane = Transformer.from_crs(WGS84, projection, always_xy=True)
+        x, y = to_plane.transform(given[:, 0], given[:, 1])
+        seeds = np.column_stack([x, y]) * projection.axis_info[0].unit_conversion_factor / 1000.0
 
         return _renumber(cKDTree(seeds).query(xy)[1])
     raise ValueError(
@@ -192,11 +206,14 @@ def split(
         round, so parts with few steps finish early. Either way each step of
         the nest is one step of one part.
     min_points : int
-        Each part stops when this many of its points remain; a part with no
-        more than that stays whole throughout.
+        Each part stops when this many of its points remain, so the last
+        step holds about that many for every part; a part with no more than
+        that stays whole throughout, as does one a layer-peeling strategy
+        can't take a layer from.
     seed : int, optional
         Seed for the split (k-means) and, when ``strategy`` is random, for
-        each part's choices.
+        each part's choices. Without one a k-means split can differ from
+        run to run, even with a deterministic strategy inside.
     **options
         The inner strategy's own options, such as ``keep`` or ``bearing``.
 
@@ -208,14 +225,21 @@ def split(
     Raises
     ------
     ValueError
-        If ``strategy`` isn't registered or is ``"split"``, ``pace`` is
-        unknown, the split is invalid (see ``partition``), ``min_points`` is
-        below 1, or the strategy can't take a step in any part.
+        If ``strategy`` isn't registered or is ``"split"`` or ``"order"``,
+        ``pace`` is unknown, the split is invalid (see ``partition``),
+        ``min_points`` is below 1, the strategy can't take a step in any
+        part, or it rejects its options or any part (a part with points
+        lacking a date, for ``"temporal"``, say).
     TypeError
         If an option isn't one the inner strategy takes.
     """
     if strategy == "split":
         raise ValueError("split can't run inside itself; split by labels instead.")
+    if strategy == "order":
+        raise ValueError(
+            "split can't run 'order' inside its parts: an order names rows of the whole "
+            "sample. Build the nest with strategies.from_order and set Nest.parts instead."
+        )
     inner = _registry._REGISTRY.get(strategy)
     if inner is None:
         raise ValueError(f"No strategy {strategy!r}; known: {', '.join(_registry._REGISTRY)}.")
@@ -228,7 +252,7 @@ def split(
     seeds = np.random.SeedSequence(seed).generate_state(n_parts) if seed is not None else None
     # Each part's steps, as rows of the whole sample's points.
     nests: list[list[np.ndarray]] = []
-    failure: ValueError | None = None
+    failure: NoStepError | None = None
     for part in range(n_parts):
         members = np.flatnonzero(labels == part)
         if len(members) <= min_points:
@@ -242,7 +266,7 @@ def split(
             raise RuntimeError("A part's points came back out of order; please report this.")
         try:
             nest = inner.original(part_sample, min_points=min_points, **own)
-        except ValueError as err:  # this part is too small for the strategy to take a step
+        except NoStepError as err:  # this part has no layer to peel: it stays whole
             failure = err
             nests.append([members])
             continue

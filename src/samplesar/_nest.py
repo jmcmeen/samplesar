@@ -85,6 +85,8 @@ class Nest:
         make no polygon."""
         xy = self.sample.xy
         hulls = [shapely.MultiPoint(xy[group]).convex_hull for group in self.groups(step)]
+        if not hulls:  # a step with no points
+            return shapely.GeometryCollection()
         if len(hulls) == 1:
             return hulls[0]
         polygons = [hull for hull in hulls if isinstance(hull, shapely.Polygon)]
@@ -114,16 +116,9 @@ class Nest:
         """A step's area within the sample's mask and its whole area, both
         in km² (the same without a mask): of its convex hull, or for a nest
         with parts of its parts' hulls together."""
-        sample = self.sample
         if self.parts is None:
-            return sample.areas_of(self.steps[step])
-        cover = self.footprint(step)
-        if not cover.area > 0:
-            return 0.0, 0.0
-        whole = float(cover.area) / sample.area_scale
-        if sample.mask is None:
-            return whole, whole
-        return sample._mask_tiles.area_within(cover) / sample.area_scale, whole
+            return self.sample.areas_of(self.steps[step])
+        return _cover_areas(self.sample, self.footprint(step))
 
     def to_frame(self) -> pd.DataFrame:
         """The nest as a table.
@@ -217,7 +212,7 @@ class Nest:
             "format": FORMAT,
             # A nest without a mask or parts is saved as version 3, and one
             # without parts as 4, which older releases still read.
-            "version": 5 if self.parts is not None else 4 if mask is not None else 3,
+            "version": FORMAT_VERSION if self.parts is not None else 4 if mask is not None else 3,
             "samplesar": _package_version(),
             "strategy": self.strategy,
             "options": {k: _plain(k, v) for k, v in self.options.items()},
@@ -297,7 +292,10 @@ class Nest:
             options["center"] = options.pop("centre")
         parts = data.get("parts")
         if parts is not None:
-            parts = _indices(parts)
+            try:
+                parts = _indices(parts)
+            except ValueError:
+                raise ValueError("The saved parts must be whole numbers, one per point.") from None
             if len(parts) != sample.n_points:
                 raise ValueError("The saved parts don't match the saved sample's points.")
         return cls(
@@ -414,6 +412,17 @@ class _StepAreas:
         return np.union1d(idx[~inside], kept)
 
 
+def _cover_areas(sample: Sample, cover: shapely.Geometry) -> tuple[float, float]:
+    """The area of some ground (on the sample's projection, km) within the
+    sample's mask, and its whole area, in km²."""
+    if not cover.area > 0:
+        return 0.0, 0.0
+    whole = float(cover.area) / sample.area_scale
+    if sample.mask is None:
+        return whole, whole
+    return sample._mask_tiles.area_within(cover) / sample.area_scale, whole
+
+
 class _PartAreas:
     """Each step's areas for a nest of several parts, in km²: the union of
     the parts' convex hulls, within the mask and whole. A part's hull is
@@ -425,6 +434,7 @@ class _PartAreas:
         self.xy = sample.xy
         self.parts = parts
         self.vertices: dict[int, np.ndarray | None] = {}
+        self.hulls: dict[int, shapely.Polygon] = {}
         self.areas = (0.0, 0.0)
 
     def update(self, idx: np.ndarray, gone: np.ndarray, added: np.ndarray) -> tuple[float, float]:
@@ -436,22 +446,30 @@ class _PartAreas:
             if vertices is not None and not added[self.parts == part].any():
                 if not gone[vertices].any():
                     continue
-            self.vertices[part] = _hull_vertices(self.xy, idx[labels == part])
+            members = idx[labels == part]
+            vertices = _hull_vertices(self.xy, members)
+            self.vertices[part] = vertices
+            if vertices is not None:
+                self.hulls[part] = shapely.Polygon(self.xy[vertices])
+            else:
+                # Too few points, a line, or a sliver qhull won't take: GEOS
+                # decides, as footprint does.
+                hull = shapely.MultiPoint(self.xy[members]).convex_hull
+                if isinstance(hull, shapely.Polygon) and hull.area > 0:
+                    self.hulls[part] = hull
+                else:
+                    self.hulls.pop(part, None)
             changed = True
         if changed:
-            hulls = [shapely.Polygon(self.xy[v]) for v in self.vertices.values() if v is not None]
-            if not hulls:
-                self.areas = (0.0, 0.0)
-            else:
-                cover = shapely.union_all(hulls) if len(hulls) > 1 else hulls[0]
-                scale = self.sample.area_scale
-                whole = cover.area / scale
-                masked = (
-                    whole
-                    if self.sample.mask is None
-                    else self.sample._mask_tiles.area_within(cover) / scale
-                )
-                self.areas = (masked, whole)
+            hulls = list(self.hulls.values())
+            cover = (
+                shapely.GeometryCollection()
+                if not hulls
+                else hulls[0]
+                if len(hulls) == 1
+                else shapely.union_all(hulls)
+            )
+            self.areas = _cover_areas(self.sample, cover)
         return self.areas
 
 
@@ -493,12 +511,23 @@ def _short(value: Any) -> str:
     sequences (a removal order, say) abbreviated with their length."""
     if isinstance(value, np.generic):
         value = value.item()
+    if isinstance(value, shapely.Geometry):
+        return f"<{value.geom_type}>"
+    if hasattr(value, "to_numpy"):  # a pandas or geopandas column or table
+        return f"<{type(value).__name__} ({len(value)})>"
+    if isinstance(value, list | tuple) and any(isinstance(v, shapely.Geometry) for v in value):
+        kinds = sorted({v.geom_type for v in value if isinstance(v, shapely.Geometry)})
+        return f"<{len(value)} {'/'.join(kinds)}>"
     if isinstance(value, np.ndarray | list | tuple) and len(value) > 6:
         head = ", ".join(
             repr(v.item() if isinstance(v, np.generic) else v) for v in list(value)[:3]
         )
         return f"[{head}, ... ({len(value)})]"
     return repr(value)
+
+
+class NoStepError(ValueError):
+    """A strategy that removes whole layers couldn't remove even one."""
 
 
 def check_size(sample: Sample, min_points: int) -> None:
@@ -536,6 +565,13 @@ def _plain(name: str, value: Any) -> Any:
     or a ValueError naming the option if it can't be stored."""
     if isinstance(value, np.generic):
         return value.item()
+    if isinstance(value, shapely.Geometry):
+        return shapely.to_wkt(value, rounding_precision=-1)
+    if hasattr(value, "to_crs") and hasattr(value, "crs"):  # a GeoSeries or GeoDataFrame
+        frame = value if value.crs is None else value.to_crs(4326)
+        return [_plain(name, g) for g in getattr(frame, "geometry", frame)]
+    if isinstance(value, pd.Series | pd.Index):
+        return [_plain(name, v) for v in value.tolist()]
     if isinstance(value, np.ndarray | tuple | list):
         return [_plain(name, v) for v in value]
     if isinstance(value, Mapping):

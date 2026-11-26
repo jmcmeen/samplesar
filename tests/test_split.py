@@ -222,9 +222,9 @@ def test_small_parts_stay_whole_and_empty_work_is_an_error():
 def test_inner_options_and_errors():
     sample, truth = clusters(n=15)
     nest = samplesar.strategies.split(sample, "hull_area", by=truth, keep="smallest")
-    assert dict(nest.options) == {"strategy": "hull_area", "by": truth, "keep": "smallest"} or (
-        nest.options["keep"] == "smallest"
-    )
+    assert list(nest.options) == ["strategy", "by", "keep"]
+    assert nest.options["strategy"] == "hull_area" and nest.options["keep"] == "smallest"
+    assert nest.options["by"] is truth
     with pytest.raises(ValueError, match="No strategy"):
         samplesar.strategies.split(sample, "peel")
     with pytest.raises(ValueError, match="itself"):
@@ -286,3 +286,102 @@ def test_diagnostics_and_plots_follow_the_parts():
     assert samplesar.plot.curve(nest) is not None
     fit = nest.fit("power")
     assert np.isfinite(fit.params["z"])
+
+
+def test_order_cannot_run_inside_parts():
+    sample, truth = clusters(n=8)
+    with pytest.raises(ValueError, match="order"):
+        samplesar.strategies.split(sample, "order", by=truth, order=[0, 1, 2])
+
+
+def test_a_part_the_strategy_rejects_is_an_error_not_a_whole_part():
+    # One part has a point without a date: temporal must say so, not skip it.
+    sample, truth = clusters(n=8)
+    data = sample.data.copy()
+    data["date"] = pd.Timestamp("2020-01-01") + pd.to_timedelta(np.arange(len(data)), unit="D")
+    data.loc[20, "date"] = pd.NaT
+    dated = samplesar.sources.dataframe(data, date_col="date")
+    with pytest.raises(ValueError, match="have no date"):
+        samplesar.strategies.split(dated, "temporal", by=truth)
+    complete = samplesar.sources.dataframe(data.fillna(pd.Timestamp("2019-01-01")), date_col="date")
+    nest = samplesar.strategies.split(complete, "temporal", by=truth)
+    assert len(nest.steps[-1]) == 9
+
+
+def test_nests_split_by_polygons_or_a_series_save_and_label(tmp_path):
+    sample, truth = clusters(n=10)
+    boxes = [
+        shapely.box(*sample.points[truth == k].min(axis=0), *sample.points[truth == k].max(axis=0))
+        for k in range(3)
+    ]
+    for by in (boxes, pd.Series(truth), pd.Series(["a", "b", "c"])[truth].reset_index(drop=True)):
+        nest = samplesar.strategies.split(sample, "radial", by=by)
+        assert np.array_equal(nest.parts, truth)
+        assert len(nest.label) < 120
+        path = tmp_path / "nest.json"
+        nest.to_json(path)
+        back = samplesar.Nest.from_json(path)
+        assert np.array_equal(back.parts, truth)
+        assert back.to_frame()["area"].tolist() == pytest.approx(nest.to_frame()["area"].tolist())
+    assert "by=<3 Polygon>" in samplesar.strategies.split(sample, "radial", by=boxes).label
+
+
+def test_float_labels_must_be_whole():
+    sample, truth = clusters(n=5)
+    assert np.array_equal(samplesar.strategies.partition(sample, by=truth.astype(float)), truth)
+    with pytest.raises(ValueError, match="whole numbers"):
+        samplesar.strategies.partition(sample, by=truth + 0.5)
+
+
+def test_a_table_agrees_with_each_step_measured_alone_even_when_not_nested():
+    # A hand-built nest that grows, shrinks to lines and points, and empties.
+    sample, truth = clusters(n=6)
+    everything = np.arange(18)
+    steps = (
+        everything,
+        everything[::2],
+        everything,
+        np.array([0, 1, 6, 7, 8]),
+        np.array([0]),
+        np.array([], dtype=int),
+        everything[6:],
+    )
+    nest = samplesar.Nest(sample, steps, parts=truth)
+    table = nest.to_frame()
+    for i in range(len(steps)):
+        assert table["area"].iloc[i] == pytest.approx(nest.areas_at(i)[0], rel=1e-9, abs=1e-12)
+    assert table["n_parts"].tolist() == [3, 3, 3, 2, 1, 0, 2]
+    assert nest.footprint(5).is_empty and nest.areas_at(5) == (0.0, 0.0)
+    assert len(samplesar.evaluate.diagnostics(nest)) == len(steps)
+
+
+def test_parts_of_one_or_two_points_cover_no_ground():
+    sample, truth = clusters(n=6)
+    nest = samplesar.strategies.split(sample, "radial", by=truth, min_points=1)
+    table = nest.to_frame()
+    assert table["area"].iloc[-1] == 0.0 and table["n_points"].iloc[-1] == 3
+    assert (np.diff(table["area"]) <= 1e-9).all()
+
+
+def test_animating_a_split_nest_draws_each_frame():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    sample, truth = clusters(n=5)
+    nest = samplesar.strategies.split(sample, "radial", by=truth)
+    animation = samplesar.plot.animate(nest, reverse=True)
+    animation._draw_frame(0)
+    animation._draw_frame(nest.n_steps - 1)
+
+
+def test_kmeans_with_more_parts_than_distinct_places_gives_fewer():
+    sample = km_sample([(0, 0)] * 1 + [(0, 1e-9), (50, 50), (50, 50.000001)])
+    labels = samplesar.strategies.partition(sample, parts=4, seed=0)
+    assert labels.max() + 1 <= 4 and labels[0] == 0
+
+
+def test_saved_parts_must_be_whole_numbers():
+    sample, _ = clusters(n=5)
+    saved = samplesar.strategies.split(sample, "radial", parts=3, seed=1).to_dict()
+    saved["parts"] = [0.5] * 15
+    with pytest.raises(ValueError, match="parts must be whole numbers"):
+        samplesar.Nest.from_dict(saved)

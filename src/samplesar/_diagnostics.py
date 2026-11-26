@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from samplesar._nest import Nest
+from samplesar._nest import Nest, _cover_areas
 
 
 def diagnostics(nest: Nest) -> pd.DataFrame:
@@ -43,12 +43,12 @@ def diagnostics(nest: Nest) -> pd.DataFrame:
     length = float(np.sqrt(scale))
     first = nest.footprint(0)
     origin = np.asarray(first.centroid.coords[0])
-    area0 = nest.areas_at(0)[0] if first.area > 0 else np.nan
+    area0 = _cover_areas(sample, first)[0] if first.area > 0 else np.nan
     rows = []
     for i, idx in enumerate(nest.steps):
         hull = nest.footprint(i)
         polygon = hull.area > 0
-        area = nest.areas_at(i)[0] if polygon else 0.0
+        area = _cover_areas(sample, hull)[0] if polygon else 0.0
         perimeter = hull.length / length if polygon else np.nan
         row = {
             "step": i,

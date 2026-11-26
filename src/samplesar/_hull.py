@@ -9,7 +9,7 @@ import numpy as np
 import shapely
 from shapely.geometry import MultiPoint, Polygon
 
-from samplesar._nest import Nest, check_size
+from samplesar._nest import Nest, NoStepError, check_size
 from samplesar._registry import register
 from samplesar._sample import Sample, point_species
 from samplesar._sample import hull_area as convex_area
@@ -261,7 +261,7 @@ def hull_peel(sample: Sample, min_points: int = 3) -> Nest:
         remaining = inside
         steps.append(remaining.copy())
     if len(steps) == 1:
-        raise ValueError(
+        raise NoStepError(
             f"No layer can be peeled: fewer than {min_points} points lie strictly inside the "
             "sample's convex hull."
         )
@@ -330,7 +330,7 @@ def grid_peel(sample: Sample, cell_km: float, min_points: int = 3) -> Nest:
         remaining = inside
         steps.append(remaining.copy())
     if len(steps) == 1:
-        raise ValueError(
+        raise NoStepError(
             f"No layer of {cell_km} km cells can be peeled: fewer than {min_points} points "
             "lie in cells strictly inside the hull of the occupied cells."
         )
@@ -616,7 +616,7 @@ def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nes
         remaining = inside
         steps.append(remaining.copy())
     if len(steps) == 1:
-        raise ValueError(
+        raise NoStepError(
             f"No layer can be peeled: fewer than {min_points} points lie inside the "
             "sample's concave hull."
         )
