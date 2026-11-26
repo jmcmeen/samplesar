@@ -9,6 +9,7 @@ import os
 import re
 import urllib.request
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -122,6 +123,7 @@ def _polygons(geometry: Any) -> Any:
 def admin_units(
     country: str,
     level: int = 1,
+    names: Iterable[str] | None = None,
     *,
     simplified: bool = False,
     inside: Any = None,
@@ -141,6 +143,10 @@ def admin_units(
     level : int
         1 for first-level units (states, provinces), 2 for the next
         (counties, districts), up to 5 where a country has them.
+    names : iterable of str, optional
+        Only these units, matched without regard to case against each
+        unit's name (``"Alabama"``) or ISO 3166-2 code (``"US-AL"``), and
+        returned in the order asked for. By default every unit.
     simplified : bool
         Use geoBoundaries' simplified geometry.
     inside : polygon, optional
@@ -161,15 +167,47 @@ def admin_units(
     ------
     ValueError
         If the country code or level is invalid or unavailable, a download
-        fails, or no unit lies ``inside`` the region.
+        fails, no unit lies ``inside`` the region, or a name matches no
+        unit or several (the message lists close names).
 
     Examples
     --------
     >>> states = samplesar.regions.admin_units("USA")  # doctest: +SKIP
+    >>> three = samplesar.regions.admin_units("USA", names=["Alabama", "Georgia", "Texas"])  # doctest: +SKIP
     >>> tennessee = samplesar.regions.admin("USA", 1, "Tennessee")  # doctest: +SKIP
     >>> counties = samplesar.regions.admin_units("USA", 2, inside=tennessee)  # doctest: +SKIP
     """
-    _, features = _units(country, level, simplified, inside, cache_dir)
+    iso, features = _units(country, level, simplified, inside, cache_dir)
+    if names is not None:
+        if isinstance(names, str):
+            names = [names]
+        chosen = []
+        for wanted in names:
+            key = str(wanted).casefold()
+            matches = [
+                f
+                for f in features
+                if key
+                in (
+                    str(f["properties"].get("shapeName", "")).casefold(),
+                    str(f["properties"].get("shapeISO", "")).casefold(),
+                )
+            ]
+            if not matches:
+                known = sorted({str(f["properties"].get("shapeName", "")) for f in features})
+                close = difflib.get_close_matches(str(wanted), known, n=5, cutoff=0.6)
+                hint = f" Close: {', '.join(close)}." if close else ""
+                raise ValueError(f"No ADM{level} unit of {iso} is named {wanted!r}.{hint}")
+            if len(matches) > 1:
+                raise ValueError(
+                    f"{len(matches)} ADM{level} units of {iso} are named {wanted!r}. Narrow "
+                    "them with inside=, a boundary of the level above."
+                )
+            if matches[0] not in chosen:
+                chosen.append(matches[0])
+        if not chosen:
+            raise ValueError("No names given.")
+        features = chosen
     names = [str(f["properties"].get("shapeName") or "") for f in features]
     shared = {name for name, count in Counter(names).items() if count > 1 or not name}
     units: dict[str, Any] = {}

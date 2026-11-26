@@ -147,7 +147,27 @@ islands.to_frame()     # region, area (km²), species, n_points, n_observations
 islands.fit("power")
 ```
 
-This is species-area data of the island type. It is a different design
+A design can be put together by hand from several sources: a few units
+picked by name, regions from different files, an area you know in place of
+a measured one, and rows typed in outright.
+
+```python
+three = samplesar.regions.admin_units("USA", names=["Alabama", "Georgia", "Texas"])
+parks = samplesar.regions.read_units("parks.gpkg", "UNIT_NAME", ["Shenandoah"])
+
+islands = samplesar.designs.islands(
+    sample,
+    {**three, **parks},
+    areas={"Shenandoah": 806},            # its official km²
+    units={"Mammoth Cave": (214, 12)},    # km² and species, no boundary needed
+)
+islands = islands.add(more_regions).drop(["Texas"])
+```
+
+![Eight regions on a map, each with its points and species count, and their species-area curve, one point per region](https://raw.githubusercontent.com/jmcmeen/samplesar/main/docs/assets/islands.webp)
+
+`plot.islands` draws the map and `plot.curve` the curve. This is
+species-area data of the island type. It is a different design
 from a nest, and the two kinds of curve aren't comparable point for point:
 see [Regions as sampling units](https://jmcmeen.github.io/samplesar/islands/).
 
@@ -166,8 +186,8 @@ and against chance:
   far its steps are from independent.
 
 `samplesar.plot` draws one step of a nest (`nest`), the species-area curve
-with its power fit (`curve`), and the whole nest as an animation
-(`animate`).
+with its power fit (`curve`), the whole nest as an animation (`animate`),
+and the regions of an island design on a map (`islands`).
 
 ## Development
 
