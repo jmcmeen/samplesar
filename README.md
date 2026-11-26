@@ -109,6 +109,21 @@ name through `strategies.run(sample, "hull_peel")`:
   trailhead, a feeder) that differ only by GPS jitter. Left apart, they make
   the last steps of a hull nest measure hulls centimeters across.
 
+## Regions as sampling units
+
+A nest shrinks one sample, so its areas are arbitrary. To use regions you
+choose (states, parks, real islands) as the units instead, one row each:
+
+```python
+states = samplesar.regions.admin_units("USA", level=1)
+islands = samplesar.designs.islands(sample, states)
+islands.to_frame()     # region, area (km²), species, n_points, n_observations
+islands.fit("power")
+```
+
+This is species-area data of the island type, a different design from a
+nest: see [Regions as sampling units](https://jmcmeen.github.io/samplesar/islands/).
+
 ## Evaluating and plotting
 
 - `samplesar.evaluate`: `compare` fits several nests side by side,

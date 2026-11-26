@@ -13,3 +13,11 @@
 ## regions.read
 
 ::: samplesar.regions.read
+
+## regions.admin_units
+
+::: samplesar.regions.admin_units
+
+## regions.read_units
+
+::: samplesar.regions.read_units

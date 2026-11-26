@@ -46,6 +46,19 @@ All notable changes to this project are documented here. The format is based on
   nests without parts are saved as before). `Nest.groups`, `Nest.footprint`
   and `Nest.areas_at` give a step's points by part, the ground it covers
   and its areas.
+- `designs.islands(sample, regions)`: regions as sampling units (states,
+  parks, real islands), one row each with the region's area and the species
+  observed in it, for species-area data of the island type. `Islands` has
+  `to_frame`, `sar_data`, `fit` and `sample_of`; areas are each region's own
+  on the ellipsoid (optionally within a mask), or the hull of its points.
+- `regions.admin_units(country, level)` and `regions.read_units(source,
+  column)`: many named regions at once, each as its own polygon.
+
+### Fixed
+
+- Downloads name samplesar as their client. geoBoundaries now refuses
+  Python's default `User-Agent` with a 403, so `regions.admin` failed for
+  any boundary not already cached.
 
 ### Changed
 

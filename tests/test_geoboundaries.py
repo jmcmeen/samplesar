@@ -157,3 +157,25 @@ def test_invalid_rings_are_repaired(fake, monkeypatch):
     monkeypatch.setitem(FILES, "XYZ_ADM0", [feature("Xland", "XYZ", bowtie, "c0")])
     result = samplesar.regions.admin("XYZ", cache_dir=cache)
     assert result.is_valid and result.area == pytest.approx(2.0)
+
+
+def test_units_each_as_their_own_polygon(fake):
+    states = samplesar.regions.admin_units("XYZ")
+    assert list(states) == ["North", "South"]
+    assert states["North"].equals(box(0, 5, 10, 10))
+
+
+def test_units_sharing_a_name_are_told_apart(fake):
+    districts = samplesar.regions.admin_units("xyz", level=2)
+    assert list(districts) == ["Hill (d1)", "Hill (d2)", "Vale"]
+    north = samplesar.regions.admin("XYZ", 1, "North")
+    assert list(samplesar.regions.admin_units("XYZ", 2, inside=north)) == ["Hill"]
+
+
+def test_units_bad_arguments(fake):
+    with pytest.raises(ValueError, match="alpha-3"):
+        samplesar.regions.admin_units("Xland")
+    with pytest.raises(ValueError, match="level"):
+        samplesar.regions.admin_units("XYZ", level=9)
+    with pytest.raises(ValueError, match="inside"):
+        samplesar.regions.admin_units("XYZ", 2, inside=box(50, 50, 51, 51))

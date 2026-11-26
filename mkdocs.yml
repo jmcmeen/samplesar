@@ -62,11 +62,13 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Sampling Strategies: strategies.md
+  - Regions as Sampling Units: islands.md
   - API Reference:
       - Samples and nests: api/core.md
       - Sources: api/sources.md
       - Regions: api/regions.md
       - Strategies: api/strategies.md
+      - Designs: api/designs.md
       - Evaluation: api/evaluate.md
       - Plotting: api/plot.md
 

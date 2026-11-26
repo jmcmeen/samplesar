@@ -371,6 +371,7 @@ def test_animating_a_split_nest_draws_each_frame():
     animation = samplesar.plot.animate(nest, reverse=True)
     animation._draw_frame(0)
     animation._draw_frame(nest.n_steps - 1)
+    animation._draw_was_started = True  # frames were drawn by hand; nothing to warn about
 
 
 def test_kmeans_with_more_parts_than_distinct_places_gives_fewer():
