@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numbers
 from collections.abc import Callable
 from typing import Literal
 
@@ -27,60 +28,66 @@ class _Commonness:
 
     def __init__(self, sample: Sample, measure: str) -> None:
         self.measure = measure
-        self.xy = np.asarray(sample.xy)
         self.species, self.n_species = point_species(sample)
         n = sample.n_points
-        # Each point's observations of each of its species, in the order of
-        # ``self.species``.
-        data = sample.data
-        codes, _ = pd.factorize(data["species"])
-        keys = pd.MultiIndex.from_frame(data[["lon", "lat"]])
-        rows = pd.MultiIndex.from_arrays([sample.points[:, 0], sample.points[:, 1]]).get_indexer(
-            keys
-        )
-        counts = pd.Series(1, index=pd.MultiIndex.from_arrays([rows, codes])).groupby(level=[0, 1])
-        table = counts.sum()
-        self.observations = [
-            np.array([table[(p, s)] for s in self.species[p]], dtype=float) for p in range(n)
-        ]
-        self.holders: list[set[int]] = [set() for _ in range(self.n_species)]
-        for p, found in enumerate(self.species):
-            for s in found:
-                self.holders[s].add(p)
         self.value = np.zeros(self.n_species)
-        for p in range(n):
-            if measure == "occupancy":
-                self.value[self.species[p]] += 1
-            elif measure == "abundance":
-                self.value[self.species[p]] += self.observations[p]
-        if measure == "range":
+        self.floor = 1.0  # a species still present has a count of at least 1
+        if measure == "occupancy":
+            for found in self.species:
+                self.value[found] += 1
+        elif measure == "abundance":
+            # Each point's observations of each of its species, in the order
+            # of ``self.species``.
+            data = sample.data
+            codes, _ = pd.factorize(data["species"])
+            keys = pd.MultiIndex.from_frame(data[["lon", "lat"]])
+            points = pd.MultiIndex.from_arrays([sample.points[:, 0], sample.points[:, 1]])
+            rows = np.asarray(points.get_indexer(keys))
+            place = [{int(s): i for i, s in enumerate(found)} for found in self.species]
+            self.observations = [np.zeros(len(found)) for found in self.species]
+            pairs, counts = np.unique(np.column_stack([rows, codes]), axis=0, return_counts=True)
+            for (p, s), count in zip(pairs, counts, strict=True):
+                self.observations[p][place[p][int(s)]] = count
+            for p, found in enumerate(self.species):
+                self.value[found] += self.observations[p]
+        else:
+            self.xy = np.asarray(sample.xy)
+            self.alive = np.ones(n, dtype=bool)
+            where = np.concatenate(self.species) if n else np.empty(0, dtype=int)
+            point = np.repeat(np.arange(n), [len(found) for found in self.species])
+            order = np.argsort(where, kind="stable")
+            bounds = np.searchsorted(where[order], np.arange(self.n_species + 1))
+            # Each species' points, in index order.
+            self.holders = [point[order[bounds[s] : bounds[s + 1]]] for s in range(self.n_species)]
             for s in range(self.n_species):
                 self.value[s] = self._range(s)
+            # A range within rounding of no area (one or two points, or points
+            # in a line) counts as the smallest real range in the whole
+            # sample, or 1 km² if there is none. Fixed here, so a species
+            # doesn't turn common as it loses its last points.
+            real = self.value[self.value > 1e-9 * convex_area(self.xy)]
+            self.floor = float(real.min()) if real.size else 1.0
 
     def _range(self, s: int) -> float:
-        return convex_area(self.xy[sorted(self.holders[s])])
+        points = self.holders[s]
+        return convex_area(self.xy[points[self.alive[points]]])
 
     def remove(self, point: int) -> None:
-        """Take a point's observations out of every measure."""
+        """Take a point's observations out of the measure."""
         found = self.species[point]
-        for s in found:
-            self.holders[s].discard(point)
         if self.measure == "occupancy":
             self.value[found] -= 1
         elif self.measure == "abundance":
             self.value[found] -= self.observations[point]
         else:
+            self.alive[point] = False
             for s in found:
                 self.value[s] = self._range(s)
 
     def rarity(self) -> np.ndarray:
-        """Each species' rarity: the inverse of its commonness. A range of no
-        area (a species at one or two points, or along a line) counts as the
-        smallest positive range, or 1 km² if there is none."""
-        value = self.value
-        positive = value[value > 0]
-        floor = float(positive.min()) if positive.size else 1.0
-        return 1.0 / np.maximum(value, floor)
+        """Each species' rarity: the inverse of its commonness, which is
+        never taken below the floor."""
+        return 1.0 / np.maximum(self.value, self.floor)
 
 
 def rarity_weights(score: np.ndarray, power: float, rare_first: bool) -> np.ndarray:
@@ -128,14 +135,18 @@ def hull_rarity(
     measure : {"occupancy", "abundance", "range"}
         What makes a species common: the number of points it occurs at, its
         number of observations, or the area of the convex hull of its own
-        points (km²; a species without a hull of positive area counts as the
-        smallest such range in the sample).
+        points (km²). A species whose points make no hull (one or two
+        points, or points in a line) counts as the smallest range any
+        species has in the whole sample, or 1 km² if none has one, so it is
+        the rarest without being infinitely so.
     score : {"sum", "mean", "max"}
         How a vertex's species are combined. ``"sum"`` favors rich vertices
         as well as rare species; ``"mean"`` and ``"max"`` don't.
     update : bool
         Measure commonness among the points still remaining at each step,
-        instead of once on the whole sample.
+        instead of once on the whole sample. With ``measure="range"`` this
+        rebuilds the hull of every species at the removed vertex, which is
+        slow on samples of thousands of points.
     power : float, optional
         Choose a vertex at random instead, with probability proportional to
         its score raised to ``power`` (``remove="rare"``) or to the inverse
@@ -145,7 +156,8 @@ def hull_rarity(
     min_points : int
         Stop when this many points remain.
     seed : int, optional
-        Seed for the random choices when ``power`` is given.
+        Seed for the random choices when ``power`` is given; without
+        ``power`` the choice is deterministic and the seed changes nothing.
 
     Returns
     -------
@@ -154,9 +166,9 @@ def hull_rarity(
     Raises
     ------
     ValueError
-        If ``remove``, ``measure`` or ``score`` is unknown, ``power`` is
-        negative or not finite, ``seed`` is given without ``power``, or
-        ``min_points`` is below 1 or the sample has fewer points.
+        If ``remove``, ``measure`` or ``score`` is unknown, ``power`` isn't
+        a finite number of at least 0, or ``min_points`` is below 1 or the
+        sample has fewer points.
     """
     if remove not in ("common", "rare"):
         raise ValueError(f"remove must be 'common' or 'rare', got {remove!r}")
@@ -164,10 +176,12 @@ def hull_rarity(
         raise ValueError(f"measure must be 'occupancy', 'abundance' or 'range', got {measure!r}")
     if score not in _SCORES:
         raise ValueError(f"score must be 'sum', 'mean' or 'max', got {score!r}")
-    if power is not None and not (np.isfinite(power) and power >= 0):
-        raise ValueError(f"power must be a finite number of at least 0, got {power}.")
-    if power is None and seed is not None:
-        raise ValueError("seed is only used with power; without it the choice is deterministic.")
+    if power is not None and (
+        isinstance(power, bool)
+        or not isinstance(power, numbers.Real)
+        or not (np.isfinite(power) and power >= 0)
+    ):
+        raise ValueError(f"power must be a finite number of at least 0, got {power!r}.")
     rare_first = remove == "rare"
     combine = _SCORES[score]
     points = sample.xy

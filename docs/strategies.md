@@ -132,7 +132,9 @@ area of the convex hull of its own points (`"range"`). A vertex's score
 combines the rarities of the species observed at it: `"sum"` (with
 occupancy, this is rarity-weighted richness, which also favors rich
 vertices), `"mean"` or `"max"`. Commonness is measured once on the whole
-sample, or with `update=True` among the points remaining at each step.
+sample, or with `update=True` among the points remaining at each step. A
+species whose points make no hull (one or two points, or a line) has the
+smallest range any species has in the sample.
 
 `hull_species` differs: it asks only whether a vertex holds a species found
 at no other remaining point, so it can't tell a widespread species from a

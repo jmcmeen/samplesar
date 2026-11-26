@@ -20,6 +20,9 @@ def km_frame(rows):
     return samplesar.sources.dataframe(frame[["species", "lon", "lat"]], crs=UTM_17N)
 
 
+PROBS = np.arange(12, 0, -1) / np.arange(12, 0, -1).sum()
+
+
 @pytest.fixture
 def sample():
     rng = np.random.default_rng(3)
@@ -29,9 +32,6 @@ def sample():
         for species in rng.choice(12, size=rng.integers(1, 5), replace=False, p=PROBS):
             rows.extend([(x, y, f"sp{species}")] * int(rng.integers(1, 4)))
     return km_frame(rows)
-
-
-PROBS = np.arange(12, 0, -1) / np.arange(12, 0, -1).sum()
 
 
 def removed(nest):
@@ -58,9 +58,17 @@ def brute_commonness(sample, table, points, measure):
             out[species] = sum(table[p][species] for p in holders)
         else:
             out[species] = samplesar.hull_area(sample.xy[holders])
-    positive = [v for v in out.values() if v > 0]
-    floor = min(positive) if positive else 1.0
-    return {s: max(v, floor) for s, v in out.items()}
+    return out
+
+
+def floor_of(sample, table, measure):
+    """Counts never fall below 1 while a species is present; a range of no
+    area counts as the smallest real range in the whole sample."""
+    if measure != "range":
+        return 1.0
+    whole = brute_commonness(sample, table, range(sample.n_points), measure)
+    real = [v for v in whole.values() if v > 1e-9 * samplesar.hull_area(sample.xy)]
+    return min(real) if real else 1.0
 
 
 @pytest.mark.parametrize("measure", ["occupancy", "abundance", "range"])
@@ -74,10 +82,13 @@ def test_each_step_removes_the_brute_force_choice(sample, measure, score, remove
     table = point_table(sample)
     combine = {"sum": sum, "mean": lambda v: sum(v) / len(v), "max": max}[score]
     whole = brute_commonness(sample, table, range(sample.n_points), measure)
+    floor = floor_of(sample, table, measure)
     for step, point in zip(nest.steps, removed(nest), strict=False):
         common = brute_commonness(sample, table, list(step), measure) if update else whole
         vertices = hull_vertices(sample.xy, step)
-        scores = np.array([combine([1.0 / common[s] for s in table[v]]) for v in vertices])
+        scores = np.array(
+            [combine([1.0 / max(common[s], floor) for s in table[v]]) for v in vertices]
+        )
         best = scores.max() if remove == "rare" else scores.min()
         tied = vertices[np.isclose(scores, best, rtol=1e-9, atol=0)]
         assert point in tied
@@ -164,8 +175,58 @@ def test_weights():
 def test_seeded_runs_repeat(sample):
     a = samplesar.strategies.hull_rarity(sample, power=1.5, seed=11)
     b = samplesar.strategies.hull_rarity(sample, power=1.5, seed=11)
-    c = samplesar.strategies.hull_rarity(sample, power=1.5, seed=12)
-    assert removed(a) == removed(b) != removed(c)
+    assert removed(a) == removed(b)
+    others = {
+        tuple(removed(samplesar.strategies.hull_rarity(sample, power=1.5, seed=s)))
+        for s in range(12, 16)
+    }
+    assert others != {tuple(removed(a))}
+    # Without power the choice is deterministic, whatever the seed.
+    plain = samplesar.strategies.hull_rarity(sample)
+    assert removed(plain) == removed(samplesar.strategies.hull_rarity(sample, seed=3))
+
+
+def test_updating_changes_the_nest(sample):
+    for measure in ("occupancy", "abundance", "range"):
+        once = samplesar.strategies.hull_rarity(sample, remove="rare", measure=measure)
+        updated = samplesar.strategies.hull_rarity(
+            sample, remove="rare", measure=measure, update=True
+        )
+        assert removed(once) != removed(updated)
+
+
+def test_a_species_losing_its_range_stays_rare():
+    # "small" has a 1 km² triangle outside the east edge; every other range is large.
+    big = [(x, y, s) for x, y in [(0, 0), (20, 0), (20, 20), (0, 20), (10, 10)] for s in "ab"]
+    small = [(21, 9, "small"), (22, 10, "small"), (21, 11, "small")]
+    sample = km_frame(big + small + [(8, 8, "a"), (12, 8, "b"), (10, 12, "a")])
+    nest = samplesar.strategies.hull_rarity(
+        sample, remove="rare", measure="range", update=True, min_points=6
+    )
+    # Its three points go first: down to two points its range is nothing,
+    # which counts as its old 1 km², not as the next smallest range.
+    assert sorted(removed(nest)[:3]) == [5, 6, 7]
+
+
+def test_a_species_in_a_line_has_no_range():
+    # "row" lies on a straight grid row: collinear but for rounding.
+    rows = [(x, 0, "row") for x in range(-2, 8)]
+    rows += [(x, y, "wide") for x, y in [(0, 5), (5, 5), (0, -5), (5, -5), (2, 2), (3, -2)]]
+    rows += [(1, 3, "mid"), (4, 3, "mid"), (2, -3, "mid")]
+    sample = km_frame(rows)
+    nest = samplesar.strategies.hull_rarity(sample, remove="rare", measure="range", min_points=8)
+    # The ends of the row are hull vertices with the rarest species (no
+    # range: it counts as "mid"'s, the smallest real one), so the row goes
+    # first, from its ends.
+    assert removed(nest)[0] in (0, 9)
+    assert all(point < 10 for point in removed(nest)[:4])
+
+
+def test_ties_go_to_the_vertex_farthest_from_the_center():
+    # Every point holds the same species; one corner sticks out.
+    rows = [(x, y, "a") for x, y in [(0, 0), (10, 0), (30, 30), (0, 10), (4, 4), (5, 6), (6, 4)]]
+    nest = samplesar.strategies.hull_rarity(km_frame(rows), min_points=6)
+    assert removed(nest) == [2]
 
 
 @pytest.mark.parametrize(
@@ -176,7 +237,8 @@ def test_seeded_runs_repeat(sample):
         {"score": "median"},
         {"power": -1},
         {"power": float("nan")},
-        {"seed": 3},
+        {"power": True},
+        {"power": "2"},
         {"min_points": 0},
     ],
 )
