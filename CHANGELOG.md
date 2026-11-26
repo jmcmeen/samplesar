@@ -15,6 +15,14 @@ All notable changes to this project are documented here. The format is based on
   maximum. `update=True` measures commonness among the remaining points, and
   `power` draws the vertex at random, favoring high scores for
   `remove="rare"` and low ones for `remove="common"`.
+- `strategies.band(sample, bearing=0)`: closes in on a line from both
+  sides, so each step keeps a band: a belt of latitude by default, or with
+  `bearing=90` a strip that keeps the sample's whole north-south span.
+- `strategies.sector(sample, start=0, sectors=4)`: removes one compass
+  sector after another, to test whether a curve depends on which side of a
+  region is lost first.
+- `strategies.radial` takes `stretch` and `bearing`: the discs become
+  ellipses, so the sample shrinks faster in one direction than the other.
 
 ### Changed
 

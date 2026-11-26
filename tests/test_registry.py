@@ -47,6 +47,8 @@ def test_built_in_strategies_are_listed():
         "hull_distance",
         "concave_peel",
         "radial",
+        "band",
+        "sector",
         "sweep",
         "density_peel",
         "grow",

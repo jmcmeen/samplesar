@@ -54,6 +54,14 @@
 
 ::: samplesar.strategies.radial
 
+## strategies.band
+
+::: samplesar.strategies.band
+
+## strategies.sector
+
+::: samplesar.strategies.sector
+
 ## strategies.sweep
 
 ::: samplesar.strategies.sweep

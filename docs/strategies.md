@@ -166,6 +166,31 @@ farthest from a center, so the sample shrinks as concentric discs: the
 point-data analogue of nested circular plots around a focal site. `center` is
 a (longitude, latitude), by default the mean of the projected points.
 
+With `stretch` the discs become ellipses, `stretch` times longer along
+`bearing` (degrees clockwise from grid north) than across it, so the sample
+is pulled in faster in one direction than the other:
+`radial(sample, stretch=2, bearing=0)` shrinks twice as fast east-west as
+north-south.
+
+### Band
+
+`strategies.band(sample, bearing=0, center=None, min_points=3)` closes in on
+a line from both sides: each step removes the point farthest from the line
+through `center`, measured along `bearing`. The default keeps a belt of
+latitude that narrows from the north and the south, as a study of a
+latitudinal gradient might. `bearing=90` narrows from the east and the west
+instead, so the sample keeps its whole north-south span, and any gradient
+along it, to the end.
+
+### Sector
+
+`strategies.sector(sample, start=0, sectors=4, clockwise=True, center=None)`
+removes one compass sector after another, each from its far end inwards.
+With the defaults the north-east quadrant goes first, then the south-east,
+south-west and north-west. Running it from several `start` bearings tests
+whether a curve depends on which side of a region is lost first, as when a
+range retreats toward a pole or upslope.
+
 ### Sweep
 
 `strategies.sweep(sample, bearing=90.0, min_points=3)` removes points in order

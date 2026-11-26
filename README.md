@@ -85,9 +85,11 @@ name through `strategies.run(sample, "hull_peel")`:
   remove the hull vertex that changes the area or species count least or
   most, or lies farthest from or nearest to the center; `hull_rarity`
   removes the one whose species are the most common, or the rarest.
-- **Fixed rankings**, fast on large samples: `radial` (shrinking discs),
-  `sweep` (a line moving across), `density_peel` (sparsest first) and
-  `grow` (growing out from a seed point, in reverse).
+- **Fixed rankings**, fast on large samples: `radial` (shrinking discs or
+  ellipses), `sweep` (a line moving across), `band` (closing in on a line
+  from both sides), `sector` (one compass sector after another),
+  `density_peel` (sparsest first) and `grow` (growing out from a seed
+  point, in reverse).
 
 [Sampling strategies](https://jmcmeen.github.io/samplesar/strategies/) describes each one.
 

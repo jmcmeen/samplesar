@@ -1,8 +1,8 @@
 """Strategies that rank every point once and remove them in that order.
 
 Each is fast (no hull is re-measured per step) and has its own geometric
-meaning: concentric discs, a moving front, a smoothed density boundary, or a
-region grown from a seed. Ties are broken by point index.
+meaning: concentric discs or ellipses, a moving front, a narrowing band,
+compass sectors, a smoothed density boundary, or a region grown from a seed. Ties are broken by point index.
 """
 
 from __future__ import annotations
@@ -34,6 +34,19 @@ def _center_xy(sample: Sample, center: tuple[float, float] | None) -> np.ndarray
     return _to_xy(sample, lon, lat)
 
 
+def _along_across(
+    sample: Sample, bearing: float, origin: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Each point's offset from ``origin`` along a bearing and across it, in km."""
+    if not np.isfinite(bearing):
+        raise ValueError(f"bearing must be a finite number of degrees, got {bearing}.")
+    angle = np.radians(bearing)
+    # Rounded so that bearings like 90° give exact 0 and 1, not 6e-17.
+    east, north = np.round(np.sin(angle), 15), np.round(np.cos(angle), 15)
+    offset = np.asarray(sample.xy) - origin
+    return offset[:, 0] * east + offset[:, 1] * north, offset[:, 0] * north - offset[:, 1] * east
+
+
 def _tied(key: np.ndarray) -> np.ndarray:
     """``key`` rounded to a billionth of its range, so values equal but for
     floating-point rounding (points round-tripped through longitude and
@@ -52,11 +65,19 @@ def _by_rank(sample: Sample, key: np.ndarray, min_points: int) -> Nest:
 
 
 @register("radial")
-def radial(sample: Sample, center: tuple[float, float] | None = None, min_points: int = 3) -> Nest:
+def radial(
+    sample: Sample,
+    center: tuple[float, float] | None = None,
+    min_points: int = 3,
+    stretch: float = 1.0,
+    bearing: float = 0.0,
+) -> Nest:
     """Nest a sample by removing the point farthest from a center at each step.
 
     The sample shrinks as concentric discs around the center, the point-data
-    analogue of nested circular plots around a focal site.
+    analogue of nested circular plots around a focal site. With ``stretch``
+    the discs become ellipses, so the sample is pulled in faster in one
+    direction than the other.
 
     Parameters
     ----------
@@ -67,6 +88,15 @@ def radial(sample: Sample, center: tuple[float, float] | None = None, min_points
         the projected points.
     min_points : int
         Stop when this many points remain.
+    stretch : float
+        How many times longer each ellipse is along ``bearing`` than across
+        it: distances along the bearing are divided by it. 1 gives discs;
+        above 1 the sample keeps its extent along the bearing longer and
+        shrinks faster across it; below 1 the reverse.
+    bearing : float
+        The direction of the ellipses' stretched axis, in degrees clockwise
+        from grid north of the sample's projection. With ``stretch=2``, 0
+        shrinks the sample twice as fast east-west as north-south.
 
     Returns
     -------
@@ -75,12 +105,130 @@ def radial(sample: Sample, center: tuple[float, float] | None = None, min_points
     Raises
     ------
     ValueError
-        If ``center`` isn't a longitude and latitude, or ``min_points`` is
-        below 1 or above the sample's size.
+        If ``center`` isn't a longitude and latitude, ``stretch`` isn't
+        positive, ``bearing`` isn't finite, or ``min_points`` is below 1 or
+        above the sample's size.
     """
     check_size(sample, min_points)
-    distance = np.hypot(*(sample.xy - _center_xy(sample, center)).T)
-    return _by_rank(sample, -distance, min_points)
+    if not (np.isfinite(stretch) and stretch > 0):
+        raise ValueError(f"stretch must be a positive number, got {stretch}.")
+    along, across = _along_across(sample, bearing, _center_xy(sample, center))
+    return _by_rank(sample, -np.hypot(along / stretch, across), min_points)
+
+
+@register("band")
+def band(
+    sample: Sample,
+    bearing: float = 0.0,
+    center: tuple[float, float] | None = None,
+    min_points: int = 3,
+) -> Nest:
+    """Nest a sample by closing in on a line from both sides, keeping a band.
+
+    At each step the point farthest from a line through ``center``, measured
+    along ``bearing``, is removed, so each step keeps a band around the line
+    and the sample's whole extent across the bearing. With the default
+    bearing of 0 the band is a belt of latitude closing in from the north
+    and the south; with 90 it closes in from the east and the west, keeping
+    the sample's north-south span, and whatever gradient runs along it, to
+    the end. It is [`radial`][samplesar.strategies.radial] with an unbounded
+    ``stretch`` across the bearing.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    bearing : float
+        The direction the band narrows along, in degrees clockwise from grid
+        north of the sample's projection.
+    center : tuple of float, optional
+        A (longitude, latitude) on the line the band closes in on; by
+        default the mean of the projected points.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``bearing`` isn't finite, ``center`` isn't a longitude and
+        latitude, or ``min_points`` is below 1 or above the sample's size.
+    """
+    check_size(sample, min_points)
+    along, _ = _along_across(sample, bearing, _center_xy(sample, center))
+    return _by_rank(sample, -np.abs(along), min_points)
+
+
+@register("sector")
+def sector(
+    sample: Sample,
+    start: float = 0.0,
+    sectors: int = 4,
+    clockwise: bool = True,
+    center: tuple[float, float] | None = None,
+    min_points: int = 3,
+) -> Nest:
+    """Nest a sample by removing one compass sector after another.
+
+    The plane around ``center`` is cut into equal sectors, the first
+    starting at the bearing ``start`` and the rest following clockwise (or
+    counterclockwise). The points of the first sector are removed, farthest
+    from the center first, then those of the next, and so on. With the
+    defaults the north-east quadrant goes first, then the south-east, the
+    south-west and the north-west: a way to test whether a curve depends on
+    which side of a region is lost first.
+
+    A point on the line between two sectors belongs to the later one, and a
+    point at the center to the first.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    start : float
+        The bearing where the first sector begins, in degrees clockwise from
+        grid north of the sample's projection.
+    sectors : int
+        The number of equal sectors, at least 1. With 1 the sample shrinks
+        as [`radial`][samplesar.strategies.radial] does.
+    clockwise : bool
+        Whether the sectors are taken clockwise from ``start``.
+    center : tuple of float, optional
+        The (longitude, latitude) the sectors meet at; by default the mean
+        of the projected points.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``start`` isn't finite, ``sectors`` isn't a whole number of at
+        least 1, ``center`` isn't a longitude and latitude, or
+        ``min_points`` is below 1 or above the sample's size.
+    """
+    check_size(sample, min_points)
+    if not np.isfinite(start):
+        raise ValueError(f"start must be a finite number of degrees, got {start}.")
+    if isinstance(sectors, bool) or not isinstance(sectors, int | np.integer) or sectors < 1:
+        raise ValueError(f"sectors must be a whole number of at least 1, got {sectors!r}.")
+    offset = np.asarray(sample.xy) - _center_xy(sample, center)
+    distance = np.hypot(offset[:, 0], offset[:, 1])
+    bearing = np.degrees(np.arctan2(offset[:, 0], offset[:, 1]))  # clockwise from north
+    turned = (bearing - start) if clockwise else (start - bearing)
+    # Rounded so a point on a sector's first edge is in it, not, by 1e-14 of
+    # a degree, at the end of the last.
+    turned = np.round(np.mod(turned, 360.0), 9) % 360.0
+    which = np.floor(turned / (360.0 / sectors)).astype(int)
+    which[distance <= 1e-9 * distance.max()] = 0  # at the center, to within rounding
+    order = np.lexsort((np.arange(sample.n_points), _tied(-distance), which))
+    return from_order(sample, order, min_points=min_points)
 
 
 @register("sweep")
