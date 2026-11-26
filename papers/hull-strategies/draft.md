@@ -17,11 +17,11 @@ recording area and richness at each step, but how the sample shrinks is a
 choice, and the choice shapes the curve. We define ten strategies for
 shrinking a sample, from random removal to removing points from the convex
 hull inwards by rules on area, species and distance, and compare them on
-eight iNaturalist samples, from a park to a whole country and a multi-state
+seven iNaturalist samples, from a park to a whole country and a multi-state
 ecoregion, and on simulated communities. Random removal keeps the sample's
 full extent until its last points and gives near-vertical curves whose
 power-model slope is meaningless. Strategies that shrink the hull from the
-outside in agree with one another and give slopes of 0.15 to 0.34, the range
+outside in agree with one another and give slopes of 0.15 to 0.30, the range
 of classic SARs, while greedy rules bias the slope. Records made at one spot
 dominate the end of every nest unless points within a few meters are merged,
 which in simulations largely restores the slope that clustering destroys.
@@ -98,14 +98,35 @@ its gaps. All are implemented in samplesar.
 | S9 | Closest to the center | the vertex closest to it |
 | S10 | Concave peeling | every point on a concave hull's boundary (ratio 0.3) |
 
+Twelve strategies added to samplesar after the first analysis were run on the
+same samples (Table 1b; specified in strategies.md, "Added strategies"):
+rankings fixed once on the whole sample (A1 to A5), a random hull vertex
+weighted by its isolation (A6), peeling of grid cells at three scales (A7 to
+A9), hull vertices chosen by the rarity of their species (A10, A11), and the
+vertex whose loss most shrinks the smallest enclosing circle (A12).
+
+**Table 1b.** The added strategies.
+
+| | Strategy | Removes at each step |
+| --- | --- | --- |
+| A1 | Radial | the point farthest from the sample's center |
+| A2, A3 | Sweep east, sweep north | the westernmost, or the southernmost, point |
+| A4 | Density peeling | the point of lowest kernel density (Scott's bandwidth) |
+| A5 | Growth, reversed | the point a region grown from the center reached last |
+| A6 | Isolation-weighted hull vertex | a random hull vertex, weighted by the square of its distance to its nearest neighbor |
+| A7 to A9 | Grid peeling: fine, medium, coarse | every point in the cells on the hull of the occupied cells (cell side 1/40, 1/20, 1/10 of the square root of the sample's hull area) |
+| A10 | Common species first | the hull vertex with the lowest rarity-weighted richness |
+| A11 | Rare species first | the hull vertex with the highest |
+| A12 | Smallest enclosing circle | the vertex on the enclosing circle whose loss shrinks it most |
+
 ### 2.3 Merging co-located records
 
 Points closer than a set distance were merged into one, keeping all their
 observations (single linkage on the projected points; each group placed at
 its first-seen member). The main results use 10 m for the park samples, 25 m
 for Monteverde, 50 m for the Great Smoky Mountains and 100 m for East
-Tennessee, Costa Rica and the Southern Appalachians; sensitivity to the distance was tested from 0 to 50 m on the
-single-observer park sample.
+Tennessee, Costa Rica and the Southern Appalachians; sensitivity to the
+distance was tested from 0 to 50 m on the park sample.
 
 ### 2.4 Fitting and baselines
 
@@ -129,10 +150,11 @@ hull (Polsby-Popper, 4πA/P²).
 
 ### 2.6 Data
 
-Eight iNaturalist samples (Table 2): one observer's records in Steele Creek
-Park, Bristol, Tennessee; and, from a local copy of iNaturalist's open-data
-export (observations with openly licensed photos), research-grade records of
-all taxa in the same area, frogs in East Tennessee, birds in the Great Smoky
+Seven iNaturalist samples (Table 2), all drawn from a local copy of
+iNaturalist's open-data export (observations with openly licensed photos),
+so that every result can be reproduced from the script: research-grade
+records of all taxa around Steele Creek Park, Bristol, Tennessee, frogs in
+East Tennessee, birds in the Great Smoky
 Mountains, frogs around Monteverde, frogs in all of Costa Rica (inside the
 national boundary from geoBoundaries; Runfola et al. 2020), and frogs and
 salamanders in the Southern Appalachians. The Southern Appalachians were taken
@@ -141,13 +163,15 @@ Appalachians ecoregions (Omernik & Griffith 2014) south of the Roanoke Gap
 (37.3°N), where the southern Blue Ridge ends; the region is the world's
 richest in salamanders, which makes it a demanding test of the strategies.
 Samples larger than 1,500 points after merging were thinned to 1,500 points
-at random (seeded), to keep the area-based strategies tractable.
+at random (seeded), to keep the area-based strategies tractable. The Costa
+Rica sample was also run with its areas measured on land only, each hull
+cut to the national boundary, including two strategies that choose the hull
+vertex by land area (M1 keeps the most, M2 the least).
 
 **Table 2.** Samples (from `results/tables/datasets.csv`).
 
 | Sample | Observations | Points | Species | Hull area (km²) | Merge (m) | Points used |
 | --- | --- | --- | --- | --- | --- | --- |
-| Steele Creek Park, one observer | 1,040 | 893 | 757 | 5.4 | 10 | 219 |
 | Steele Creek Park area, all taxa | 4,431 | 3,992 | 1,281 | 17.3 | 10 | 1,224 |
 | East Tennessee, frogs | 10,314 | 9,803 | 21 | 69,580 | 100 | 1,500 |
 | Great Smoky Mountains, birds | 16,344 | 15,460 | 211 | 3,210 | 50 | 1,500 |
@@ -180,30 +204,31 @@ the results.
 ### 3.1 Strategies split into three groups
 
 Random removal (S1) gave near-vertical curves (Fig. 2) and slopes of 0.7 to
-5, often at the bound of the fit's search: it keeps the sample's full extent
-until its last points, so area hardly changes while richness falls (Fig. 3).
+4.9: it keeps the sample's full extent until its last points, so area hardly
+changes while richness falls (Fig. 3).
 The outside-in strategies without a greedy rule, random hull vertex (S2),
 hull peeling (S3) and concave peeling (S10), agreed closely with one another
-on every sample, with *z* between 0.15 and 0.34, the range reported for
+on every sample, with *z* between 0.15 and 0.30, the range reported for
 classic SARs. Greedy rules shifted *z*: keeping species (S6) gave the lowest
-slope on five of eight samples (0.05 to 0.22), and keeping area (S4) the
-highest of the hull strategies on seven of eight (0.21 to 0.97, and 3.4 on
-the single-observer sample), where removing the vertex closest to the center
-(S9) also reached the bound. At Monteverde, where every strategy but S1, S4
-and S9 gave *z* between 0.14 and 0.17, and for Southern Appalachian
-salamanders (0.22 to 0.27 for all but S1 and S4), the greedy rules made
-little difference.
+slope on four of seven samples (0.07 to 0.22 overall), and keeping area (S4)
+the highest of the hull strategies on all seven (0.21 to 0.97). At
+Monteverde, where every strategy but S1, S4 and S9 gave *z* between 0.14 and
+0.17, and for Southern Appalachian salamanders (0.22 to 0.27 for all but S1
+and S4), the greedy rules made little difference.
 
 ### 3.2 Clustered records, and merging them
 
-On the single-observer park sample, merging within 5 m removed 72% of the
-points (across Table 2 the share ranged from 4%, for Southern Appalachian
-salamanders, to 72%).
-Without merging, the last few hundred steps of every hull nest measured hulls
-under a square meter across, and every hull strategy but S4 and S9 gave
-*z* ≈ 0.06 to 0.07.
-Merging within 5 to 10 m raised hull peeling's *z* to 0.26 to 0.34, after
-which it changed little up to 50 m (Fig. 4). The simulations isolate the
+On the park sample, merging within 5 m removed 50% of the points (across
+Table 2 the share ranged from 4%, for Southern Appalachian salamanders, to
+50%).
+Without merging, hull nests ended on hulls of well under a square meter (the
+smallest fitted area of hull peeling was 0.03 m²), and every hull strategy
+but S4 and S9 gave *z* between 0.15 and 0.22.
+Merging within 2 to 10 m raised hull peeling's *z* to 0.30 to 0.31, and it
+was 0.27 at 25 m; at 50 m, with 230 points left, the slopes of most hull
+strategies rose (0.46 for hull peeling), a sign of over-merging at the scale
+of a park
+(Fig. 4). The simulations isolate the
 effect (Fig. 5): with no clustering, the outside-in strategies (S2, S3, S5,
 S7, S8, S10) gave a median *z* of 0.42 to 0.48; with half the records at one
 spot, *z* fell to 0.07 to 0.08 for the raw records, but stayed at 0.26 to
@@ -211,23 +236,22 @@ spot, *z* fell to 0.07 to 0.08 for the raw records, but stayed at 0.26 to
 
 ### 3.3 Against the random-vertex baseline
 
-Hull peeling fell inside the random-vertex baseline's distribution on seven
-of eight samples (rank p 0.07 to 0.89 against 99 baseline nests), and just
+Hull peeling fell inside the random-vertex baseline's distribution on six
+of seven samples (rank p 0.07 to 0.89 against 99 baseline nests), and just
 outside it for all of Costa Rica (p = 0.04); concave peeling fell inside on
-four (and on a fifth at exactly p = 0.05). The greedy strategies mostly fell outside it: keeping area (S4) at
+four. The greedy strategies mostly fell outside it: keeping area (S4) at
 p = 0.01, the smallest possible, on every sample, and keeping species (S6),
 removing the vertex farthest from the center (S8) or closest to it (S9) on
-six or seven of eight. Greedy rules bias the slope rather than adding
+five or six of seven. Greedy rules bias the slope rather than adding
 noise. A random-vertex nest with a different seed itself fell anywhere from
 p = 0.03 to 0.90, a reminder of how much one random nest varies.
 
 ### 3.4 Steps are far from independent
 
 Residuals of one-at-a-time nests were strongly autocorrelated, with lag-1
-autocorrelation above 0.94 in all but two cases (S6 at 0.84 and S8 at 0.46,
-both on the single-observer sample). Peeling strategies, with far fewer
-steps, were usually lower (hull peeling 0.60 to 0.96, concave peeling 0.12
-to 0.88), so their R² and AICc overstate the evidence less, though still
+autocorrelation above 0.94 in every case. Peeling strategies, with far fewer
+steps, were lower (hull peeling 0.78 to 0.96, concave peeling 0.50 to 0.88),
+so their R² and AICc overstate the evidence less, though still
 substantially.
 
 ### 3.5 Hull shapes
@@ -237,7 +261,51 @@ S2 and S8 keep the hull compact and centered; S4 and S9 leave elongated hulls
 that span the sample, which is why their areas stay large and their slopes
 steep.
 
-### 3.6 Run time
+### 3.6 The added strategies
+
+Most of the added strategies that shrink the sample from the outside in
+agreed with hull peeling (Fig. 8; `results/tables/strategies_added.csv`).
+Radial removal (A1) and fine grid peeling (A7) stayed within 0.05 of hull
+peeling's *z* on every sample, the isolation-weighted vertex (A6) within
+0.06, and reversed growth (A5) within 0.08, with *z* between 0.15 and 0.32
+across the four. Density peeling (A4) gave 0.15 to 0.27, and fell 0.10 below
+hull peeling for Costa Rica.
+
+Direction mattered. Sweeping a front east (A2) or north (A3) gave slopes
+from 0.15 to 1.22, differing between the two bearings by up to 0.33 on one
+sample (0.52 east and 0.19 north for Great Smoky Mountains birds) and above
+0.5 on four: a sweep leaves a strip whose hull loses area slowly, so its
+slope reflects the sample's shape along the bearing more than its richness.
+
+Scale mattered less. From fine to coarse grid cells the number of steps fell
+from 21 to 38 down to 9 to 11, *z* moved by at most 0.07 on any sample
+(up on five, down on two), and lag-1 autocorrelation of the residuals fell
+from 0.64 to 0.92 to 0.05 to 0.58: coarse layers are closer to independent
+observations, at the cost of very few of them.
+
+The rarity rules behaved as the species rules did. Removing vertices of
+common species first (A10) tracked keeping the most species (S6) within 0.04
+on six of seven samples (0.07 to 0.20), and gave 0.44 for Southern
+Appalachian salamanders, 0.22 above it. Removing rare species first (A11)
+gave 0.15 to 0.37. The enclosing-circle rule (A12, 0.14 to 0.27) resembled
+removing the vertex farthest from the center (S8).
+
+Against the random-vertex baseline, reversed growth and the isolation-weighted
+vertex fell inside its distribution on four of seven samples, fine grid
+peeling and rare-first rarity on three, radial removal and the enclosing
+circle on two, and the sweeps, density peeling, coarser grids and
+common-first rarity on one or none. Agreement in *z* to within 0.05 is therefore not the same as being
+indistinguishable from a random-vertex nest: the baseline's 95% range was
+narrow, 0.014 to 0.069 wide.
+
+**On land only.** A quarter of the thinned Costa Rica sample's hull is sea
+(23%). Measured on land, the slope of every hull strategy but S4 rose, by
+0.01 to 0.03 (hull peeling from 0.27 to 0.30), and hull peeling moved inside the
+random-vertex baseline (p = 0.12, from 0.04); keeping area (S4) fell from
+0.54 to 0.44, since the area it kept was partly sea. Choosing the vertex by
+land area gave 0.44 keeping the most (M1) and 0.25 keeping the least (M2).
+
+### 3.7 Run time
 
 Run time grew faster than linearly for every hull strategy (Fig. 7). On a
 desktop (AMD Ryzen 7 7700), a 4,000-point sample took 0.16 s to peel (S3)
@@ -274,17 +342,21 @@ richness is to losing the least or most valuable ground, rather than giving
 an unbiased SAR.
 
 Clustered records are the largest practical hazard. Without merging, the
-end of every nest measures GPS error, and the fitted slope collapses toward
-zero. Merging within a few meters removes the artifact with little sign of
-over-merging up to tens of meters; the distance should be chosen relative to
-positional accuracy and reported.
+end of every nest measures GPS error, and the fitted slope falls: toward
+zero in the simulations, where half the records sit at one spot, and by
+about a quarter for hull peeling in the park sample. Merging within a few meters removes
+the artifact; merging at tens of meters in a small area leaves too few
+points and raises the slope again, so the distance should be chosen
+relative to positional accuracy and the sample's extent, and reported.
 
 **Limitations.** Areas are convex hull areas even for concave peeling, and
 include whatever the hull spans that isn't habitat. For Costa Rica, 26% of
 the full hull (68,500 km²) is sea; the share falls to 15% after a quarter of
 the peeling steps and to zero by three quarters, so the large end of the curve
-is stretched and *z* underestimated. Coasts, inlets, lakes and concave
-islands need areas measured within a land or study-area mask. The
+is stretched and *z* underestimated: by 0.03 for hull peeling, when areas
+were measured on land (section 3.6). Coasts, inlets, lakes and concave
+islands need areas measured within a land or study-area mask, as only the
+Costa Rica sample was here. The
 open-data export holds only observations with openly licensed photos, and
 obscured observations carry randomized coordinates without a flag. Samples
 larger than 1,500 points after merging were thinned for the comparison
@@ -295,8 +367,9 @@ treats S2 as the reference.
 **Next steps.** A known-answer simulation (communities with a set *z*), more
 regions and taxa, plot-based data (NEON) for independent-plot SARs, multi-model
 fits, searched removal orders (evaluated with `strategies.from_order`) to see how
-far the greedy rules are from optimal, and further strategies: kernel-smoothed
-boundaries, spatially weighted and multi-scale removal.
+far the greedy rules are from optimal, and the strategies that need more
+than positions and species: nests by elevation and by date, and samples
+nested as several patches at once.
 
 ## Reproducibility
 
@@ -309,8 +382,7 @@ gives its address). From the repository root:
 ```bash
 uv run python papers/hull-strategies/analysis/run.py \
     --opendata ~/data/inaturalist-open-data/observations.parquet \
-    --ecoregions ~/data/epa-ecoregions/us_eco_l3.zip \
-    --local-sample path/to/steele_creek.csv
+    --ecoregions ~/data/epa-ecoregions/us_eco_l3.zip
 ```
 
 The script writes every table and figure to `results/` (or `--out`); the
@@ -325,10 +397,11 @@ sample.
 1. `results/figures/fig1_strategies.webp`: each strategy on a simulated sample, at about half its points.
 2. `results/figures/fig2_curves.webp`: species-area curves of every strategy, per sample.
 3. `results/figures/fig3_z_by_strategy.webp`: *z* by strategy and sample.
-4. `results/figures/fig4_merge_sensitivity.webp`: *z* against the merge distance, single-observer park sample.
+4. `results/figures/fig4_merge_sensitivity.webp`: *z* against the merge distance, park sample.
 5. `results/figures/fig5_simulated_clusters.webp`: simulated clustering, with and without merging.
 6. `results/figures/fig6_compactness.webp`: hull compactness as points are removed.
 7. `results/benchmarks/<machine>/fig7_runtime.webp`: run time against sample size, by strategy (one per machine benchmarked).
+8. `results/figures/fig8_added_strategies.webp`: *z* of the original and added strategies per sample, against the random-vertex baseline's range, with Costa Rica also on land.
 
 ## References (to verify)
 

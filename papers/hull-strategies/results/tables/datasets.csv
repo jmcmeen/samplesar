@@ -1,5 +1,4 @@
 dataset,label,observations,points,species,area_km2,share_merged_at_5m,merge_m,points_merged,points_used
-local,"Steele Creek Park, one observer",1040,893,757,5.410351138143349,0.7178051511758119,10,219,219
 steele_creek_all,"Steele Creek Park area, all taxa",4431,3992,1281,17.278775362531235,0.50125250501002,10,1224,1224
 etn_frogs,"East Tennessee, frogs",10314,9803,21,69579.80629014176,0.0892583902886871,100,6370,1500
 gsmnp_birds,"Great Smoky Mountains, birds",16344,15460,211,3209.479642303229,0.38635187580853814,50,3394,1500
