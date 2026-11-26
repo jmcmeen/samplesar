@@ -583,12 +583,16 @@ class Sample:
         [`merge_within`][samplesar.Sample.merge_within], the points not kept
         are dropped with their observations, as spatial thinning of
         occurrence records usually is: species seen only at dropped points
-        are lost.
+        are lost. The cells start at this sample's own corner, so thinning a
+        part of a sample isn't the same as taking that part of the thinned
+        sample, and thinning twice can drop a few more points.
 
         Parameters
         ----------
         km : float
-            The side of a cell, in km (positive).
+            The side of a cell, in km on the ground (positive); with a
+            distorting ``crs`` it is corrected by the projection's scale at
+            the sample's center, as areas are.
         seed : int, optional
             Keep a random point of each cell, reproducibly. By default the
             point nearest its cell's center is kept (ties to the lowest
@@ -602,7 +606,8 @@ class Sample:
         Raises
         ------
         ValueError
-            If ``km`` isn't a positive number.
+            If ``km`` isn't a positive number, or is too small for the
+            sample's extent to count cells in.
         """
         if isinstance(km, bool) or not isinstance(km, numbers.Real):
             raise ValueError(f"km must be a positive number, got {km!r}.")
@@ -611,6 +616,11 @@ class Sample:
             raise ValueError(f"km must be a positive number, got {km!r}.")
         xy = np.asarray(self.xy)
         corner = xy.min(axis=0)
+        # xy is in the projection's km; a distorting crs stretches lengths by
+        # about the square root of its areal scale.
+        km = km * float(np.sqrt(self.area_scale))
+        if float((xy.max(axis=0) - corner).max()) / km > 2.0**52:
+            raise ValueError(f"km={km:g} is too small for a sample this wide.")
         ij = np.floor((xy - corner) / km + 1e-9).astype(np.int64)
         _, cell = np.unique(ij, axis=0, return_inverse=True)
         cell = np.asarray(cell).ravel()

@@ -90,7 +90,7 @@ convex hull areas.
 
 A pair, `ratio=(0.6, 0.1)`, changes the ratio as the sample shrinks, in
 proportion to the points removed: loose while there are many points to
-outline, tight at the end. shapely's ratio is already relative to the
+outline, tighter as they go. shapely's ratio is already relative to the
 spacing of the points left, so a single value is the default; the pair is
 for testing how much a curve depends on it.
 
@@ -313,7 +313,8 @@ nest = samplesar.strategies.hull_peel(even)
 
 The points not kept are dropped with their observations, as spatial
 thinning of occurrence records usually is, so species seen only at dropped
-points are lost. To keep every observation and only merge points a few
+points are lost. The cells start at the sample's own south-west corner, so
+thin the whole sample once, before taking parts of it. To keep every observation and only merge points a few
 meters apart, use `Sample.merge_within`.
 
 ## Comparing strategies

@@ -1,5 +1,7 @@
 """Sample.thin, and concave_peel's ratio schedule."""
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -48,7 +50,32 @@ def test_the_point_nearest_each_cells_center_is_kept():
     thinned = sample.thin(1.0)
     # Cell (0, 0): (0.5, 0.5) is at the center; cell (1, 0): (1.5, 0.5).
     assert np.allclose(thinned.xy, sample.xy[[1, 4]])
-    assert thinned.thin(1.0).n_points == 2  # thinning again changes nothing
+
+
+def test_ties_for_the_center_go_to_the_lowest_index():
+    # Mirror images about the cell's center, laid out in the sample's own crs.
+    sample = km_sample([(0, 0), (0.25, 0.5), (0.75, 0.5), (0.5, 0.25), (0.5, 0.75)])
+    kept = sample.thin(1.0)
+    assert kept.n_points == 1
+    assert np.hypot(*(kept.xy[0] - sample.xy[0])) == pytest.approx(np.hypot(0.25, 0.5), abs=0.3)
+
+
+def test_cells_are_true_kilometers_in_a_distorting_crs():
+    # Web Mercator at 60° N stretches lengths twofold: a grid of points 0.6 km
+    # apart on the ground is 1.2 "km" apart on the projection.
+    lon = 10 + np.arange(8) * 0.6 / 55.8  # km per degree of longitude at 60° N
+    lat = 60 + np.arange(8) * 0.6 / 111.4
+    frame = pd.DataFrame({"species": "a", "lon": np.repeat(lon, 8), "lat": np.tile(lat, 8)})
+    geopandas = pytest.importorskip("geopandas")
+    gdf = geopandas.GeoDataFrame(
+        frame[["species"]], geometry=geopandas.points_from_xy(frame["lon"], frame["lat"]), crs=4326
+    ).to_crs(3857)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # the crs distorts areas: the point here
+        sample = samplesar.sources.geodataframe(gdf)
+        assert sample.area_scale == pytest.approx(4.0, rel=0.05)
+        # 1 km cells hold about (1 / 0.6)² = 2.8 points each.
+        assert 64 / 4.5 < sample.thin(1.0).n_points < 64 / 1.8
 
 
 def test_a_seed_keeps_a_random_point_reproducibly():
@@ -83,6 +110,11 @@ def test_large_cells_and_small_cells():
     sample = piled()
     assert sample.thin(1000.0).n_points == 1
     assert sample.thin(1e-6).n_points == sample.n_points
+
+
+def test_a_cell_too_small_to_count():
+    with pytest.raises(ValueError, match="too small"):
+        piled().thin(1e-300)
 
 
 @pytest.mark.parametrize("km", [0, -1, float("nan"), float("inf"), "1", True, None])
@@ -135,6 +167,13 @@ def test_a_schedule_saves_and_loads(tmp_path):
     nest.to_json(path)
     back = samplesar.Nest.from_json(path)
     assert back.options["ratio"] == [0.6, 0.2] and back.n_steps == nest.n_steps
+    # Saved options hold lists, so the pair is printed with brackets after loading.
+    assert nest.label == "concave_peel(ratio=(0.6, 0.2))"
+    assert back.label == "concave_peel(ratio=[0.6, 0.2])"
+    again = samplesar.strategies.run(back.sample, back.strategy, **back.options)
+    assert all(np.array_equal(a, b) for a, b in zip(again.steps, nest.steps, strict=True))
+    as_floats = samplesar.strategies.concave_peel(l_shape(), ratio=[np.float64(0.6), 0.2])
+    assert as_floats.n_steps == nest.n_steps
 
 
 @pytest.mark.parametrize("ratio", [(0.5, 1.5), (-0.1, 0.5), (0.5,), (0.1, 0.2, 0.3), "0.3", None])

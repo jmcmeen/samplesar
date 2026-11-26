@@ -581,8 +581,9 @@ def concave_peel(
         Between 0 and 1: 1 is the convex hull (the same as ``strategies.hull_peel``),
         smaller values follow the outline more tightly. A pair
         ``(start, end)`` changes it as the sample shrinks, in proportion to
-        the points removed: ``(0.6, 0.1)`` peels loosely at first and
-        tightly at the end, when few points are left to outline.
+        the points removed: ``(0.6, 0.1)`` peels loosely at first and more
+        tightly as it goes. The ratio would reach ``end`` with ``min_points``
+        left; peeling usually stops a layer or two short of that.
     min_points : int
         Stop rather than leave fewer than this many points.
 
@@ -620,7 +621,7 @@ def concave_peel(
     while True:
         # The share of the points to be removed that already are.
         done = (sample.n_points - len(remaining)) / max(sample.n_points - min_points, 1)
-        now = start + (end - start) * min(done, 1.0)
+        now = start + (end - start) * done
         hull = shapely.concave_hull(MultiPoint(points[remaining]), ratio=now)
         if isinstance(hull, Polygon):
             distance = shapely.distance(hull.exterior, shapely.points(points[remaining]))
