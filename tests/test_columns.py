@@ -5,6 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 import pytest
+import shapely
 
 import samplesar
 from samplesar._gbif import gbif_frame
@@ -82,18 +83,86 @@ def test_csv_takes_the_column_names(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("column", "values", "error"),
+    ("column", "values", "message"),
     [
-        ("alt", ["high"] * 30, ValueError),
-        ("alt", [np.inf] * 30, ValueError),
-        ("seen", ["not a date"] * 30, ValueError),
+        ("alt", ["high"] * 30, "elevation must be numeric"),
+        ("alt", [np.inf] * 30, "elevation must be finite"),
+        ("seen", ["not a date"] * 30, "date must hold dates or times"),
+        ("seen", list(range(1990, 2020)), "not numbers"),
+        ("seen", [2019, "2020-01-01"] * 15, "date must hold dates or times"),
+        ("seen", [True] * 30, "not numbers"),
     ],
 )
-def test_bad_values(column, values, error):
+def test_bad_values(column, values, message):
     data = frame()
     data[column] = values
-    with pytest.raises(error):
+    with pytest.raises(ValueError, match=message):
         samplesar.sources.dataframe(data, crs=UTM_17N, elevation_col="alt", date_col="seen")
+
+
+def test_dates_too_far_from_the_present_count_as_missing():
+    data = frame(n=4)
+    data["seen"] = ["1600-01-01", "2021-01-01", "2021-01-02T03:00:00+01:00", "3000-06-01"]
+    made = samplesar.sources.dataframe(data, crs=UTM_17N, date_col="seen")
+    assert np.isnat(made.dates).tolist() == [True, False, False, True]
+    assert made.dates[2] == np.datetime64("2021-01-02T02:00:00")
+    assert made.dates.dtype == "datetime64[ns]"
+    # Coarser datetimes, as a database returns them.
+    coarse = frame(n=3)
+    coarse["seen"] = np.array(["1200-01-01", "2020-05-05", "2020-05-06"], dtype="datetime64[s]")
+    made = samplesar.sources.dataframe(coarse, crs=UTM_17N, date_col="seen")
+    assert np.isnat(made.dates).tolist() == [True, False, False]
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"elevation_col": "lon"},
+        {"date_col": "alt", "elevation_col": "alt"},
+        {"lat_col": "lon"},
+    ],
+)
+def test_one_column_cannot_be_two_things(options):
+    with pytest.raises(ValueError, match="named for both|three different"):
+        samplesar.sources.dataframe(frame(), crs=UTM_17N, **options)
+
+
+def test_columns_that_borrow_our_names():
+    data = frame().rename(columns={"alt": "date", "seen": "elevation"})
+    # "date" holds heights and "elevation" holds dates.
+    made = samplesar.sources.dataframe(
+        data, crs=UTM_17N, elevation_col="date", date_col="elevation"
+    )
+    assert made.elevations.min() >= 200 and made.dates.dtype == "datetime64[ns]"
+    only = samplesar.sources.dataframe(data, crs=UTM_17N, date_col="elevation")
+    assert list(only.data.columns) == ["species", "lon", "lat", "date"]
+    named = frame().rename(columns={"species": "date"})
+    kept = samplesar.sources.dataframe(named, crs=UTM_17N, species_col="date")
+    assert kept.n_species == 5 and list(kept.data.columns) == ["species", "lon", "lat"]
+
+
+def test_within_and_masks_keep_the_columns(sample):
+    lon, lat = sample.points.T
+    box = shapely.box(lon.min(), lat.min(), np.median(lon), lat.max())
+    inside = sample.within(box, mask=True)
+    assert {"elevation", "date"} <= set(inside.data.columns)
+    assert len(inside.elevations) == inside.n_points < sample.n_points
+    assert "date" in sample.with_mask(box).data.columns
+
+
+def test_a_geodataframe_can_name_them():
+    geopandas = pytest.importorskip("geopandas")
+    data = frame()
+    gdf = geopandas.GeoDataFrame(
+        data[["species", "alt", "seen"]],
+        geometry=geopandas.points_from_xy(data["lon"], data["lat"]),
+        crs=UTM_17N,
+    )
+    made = samplesar.sources.geodataframe(gdf, elevation_col="alt", date_col="seen")
+    assert np.allclose(made.elevations, data["alt"]) and not np.isnat(made.dates).any()
+    assert list(samplesar.sources.geodataframe(gdf).data.columns) == ["species", "lon", "lat"]
+    with pytest.raises(KeyError, match="height"):
+        samplesar.sources.geodataframe(gdf, elevation_col="height")
 
 
 def test_a_missing_named_column():
@@ -222,7 +291,12 @@ def test_elevation_needs_every_point_to_have_one():
 
 @pytest.mark.parametrize(
     "options",
-    [{"remove": "up"}, {"around": 100.0}, {"remove": "outer", "around": float("nan")}],
+    [
+        {"remove": "up"},
+        {"around": 100.0},
+        {"remove": "outer", "around": float("nan")},
+        {"remove": "outer", "around": "high"},
+    ],
 )
 def test_elevation_bad_options(sample, options):
     with pytest.raises(ValueError):
@@ -261,13 +335,15 @@ def test_temporal_runs_back_through_a_survey():
     assert sorted(nest.steps[-1]) == [0, 1, 2, 3]
 
 
-def test_dates_a_second_apart_are_told_apart():
+def test_dates_a_moment_apart_are_told_apart_and_ties_go_by_index():
     data = frame(n=6)
     data["seen"] = pd.Timestamp("1900-01-01")
     data.loc[5, "seen"] = pd.Timestamp("2025-01-01")
-    data.loc[2, "seen"] = pd.Timestamp("1900-01-01 00:00:01")
+    data.loc[2, "seen"] = pd.Timestamp("1900-01-01 00:00:00.001")
     made = samplesar.sources.dataframe(data, crs=UTM_17N, date_col="seen")
-    assert removed(samplesar.strategies.temporal(made, min_points=1))[:3] == [5, 2, 0]
+    assert removed(samplesar.strategies.temporal(made, min_points=1)) == [5, 2, 0, 1, 3]
+    oldest = samplesar.strategies.temporal(made, remove="oldest", min_points=1)
+    assert removed(oldest) == [0, 1, 3, 4, 2]
 
 
 def test_temporal_needs_every_point_to_have_a_date():
@@ -327,6 +403,12 @@ def test_inaturalist_records_carry_their_date():
             "taxon": {"name": "Aus bus", "rank": "species"},
             "geojson": {"coordinates": [1.0, 2.0]},
             "observed_on": "2021-04-03",
+            "time_observed_at": "2021-04-03T09:30:00-04:00",
+        },
+        {
+            "taxon": {"name": "Aus dus", "rank": "species"},
+            "geojson": {"coordinates": [1.2, 2.0]},
+            "observed_on": "2021-04-05",
         },
         {
             "taxon": {"name": "Aus cus", "rank": "species"},
@@ -334,4 +416,23 @@ def test_inaturalist_records_carry_their_date():
         },
     ]
     table = inaturalist_frame(records)
-    assert table["date"][0] == pd.Timestamp("2021-04-03") and pd.isna(table["date"][1])
+    assert table["date"][0] == pd.Timestamp("2021-04-03 13:30:00")  # the time, in UTC
+    assert table["date"][1] == pd.Timestamp("2021-04-05") and pd.isna(table["date"][2])
+
+
+def test_the_fetching_sources_pass_their_columns_on(monkeypatch):
+    records = [
+        {
+            "species": f"Aus {name}",
+            "decimalLongitude": 1.0 + i,
+            "decimalLatitude": 2.0,
+            "taxonRank": "SPECIES",
+            "elevation": 100.0 * i,
+            "eventDate": f"202{i}-05-01",
+        }
+        for i, name in enumerate(["bus", "cus", "dus"])
+    ]
+    monkeypatch.setattr("samplesar._gbif.fetch_gbif", lambda *args, **kwargs: records)
+    made = samplesar.sources.gbif(taxon_key=1, bbox=(0, 0, 5, 5))
+    assert made.elevations.tolist() == [0.0, 100.0, 200.0]
+    assert made.dates[2] == np.datetime64("2022-05-01")

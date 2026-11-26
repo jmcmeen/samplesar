@@ -90,7 +90,8 @@ def inaturalist_frame(
 def _observed(record: Mapping[str, Any]) -> Any:
     """When the record was observed, as a UTC time without a zone; NaT when
     it has no usable date."""
-    value = record.get("observed_on") or record.get("time_observed_at")
+    # The time when there is one: the date alone ties every point of a day.
+    value = record.get("time_observed_at") or record.get("observed_on")
     if not value:
         return pd.NaT
     try:

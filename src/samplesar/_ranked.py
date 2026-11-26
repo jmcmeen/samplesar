@@ -458,15 +458,6 @@ def grow(sample: Sample, seed: tuple[float, float] | None = None, min_points: in
     return from_order(sample, growth_order(xy, start)[::-1], min_points=min_points)
 
 
-def _complete(values: np.ndarray, what: str, how: str) -> None:
-    missing = int(np.count_nonzero(np.isnan(values)))
-    if missing:
-        raise ValueError(
-            f"{missing} of the sample's {len(values)} points have no {what}; {how}, or keep "
-            f"only the points that have one (Sample.subset)."
-        )
-
-
 @register("elevation")
 def elevation(
     sample: Sample,
@@ -505,7 +496,7 @@ def elevation(
     ------
     ValueError
         If the sample has no elevations or some points lack one, ``remove``
-        is unknown, ``around`` isn't finite or is given without
+        is unknown, ``around`` isn't a finite number or is given without
         ``remove="outer"``, or ``min_points`` is below 1 or above the
         sample's size.
     """
@@ -514,10 +505,16 @@ def elevation(
         raise ValueError(f"remove must be 'highest', 'lowest' or 'outer', got {remove!r}")
     if around is not None and remove != "outer":
         raise ValueError("around is only used with remove='outer'.")
-    if around is not None and not np.isfinite(around):
-        raise ValueError(f"around must be a finite elevation in meters, got {around}.")
+    if around is not None:
+        around = _finite("around", around)
     height = sample.elevations
-    _complete(height, "elevation", "set them with Sample.with_elevations")
+    missing = int(np.count_nonzero(np.isnan(height)))
+    if missing:
+        raise ValueError(
+            f"{missing} of the sample's {len(height)} points have no elevation; set them "
+            "with Sample.with_elevations, or keep only the points that have one "
+            "(Sample.subset)."
+        )
     if remove == "highest":
         key = -height
     elif remove == "lowest":
@@ -564,11 +561,14 @@ def temporal(
     if remove not in ("newest", "oldest"):
         raise ValueError(f"remove must be 'newest' or 'oldest', got {remove!r}")
     dates = sample.dates
-    missing = np.isnat(dates)
-    when = np.where(missing, np.nan, dates.astype("datetime64[ns]").astype(np.int64) / 1e9)
-    _complete(when, "date", "give every observation one")
-    # Whole seconds, compared exactly: _tied's rounding would merge dates a
-    # billionth of the sample's span apart.
-    seconds = np.round(when).astype(np.int64)
-    order = np.lexsort((np.arange(sample.n_points), -seconds if remove == "newest" else seconds))
+    missing = int(np.count_nonzero(np.isnat(dates)))
+    if missing:
+        raise ValueError(
+            f"{missing} of the sample's {len(dates)} points have no date; give every "
+            "observation one, or keep only the points that have one (Sample.subset)."
+        )
+    # Whole nanoseconds, compared exactly: _tied's rounding would merge dates
+    # a billionth of the sample's span apart.
+    when = dates.astype("datetime64[ns]").astype(np.int64)
+    order = np.lexsort((np.arange(sample.n_points), -when if remove == "newest" else when))
     return from_order(sample, order, min_points=min_points)

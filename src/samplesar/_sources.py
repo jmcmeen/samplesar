@@ -51,7 +51,8 @@ def dataframe(
         A column holding when each observation was made (dates, times or
         text pandas can parse), kept for
         [`strategies.temporal`][samplesar.strategies.temporal]. Times with a
-        zone are converted to UTC. Rows may be missing it.
+        zone are converted to UTC, and dates before 1678 or after 2261
+        count as missing. Rows may be missing it.
 
     Returns
     -------
@@ -64,25 +65,39 @@ def dataframe(
     ValueError
         If there are no rows, a species is missing, a coordinate is
         missing, not numeric or out of range, an elevation isn't a finite
-        number, a date can't be read, or ``crs`` isn't a coordinate
-        reference system.
+        number, a date can't be read or is a number, one column is named
+        for two things, or ``crs`` isn't a coordinate reference system.
     """
     names = {species_col: "species", lon_col: "lon", lat_col: "lat"}
     for column, name in ((elevation_col, "elevation"), (date_col, "date")):
         if column is None:
-            df = df.drop(columns=name, errors="ignore")  # not asked for: dropped like the rest
-        elif column not in df.columns:
+            continue
+        if column not in df.columns:
             raise KeyError(f"Missing column {column!r}.")
-        else:
-            names[column] = name
-    stale = [c for c in names.values() if c in df.columns and c not in names]
-    renamed = df.drop(columns=stale).rename(columns=names)
+        if column in names:
+            raise ValueError(f"Column {column!r} is named for both {names[column]} and {name}.")
+        names[column] = name
+    if len(names) < 3:
+        raise ValueError("species_col, lon_col and lat_col must be three different columns.")
+    # A column that already has one of our names but wasn't named for it (an
+    # "elevation" nobody asked for, a "species" beside species_col="taxon")
+    # is dropped like any other.
+    stale = [c for c in ("species", "lon", "lat", "elevation", "date") if c in df.columns]
+    stale = [c for c in stale if names.get(c) != c]
+    kept = df.drop(columns=[c for c in stale if c not in names])
+    order = [c for c in names if c in kept.columns]
+    renamed = kept.loc[:, order].rename(columns=names)
     parsed = _parse_crs(crs)
     projected = parsed if parsed is not None and parsed.is_projected else None
     return Sample(_validate(renamed, parsed), crs=projected)
 
 
-def geodataframe(gdf: Any, species_col: str = "species") -> Sample:
+def geodataframe(
+    gdf: Any,
+    species_col: str = "species",
+    elevation_col: str | None = None,
+    date_col: str | None = None,
+) -> Sample:
     """Build a sample from a GeoDataFrame of point observations.
 
     The geometries' coordinates and the frame's CRS are read directly, so
@@ -96,6 +111,9 @@ def geodataframe(gdf: Any, species_col: str = "species") -> Sample:
         in WGS84 longitude and latitude.
     species_col : str
         The column holding the species name.
+    elevation_col, date_col : str, optional
+        Columns holding each observation's elevation and date, as in
+        [`sources.dataframe`][samplesar.sources.dataframe].
 
     Returns
     -------
@@ -123,7 +141,14 @@ def geodataframe(gdf: Any, species_col: str = "species") -> Sample:
             "lat": np.asarray(geometry.y),
         }
     )
-    return dataframe(frame, crs=gdf.crs)
+    extra = {}
+    for column, name in ((elevation_col, "elevation"), (date_col, "date")):
+        if column is not None:
+            if column not in gdf.columns:
+                raise KeyError(f"Missing column {column!r}.")
+            frame[name] = np.asarray(gdf[column])
+            extra[f"{name}_col"] = name
+    return dataframe(frame, crs=gdf.crs, **extra)
 
 
 def csv(path: str | Path, **kwargs: str) -> Sample:

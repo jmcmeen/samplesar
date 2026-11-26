@@ -76,21 +76,51 @@ def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
     return out
 
 
-def _dates(column: pd.Series) -> pd.Series:
-    """A column of dates, times or text as UTC times without a zone. Text is
-    parsed in one pass when it shares a format, and value by value when it
-    doesn't (a date here, a time with a zone there)."""
+def _one_date(value: Any) -> Any:
+    """One value as a UTC time; NaT when missing or too far from the present
+    for pandas to hold."""
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return pd.NaT
+    if isinstance(value, bool | numbers.Number):
+        raise ValueError(f"{value!r} is a number, not a date")
     try:
+        return pd.to_datetime(value, utc=True)
+    except pd.errors.OutOfBoundsDatetime:
+        return pd.NaT
+
+
+def _dates(column: pd.Series) -> pd.Series:
+    """A column of dates, times or text as UTC times without a zone, at
+    nanosecond resolution. Text is parsed in one pass when it shares a
+    format, and value by value when it doesn't (a date here, a time with a
+    zone there). Dates pandas can't hold at that resolution (before 1678 or
+    after 2261) become missing. Numbers aren't dates: a column of years
+    would be read as nanoseconds since 1970."""
+    numeric = pd.api.types.is_numeric_dtype(column) or pd.api.types.is_bool_dtype(column)
+    if numeric and not column.isna().all():
+        raise ValueError(
+            "date must hold dates, times or text, not numbers; build dates from a year "
+            "column with pandas.to_datetime(years, format='%Y')."
+        )
+    try:
+        if (
+            column.dtype == object
+            and column.map(lambda v: isinstance(v, bool | numbers.Number) and v == v).any()
+        ):
+            raise ValueError("date holds numbers among its values")
         with warnings.catch_warnings():  # pandas warns before falling back itself
             warnings.simplefilter("ignore", UserWarning)
             when = pd.to_datetime(column, utc=True)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         try:
-            when = column.map(lambda v: pd.to_datetime(v, utc=True))
-            when = pd.to_datetime(when, utc=True)
+            when = pd.to_datetime(column.map(_one_date), utc=True)
         except (TypeError, ValueError, OverflowError) as err:
             raise ValueError(f"date must hold dates or times: {err}") from err
-    return when.dt.tz_localize(None).astype("datetime64[ns]")
+    when = when.dt.tz_localize(None)
+    try:
+        return when.astype("datetime64[ns]")
+    except (ValueError, OverflowError):  # some lie outside what nanoseconds can hold
+        return when.where(when.dt.year.between(1678, 2261)).astype("datetime64[ns]")
 
 
 @dataclass(frozen=True)
@@ -107,8 +137,9 @@ class Sample:
         One row per observation, with columns ``species`` (str), ``lon`` and
         ``lat`` (float, decimal degrees), and optionally ``elevation``
         (float, meters above sea level) and ``date`` (when it was observed),
-        either of which may be missing on some rows. Several observations
-        may share a point. Treat it as read-only: the points and other derived values
+        either of which may be missing on some rows (the sources parse and
+        check them; a frame passed here directly must already hold floats
+        and ``datetime64[ns]``). Several observations may share a point. Treat it as read-only: the points and other derived values
         are computed once, so build a new sample rather than editing it.
     center : tuple of float, optional
         The (lon, lat) the points are projected about for areas and
