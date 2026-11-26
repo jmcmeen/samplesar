@@ -90,6 +90,14 @@
 
 ::: samplesar.strategies.available
 
+## strategies.split
+
+::: samplesar.strategies.split
+
+## strategies.partition
+
+::: samplesar.strategies.partition
+
 ## strategies.register
 
 ::: samplesar.strategies.register

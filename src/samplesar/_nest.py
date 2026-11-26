@@ -41,12 +41,54 @@ class Nest:
     options : mapping
         The options the strategy was called with, as given (defaults left
         out), read-only.
+    parts : np.ndarray, optional
+        For a nest of several patches (see
+        [`strategies.split`][samplesar.strategies.split]): the part each of
+        the sample's points belongs to, one whole number per row of
+        ``sample.points``. Each step's area is then the area covered by its
+        parts' convex hulls together, not one hull around them all.
     """
 
     sample: Sample
     steps: tuple[np.ndarray, ...]
     strategy: str = ""
     options: Mapping[str, Any] = field(default_factory=Options)
+    parts: np.ndarray | None = None
+
+    def __post_init__(self) -> None:
+        if self.parts is None:
+            return
+        parts = np.asarray(self.parts)
+        if parts.shape != (self.sample.n_points,) or not np.issubdtype(parts.dtype, np.integer):
+            raise ValueError(
+                f"parts must hold one whole number per point ({self.sample.n_points}), got "
+                f"shape {parts.shape} of {parts.dtype}."
+            )
+        parts = parts.astype(int)
+        parts.flags.writeable = False
+        object.__setattr__(self, "parts", parts)
+
+    def groups(self, step: int) -> list[np.ndarray]:
+        """A step's points, part by part: the rows of ``sample.points`` in
+        each part that still has any, in order of part. One group, the whole
+        step, for a nest without parts."""
+        idx = np.asarray(self.steps[step], dtype=int)
+        if self.parts is None:
+            return [idx]
+        labels = self.parts[idx]
+        return [idx[labels == part] for part in np.unique(labels)]
+
+    def footprint(self, step: int) -> shapely.Geometry:
+        """The ground a step covers, on the sample's projection in km: its
+        convex hull, or for a nest with parts the union of each part's hull.
+        Not cut to the sample's mask. A point or a line where the points
+        make no polygon."""
+        xy = self.sample.xy
+        hulls = [shapely.MultiPoint(xy[group]).convex_hull for group in self.groups(step)]
+        if len(hulls) == 1:
+            return hulls[0]
+        polygons = [hull for hull in hulls if isinstance(hull, shapely.Polygon)]
+        return shapely.union_all(polygons) if polygons else hulls[0]
 
     @property
     def label(self) -> str:
@@ -68,6 +110,21 @@ class Nest:
         """The observations remaining at a step, as a [`Sample`][samplesar.Sample]."""
         return self.sample.subset(self.steps[step])
 
+    def areas_at(self, step: int) -> tuple[float, float]:
+        """A step's area within the sample's mask and its whole area, both
+        in km² (the same without a mask): of its convex hull, or for a nest
+        with parts of its parts' hulls together."""
+        sample = self.sample
+        if self.parts is None:
+            return sample.areas_of(self.steps[step])
+        cover = self.footprint(step)
+        if not cover.area > 0:
+            return 0.0, 0.0
+        whole = float(cover.area) / sample.area_scale
+        if sample.mask is None:
+            return whole, whole
+        return sample._mask_tiles.area_within(cover) / sample.area_scale, whole
+
     def to_frame(self) -> pd.DataFrame:
         """The nest as a table.
 
@@ -77,7 +134,10 @@ class Nest:
             One row per step: ``step``, ``n_points``, ``area`` (convex hull,
             km², within the sample's mask (see [`with_mask`][samplesar.Sample.with_mask]) if it
             has one) and ``species`` (distinct species remaining). With a
-            mask, also ``hull_area``: the whole hull's area, km².
+            mask, also ``hull_area``: the whole hull's area, km². For a
+            nest with ``parts``, the areas are of the parts' hulls together
+            (overlaps counted once), and ``n_parts`` counts the parts with
+            points left.
         """
         sample = self.sample
         masked = sample.mask is not None
@@ -87,7 +147,9 @@ class Nest:
         # recomputed from every point at every step.
         holders = np.zeros(n_species, dtype=int)
         present = np.zeros(sample.n_points, dtype=bool)
-        areas = _StepAreas(sample)
+        areas: _StepAreas | _PartAreas = (
+            _StepAreas(sample) if self.parts is None else _PartAreas(sample, self.parts)
+        )
         rows = []
         for i, idx in enumerate(self.steps):
             idx = np.asarray(idx, dtype=int)
@@ -107,6 +169,8 @@ class Nest:
             }
             if masked:
                 row["hull_area"] = whole
+            if self.parts is not None:
+                row["n_parts"] = len(np.unique(self.parts[idx]))
             rows.append(row)
         return pd.DataFrame(rows)
 
@@ -151,9 +215,9 @@ class Nest:
         mask = self.sample.mask
         saved = {
             "format": FORMAT,
-            # A nest without a mask is saved as version 3, which older
-            # releases still read.
-            "version": FORMAT_VERSION if mask is not None else 3,
+            # A nest without a mask or parts is saved as version 3, and one
+            # without parts as 4, which older releases still read.
+            "version": 5 if self.parts is not None else 4 if mask is not None else 3,
             "samplesar": _package_version(),
             "strategy": self.strategy,
             "options": {k: _plain(k, v) for k, v in self.options.items()},
@@ -165,6 +229,8 @@ class Nest:
         }
         if mask is not None:
             saved["mask"] = shapely.to_wkt(mask, rounding_precision=-1)
+        if self.parts is not None:
+            saved["parts"] = self.parts.tolist()
         return saved
 
     @classmethod
@@ -229,11 +295,17 @@ class Nest:
         options = dict(data.get("options", {}))
         if version < 3 and "centre" in options:  # radial's keyword before version 3
             options["center"] = options.pop("centre")
+        parts = data.get("parts")
+        if parts is not None:
+            parts = _indices(parts)
+            if len(parts) != sample.n_points:
+                raise ValueError("The saved parts don't match the saved sample's points.")
         return cls(
             sample=sample,
             steps=tuple(steps),
             strategy=data.get("strategy", ""),
             options=Options(options),
+            parts=parts,
         )
 
     def to_json(self, path: str | Path) -> None:
@@ -342,6 +414,47 @@ class _StepAreas:
         return np.union1d(idx[~inside], kept)
 
 
+class _PartAreas:
+    """Each step's areas for a nest of several parts, in km²: the union of
+    the parts' convex hulls, within the mask and whole. A part's hull is
+    rebuilt only when it loses a vertex or gains a point, and the union only
+    when some hull changed."""
+
+    def __init__(self, sample: Sample, parts: np.ndarray) -> None:
+        self.sample = sample
+        self.xy = sample.xy
+        self.parts = parts
+        self.vertices: dict[int, np.ndarray | None] = {}
+        self.areas = (0.0, 0.0)
+
+    def update(self, idx: np.ndarray, gone: np.ndarray, added: np.ndarray) -> tuple[float, float]:
+        labels = self.parts[idx]
+        changed = False
+        for part in np.unique(self.parts[gone | added]):
+            part = int(part)
+            vertices = self.vertices.get(part)
+            if vertices is not None and not added[self.parts == part].any():
+                if not gone[vertices].any():
+                    continue
+            self.vertices[part] = _hull_vertices(self.xy, idx[labels == part])
+            changed = True
+        if changed:
+            hulls = [shapely.Polygon(self.xy[v]) for v in self.vertices.values() if v is not None]
+            if not hulls:
+                self.areas = (0.0, 0.0)
+            else:
+                cover = shapely.union_all(hulls) if len(hulls) > 1 else hulls[0]
+                scale = self.sample.area_scale
+                whole = cover.area / scale
+                masked = (
+                    whole
+                    if self.sample.mask is None
+                    else self.sample._mask_tiles.area_within(cover) / scale
+                )
+                self.areas = (masked, whole)
+        return self.areas
+
+
 def _hull_vertices(xy: np.ndarray, idx: np.ndarray) -> np.ndarray | None:
     """The convex hull's vertices, as indices into ``xy`` in hull order, or
     None when the points make no polygon (or qhull can't tell).
@@ -397,8 +510,9 @@ def check_size(sample: Sample, min_points: int) -> None:
 
 
 FORMAT = "samplesar.nest"
-# 2 adds the sample's center and crs; 3 spells the key "center"; 4 adds the mask
-FORMAT_VERSION = 4
+# 2 adds the sample's center and crs; 3 spells the key "center"; 4 adds the mask;
+# 5 adds parts
+FORMAT_VERSION = 5
 
 
 def _package_version() -> str:

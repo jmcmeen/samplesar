@@ -240,6 +240,44 @@ point nearest `seed` by adding, each time, the point nearest the region
 points left are around the seed, and the region follows dense corridors of
 observations rather than convex shapes.
 
+## Several patches at once
+
+One hull around a sample of separate clusters (two valleys, a chain of
+reserves, an archipelago) spans the empty ground between them, and that
+ground is most of its area. `strategies.split` nests the clusters as
+separate patches instead:
+
+```python
+nest = samplesar.strategies.split(sample, "hull_peel", parts=4)
+nest.to_frame()   # area: the four hulls together; n_parts: parts with points left
+```
+
+It splits the sample into parts, runs the named strategy inside each, and
+joins their steps into one nest. Each step's area is the ground its parts'
+hulls cover together (overlaps counted once, and within the mask if the
+sample has one), so the curve is that of several patches shrinking at once.
+`plot.nest` draws every part's hull, and `evaluate.diagnostics` describes
+them together.
+
+`by` chooses the split, and `strategies.partition(sample, parts, by)` returns
+it on its own, as one label per point:
+
+- `"kmeans"` (the default): k-means clusters of the projected points;
+  `seed` makes it reproducible.
+- `"grid"`: equal rectangles over the points' bounding box, `parts` of them
+  in the most nearly square layout, or `parts=(columns, rows)`.
+- labels you give, one per point.
+- (longitude, latitude) seeds: each point joins its nearest seed.
+- polygons (shapely, or a GeoSeries or GeoDataFrame): ecoregions, islands,
+  counties.
+
+`pace` sets how the parts shrink together. With `"even"` (the default) each
+part goes at its own pace and all reach their last step together; with
+`"turn"` each part takes one step per round, so parts with few steps finish
+early. A part with no more than `min_points` points stays whole. For one
+curve per part instead of one curve for all, nest each part yourself:
+`strategies.hull_peel(sample.subset(np.flatnonzero(labels == 0)))`.
+
 ## Comparing strategies
 
 `Nest.fit(model="power")` fits one of [sars](https://jmcmeen.github.io/sars/)'

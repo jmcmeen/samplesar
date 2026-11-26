@@ -57,16 +57,17 @@ def _fill(ax: Axes, geometry: Any, **style: Any) -> None:
         ax.add_patch(PathPatch(Path(vertices, codes), **style))
 
 
-def _hull_ring(nest: Nest, step: int, lonlat_all: np.ndarray) -> np.ndarray | None:
-    """The step's convex hull, as a closed ring of (lon, lat) points, or
-    None when its points don't make a polygon."""
-    idx = nest.steps[step]
-    xy, lonlat = nest.sample.xy[idx], lonlat_all[idx]
-    hull = MultiPoint(xy).convex_hull
-    if not isinstance(hull, Polygon):
-        return None
-    where = {tuple(p): i for i, p in enumerate(xy)}
-    return np.array([lonlat[where[tuple(c)]] for c in hull.exterior.coords])
+def _hull_rings(nest: Nest, step: int, lonlat_all: np.ndarray) -> list[np.ndarray]:
+    """The step's convex hulls (one, or one per part), each a closed ring of
+    (lon, lat) points; none where the points don't make a polygon."""
+    rings = []
+    for idx in nest.groups(step):
+        xy, lonlat = nest.sample.xy[idx], lonlat_all[idx]
+        hull = MultiPoint(xy).convex_hull
+        if isinstance(hull, Polygon):
+            where = {tuple(p): i for i, p in enumerate(xy)}
+            rings.append(np.array([lonlat[where[tuple(c)]] for c in hull.exterior.coords]))
+    return rings
 
 
 def _caption(nest: Nest, step: int, table: Any) -> str:
@@ -164,8 +165,7 @@ def _draw(
     if mask is not None:
         for edge in _rings(mask):
             ax.plot(edge[:, 0], edge[:, 1], color="0.45", linewidth=0.8, zorder=1)
-    ring = _hull_ring(nest, step, points)
-    if ring is not None:
+    for ring in _hull_rings(nest, step, points):
         hull = Polygon(ring)
         _fill(
             ax,

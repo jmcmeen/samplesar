@@ -29,6 +29,7 @@ from samplesar._ranked import (
 )
 from samplesar._rarity import hull_rarity
 from samplesar._registry import available, register, run
+from samplesar._split import partition, split
 
 __all__ = [
     "available",
@@ -47,11 +48,13 @@ __all__ = [
     "hull_rarity",
     "hull_species",
     "hull_weighted",
+    "partition",
     "radial",
     "random",
     "register",
     "run",
     "sector",
+    "split",
     "sweep",
     "temporal",
 ]

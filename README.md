@@ -92,6 +92,10 @@ name through `strategies.run(sample, "hull_peel")`:
   point, in reverse), `elevation` (from the summits down or the valleys
   up) and `temporal` (back through time).
 
+- **Several patches at once:** `split` divides the sample into parts
+  (clusters, a grid, your polygons) and runs any of the above inside each;
+  the areas are those of the parts' hulls together, as for an archipelago.
+
 [Sampling strategies](https://jmcmeen.github.io/samplesar/strategies/) describes each one.
 
 ## Data and regions

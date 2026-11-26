@@ -35,6 +35,17 @@ All notable changes to this project are documented here. The format is based on
   elevational band (`"outer"`).
 - `strategies.temporal(sample, remove="newest")`: removes points in order of
   when they were first observed, so the nest runs back through time.
+- `strategies.split(sample, "hull_peel", parts=4)`: splits the sample into
+  parts (k-means clusters, a grid, your labels, nearest seeds or polygons)
+  and runs a strategy inside each, giving one nest of several patches
+  shrinking at once. `strategies.partition` returns the split alone.
+- Nests can have `parts`: each step's area is then the ground its parts'
+  convex hulls cover together, not one hull around them all. `to_frame`
+  adds `n_parts`, `plot.nest` draws each part's hull, `evaluate.diagnostics`
+  describes them together, and saved nests keep the parts (nest format 5;
+  nests without parts are saved as before). `Nest.groups`, `Nest.footprint`
+  and `Nest.areas_at` give a step's points by part, the ground it covers
+  and its areas.
 
 ### Changed
 
