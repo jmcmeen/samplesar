@@ -197,6 +197,8 @@ def test_missing_values_survive_saving(tmp_path):
     back = samplesar.Nest.from_json(path).sample
     assert np.isnan(back.elevations[3]) and np.isnat(back.dates[4])
     assert np.allclose(np.delete(back.elevations, 3), np.delete(made.elevations, 3))
+    assert np.array_equal(np.delete(back.dates, 4), np.delete(made.dates, 4))
+    assert not np.isnat(np.delete(back.dates, 4)).any()
 
 
 def test_with_elevations(sample):
@@ -217,6 +219,37 @@ def test_with_elevations_reaches_every_observation_at_a_point():
     )
     made = samplesar.sources.dataframe(rows).with_elevations([5.0, 9.0])
     assert made.data["elevation"].tolist() == [5.0, 5.0, 9.0]
+
+
+@pytest.mark.parametrize(
+    ("strategy", "options"),
+    [
+        (samplesar.strategies.elevation, {}),
+        (samplesar.strategies.elevation, {"remove": "outer", "around": 900.0}),
+        (samplesar.strategies.temporal, {}),
+        (samplesar.strategies.temporal, {"remove": "oldest"}),
+    ],
+)
+def test_nested_one_point_per_step_and_reproducible(sample, strategy, options):
+    nest = strategy(sample, min_points=5, **options)
+    assert len(nest.steps[-1]) == 5
+    for before, after in zip(nest.steps, nest.steps[1:], strict=False):
+        assert set(after) < set(before) and len(before) - len(after) == 1
+    assert removed(nest) == removed(strategy(sample, min_points=5, **options))
+    assert removed(nest) == removed(
+        samplesar.strategies.run(sample, nest.strategy, min_points=5, **options)
+    )
+
+
+def test_ties_in_elevation_go_by_index():
+    data = frame(n=6)
+    data["alt"] = [500.0, 900.0, 500.0, 900.0, 100.0, 500.0]
+    made = samplesar.sources.dataframe(data, crs=UTM_17N, elevation_col="alt")
+    assert removed(samplesar.strategies.elevation(made, min_points=1)) == [1, 3, 0, 2, 5]
+    lowest = samplesar.strategies.elevation(made, remove="lowest", min_points=1)
+    assert removed(lowest) == [4, 0, 2, 5, 1]
+    outer = samplesar.strategies.elevation(made, remove="outer", min_points=3)  # median 500
+    assert removed(outer) == [1, 3, 4]
 
 
 @pytest.mark.parametrize("remove", ["highest", "lowest", "outer"])
