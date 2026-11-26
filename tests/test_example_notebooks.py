@@ -69,6 +69,13 @@ def test_example_notebook_is_committed_executed_and_runs(path, kernel_dir):
         if km.has_kernel:
             km.shutdown_kernel(now=True)
     # The stored outputs are what the docs show: they must be what the code gives now.
+    # Only with current pandas and numpy, though: older ones print tables and numbers
+    # differently, and the job that tests the oldest versions isn't testing the docs.
+    import numpy
+    import pandas
+
+    if int(pandas.__version__.split(".")[0]) < 2 or int(numpy.__version__.split(".")[0]) < 2:
+        return
     for before, after in zip(code_cells, _code_cells(fresh), strict=True):
         assert _text(before) == _text(after), (
             f"stale output in {path.name}; re-run and commit it:\n{before.source}"
