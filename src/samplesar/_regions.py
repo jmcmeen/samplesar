@@ -218,16 +218,23 @@ def _rows(
     return frame
 
 
-def _clipped(region: Any, clip: Any) -> Any:
-    """A region cut to a box or polygon, as its polygons only; None when
-    nothing is left."""
-    if clip is not None:
-        if isinstance(clip, tuple | list) and len(clip) == 4:
-            region = region.intersection(_box(*clip))
-        else:
-            from samplesar._boundary import as_geometry
+def _clip_shape(clip: Any) -> Any:
+    """A clip as a geometry: a (west, south, east, north) box or a polygon."""
+    if clip is None:
+        return None
+    if isinstance(clip, tuple | list) and len(clip) == 4:
+        return _box(*clip)
+    from samplesar._boundary import as_geometry
 
-            region = region.intersection(as_geometry(clip))
+    return as_geometry(clip)
+
+
+def _clipped(region: Any, clip: Any) -> Any:
+    """A region cut to a box or polygon, as its polygons only. Raises if
+    nothing is left."""
+    shape = _clip_shape(clip)
+    if shape is not None:
+        region = region.intersection(shape)
     parts = [
         g
         for g in getattr(region, "geoms", [region])
@@ -296,19 +303,32 @@ def read_units(
     """
     frame = _rows(source, column, values, cache_dir)
     frame = frame[frame[column].notna()]
+    shape = _clip_shape(clip)  # a bad clip is an error once, not "nothing left" per region
     units: dict[str, Any] = {}
-    for name in dict.fromkeys(frame[column].astype(str)):  # in the file's order
-        rows = frame[frame[column].astype(str) == name]
+    for value, rows in frame.groupby(column, sort=False):
         region = shapely.union_all(shapely.make_valid(rows.geometry.to_numpy()))
-        try:
-            units[name] = _clipped(region, clip)
-        except ValueError:
-            continue
+        if shape is not None:
+            region = region.intersection(shape)
+        parts = [
+            g
+            for g in getattr(region, "geoms", [region])
+            if g.geom_type in ("Polygon", "MultiPolygon") and not g.is_empty
+        ]
+        if parts:
+            units[_name(value)] = parts[0] if len(parts) == 1 else shapely.union_all(parts)
     if not units:
         raise ValueError(
             "Nothing of the regions is left" + (" after clipping." if clip is not None else ".")
         )
     return units
+
+
+def _name(value: Any) -> str:
+    """A column's value as a region's name: text, with a whole float as its
+    integer (66.0 is "66", as ``values`` matches it)."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 def ecoregion(

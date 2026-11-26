@@ -174,3 +174,89 @@ def test_regions_work_as_a_split_too():
     sample = observations().within(shapely.union_all(list(REGIONS.values())))
     labels = samplesar.strategies.partition(sample, by=list(REGIONS.values()))
     assert np.bincount(labels).tolist() == [40, 40, 40]
+
+
+def test_areas_do_not_depend_on_ring_winding_and_holes_are_taken_out():
+    east, west = box(10, 0, 11, 1), box(0, 0, 1, 1)
+    backwards = shapely.Polygon(west.exterior.coords[::-1])
+    both = shapely.MultiPolygon([east, backwards])
+    assert geodesic_area(both) == pytest.approx(geodesic_area(east) + geodesic_area(west))
+    hole = box(0.25, 0.25, 0.75, 0.75)
+    for ring in (hole.exterior.coords[:], hole.exterior.coords[::-1]):
+        ringed = shapely.Polygon(box(0, 0, 1, 1).exterior.coords, [ring])
+        assert geodesic_area(ringed) == pytest.approx(
+            geodesic_area(box(0, 0, 1, 1)) - geodesic_area(hole)
+        )
+
+
+def test_a_long_edge_along_a_parallel_is_not_a_geodesic():
+    # 49° to 50° N over 12° of longitude: a great circle between the corners
+    # bows north of the parallel, which would add area.
+    wide = box(-116, 49, -104, 50)
+    strips = sum(geodesic_area(box(west, 49, west + 1, 50)) for west in range(-116, -104))
+    assert geodesic_area(wide) == pytest.approx(strips, rel=1e-4)
+
+
+def test_a_region_that_crosses_itself_is_repaired():
+    bowtie = shapely.Polygon([(0, 0), (1, 1), (1, 0), (0, 1)])
+    made = samplesar.designs.islands(observations(), {"bowtie": bowtie, "big": REGIONS["big"]})
+    table = made.to_frame()
+    assert table["area"][0] == pytest.approx(geodesic_area(box(0, 0, 1, 1)) / 2, rel=0.01)
+    assert 0 < table["n_points"][0] < 40
+
+
+def test_unusable_regions_are_named():
+    with pytest.raises(ValueError, match="Region 'gone' isn't a usable polygon"):
+        samplesar.designs.islands(observations(), {"gone": shapely.Polygon()})
+    with pytest.raises(ValueError, match="Region 'region 1' isn't a usable polygon"):
+        samplesar.designs.islands(observations(), [box(0, 0, 1, 1), None])
+
+
+def test_regions_from_an_array_or_a_series():
+    shapes = list(REGIONS.values())
+    for given in (np.array(shapes, dtype=object), pd.Series(shapes)):
+        made = samplesar.designs.islands(observations(), given, names=list(REGIONS))
+        assert made.to_frame()["species"].tolist() == [2, 4, 8]
+
+
+def test_a_hull_needs_three_points_off_a_line():
+    frame = pd.DataFrame(
+        {
+            "species": list("abcde"),
+            "lon": [0.2, 0.8, 10.5, 11.0, 11.5],
+            "lat": [0.5, 0.5, 0.5, 1.0, 1.5],
+        }
+    )
+    made = samplesar.designs.islands(samplesar.sources.dataframe(frame), REGIONS, area="hull")
+    area = made.to_frame()["area"].tolist()
+    assert area[0] == 0.0 and area[2] == 0.0  # two points; none
+    # Three points in a line of longitude and latitude bend a little on the
+    # projection: a sliver, next to a region of 49,000 km².
+    assert area[1] < 5.0
+
+
+def test_the_table_is_computed_once_and_copies_are_independent():
+    made = samplesar.designs.islands(observations(), REGIONS)
+    table = made.to_frame()
+    table["species"] = 0
+    assert made.to_frame()["species"].tolist() == [2, 4, 8]
+    assert made != samplesar.designs.islands(observations(), REGIONS)  # compared by identity
+    with pytest.raises(ValueError, match="area must be"):
+        samplesar.Islands(observations(), REGIONS, area="bogus")
+
+
+def test_many_regions_and_points_are_searched_together():
+    rng = np.random.default_rng(1)
+    n = 20_000
+    frame = pd.DataFrame(
+        {
+            "species": [f"s{i}" for i in rng.integers(0, 200, n)],
+            "lon": rng.uniform(0, 30, n),
+            "lat": rng.uniform(0, 30, n),
+        }
+    )
+    cells = {f"{x},{y}": box(x, y, x + 1, y + 1) for x in range(30) for y in range(30)}
+    table = samplesar.designs.islands(samplesar.sources.dataframe(frame), cells).to_frame()
+    assert len(table) == 900 and table["n_observations"].sum() == n
+    inside = frame[(frame["lon"] < 1) & (frame["lat"] < 1)]
+    assert table["species"][0] == inside["species"].nunique()

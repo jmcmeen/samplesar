@@ -1,6 +1,7 @@
 """Regions from boundary files and known ecoregion datasets."""
 
 import pytest
+import shapely
 from shapely.geometry import box
 
 import samplesar
@@ -204,3 +205,17 @@ def test_units_bad_selections(provinces):
         samplesar.regions.read_units(provinces, "PARK")
     with pytest.raises(ValueError, match="No row has CODE = 99"):
         samplesar.regions.read_units(provinces, "CODE", [99])
+
+
+def test_units_a_bad_clip_is_reported_as_such(provinces):
+    with pytest.raises(ValueError, match="polygon"):
+        samplesar.regions.read_units(provinces, "NAME", clip=shapely.Point(0, 0))
+
+
+def test_units_from_a_float_column_are_named_as_whole_numbers(tmp_path):
+    frame = gpd.GeoDataFrame(
+        {"CODE": [66.0, 67.0]}, geometry=[box(0, 0, 1, 1), box(1, 0, 2, 1)], crs=4326
+    )
+    path = tmp_path / "codes.gpkg"
+    frame.to_file(path)
+    assert list(samplesar.regions.read_units(path, "CODE")) == ["66", "67"]

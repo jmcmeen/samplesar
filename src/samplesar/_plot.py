@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from matplotlib.animation import FuncAnimation
     from matplotlib.axes import Axes
 
+    from samplesar._islands import Islands
+
 
 def _lonlat(nest: Nest) -> np.ndarray:
     """The sample's points with longitudes unwrapped around its center, so a
@@ -180,13 +182,14 @@ def _draw(
     ax.set_title(_caption(nest, step, table))
 
 
-def curve(nest: Nest, ax: Axes | None = None, fit: bool = True) -> Axes:
+def curve(nest: Nest | Islands, ax: Axes | None = None, fit: bool = True) -> Axes:
     """Draw a nest's species-area curve on log axes.
 
     Parameters
     ----------
-    nest : Nest
-        The nest to draw.
+    nest : Nest or Islands
+        The nest to draw, or the regions of
+        [`designs.islands`][samplesar.designs.islands].
     ax : matplotlib.axes.Axes, optional
         Axes to draw on; by default a new figure.
     fit : bool

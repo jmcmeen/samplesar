@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import urllib.request
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -169,11 +170,15 @@ def admin_units(
     >>> counties = samplesar.regions.admin_units("USA", 2, inside=tennessee)  # doctest: +SKIP
     """
     _, features = _units(country, level, simplified, inside, cache_dir)
-    names = [str(f["properties"].get("shapeName", "")) for f in features]
+    names = [str(f["properties"].get("shapeName") or "") for f in features]
+    shared = {name for name, count in Counter(names).items() if count > 1 or not name}
     units: dict[str, Any] = {}
-    for f, name in zip(features, names, strict=True):
-        if names.count(name) > 1 or not name:
-            name = f"{name} ({f['properties'].get('shapeID')})".strip()
+    for position, (f, name) in enumerate(zip(features, names, strict=True)):
+        if name in shared:
+            tag = f["properties"].get("shapeID") or f"unit {position}"
+            name = f"{name} ({tag})".strip()
+        if name in units:  # the same ID twice: still keep both
+            name = f"{name} ({position})"
         units[name] = _polygons(f["_geometry"])
     return units
 
