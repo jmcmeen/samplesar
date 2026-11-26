@@ -60,6 +60,11 @@ All notable changes to this project are documented here. The format is based on
   grid cell, to even out sampling effort before nesting.
 - `strategies.concave_peel` takes `ratio=(start, end)`: the ratio changes
   as the sample shrinks, in proportion to the points removed.
+- `evaluate.ensemble(sample, strategy, n)`: many seeded nests of a random
+  strategy averaged into one curve, with the band a single nest falls in.
+- `evaluate.bootstrap(sample, strategy, model, n)`: fits to nests of
+  bootstrap resamples of the sample's points, for how much a deterministic
+  strategy's fit owes to which places were sampled.
 - `regions.admin_units(country, level)` and `regions.read_units(source,
   column)`: many named regions at once, each as its own polygon.
 

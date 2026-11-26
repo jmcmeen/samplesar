@@ -361,6 +361,33 @@ samplesar.evaluate.against_baseline(samplesar.strategies.hull_peel(sample), base
 Each parameter gets the nest's value, the baseline's mean, spread and 95%
 range, and a two-sided rank p-value.
 
+## One curve from many random nests
+
+A single random nest is one draw. `evaluate.ensemble` runs many and reads
+each one's species count at the same areas, giving the strategy's expected
+curve and the band a single nest falls in:
+
+```python
+band = samplesar.evaluate.ensemble(sample, "hull_random", n=99)
+ax.fill_between(band["area"], band["q025"], band["q975"], alpha=0.3)
+ax.plot(band["area"], band["mean"])
+```
+
+## How much a fit owes to the points sampled
+
+A deterministic strategy gives one nest per sample. `evaluate.bootstrap`
+draws the sample's points with replacement, nests each resample with the
+same strategy and fits it, so the spread of the fits shows how sensitive
+the result is to which places happened to be sampled:
+
+```python
+fits = samplesar.evaluate.bootstrap(sample, "hull_peel", n=99)
+fits["z"].quantile([0.025, 0.5, 0.975])
+```
+
+Steps within a nest aren't independent, so this spread describes
+sensitivity; it isn't a confidence interval of the usual kind.
+
 ## Adding a strategy
 
 A new sampling design is a function that takes a `Sample` and its options as

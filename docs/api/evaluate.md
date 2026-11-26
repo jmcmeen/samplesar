@@ -21,3 +21,11 @@
 ## evaluate.autocorrelation
 
 ::: samplesar.evaluate.autocorrelation
+
+## evaluate.ensemble
+
+::: samplesar.evaluate.ensemble
+
+## evaluate.bootstrap
+
+::: samplesar.evaluate.bootstrap
