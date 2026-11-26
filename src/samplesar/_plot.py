@@ -269,3 +269,83 @@ def animate(
 
     # The frames are the steps themselves, in the order they're shown.
     return FuncAnimation(fig, draw, frames=order, interval=interval, blit=False)
+
+
+def islands(
+    islands: Islands, ax: Axes | None = None, labels: bool = True, show_outside: bool = True
+) -> Axes:
+    """Draw every region of an island design: its outline, its points and its species count.
+
+    Parameters
+    ----------
+    islands : Islands
+        From [`designs.islands`][samplesar.designs.islands].
+    ax : matplotlib.axes.Axes, optional
+        Axes to draw on; by default a new figure.
+    labels : bool
+        Write each region's name and species count above it. Turn off
+        for many small regions (counties, say).
+    show_outside : bool
+        Also draw, faintly, the points that lie in no region.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Regions are colored in turn; a point in two overlapping regions
+        takes the color of the later one. Units given by hand have no
+        boundary and aren't drawn.
+
+    Raises
+    ------
+    ValueError
+        If the design has no regions, only units given by hand.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.patheffects import withStroke
+
+    sample = islands.sample
+    if sample is None or not islands.regions:
+        raise ValueError("This design has only units given by hand: there is nothing to map.")
+    own_axes = ax is None
+    if ax is None:
+        _, ax = plt.subplots()
+    points = sample.points
+    frame = islands.to_frame()
+    species = dict(zip(frame["region"], frame["species"].astype(int), strict=True))
+    inside = np.zeros(sample.n_points, dtype=bool)
+    for members in islands._members.values():
+        inside[members] = True
+    if show_outside and not inside.all():
+        ax.scatter(points[~inside, 0], points[~inside, 1], s=6, color="0.8", label="in no region")
+    corners = [points] if show_outside or not len(islands.regions) else []
+    for i, (name, region) in enumerate(islands.regions.items()):
+        color = f"C{i % 10}"
+        _fill(ax, region, color=color, alpha=0.12, linewidth=0, zorder=1)
+        for edge in _rings(region):
+            ax.plot(edge[:, 0], edge[:, 1], color=color, linewidth=1.4, zorder=2)
+            corners.append(edge)
+        members = islands._members[name]
+        ax.scatter(points[members, 0], points[members, 1], s=8, color=color, zorder=3)
+        if labels:
+            # Above the region, so a small one isn't hidden under its own name.
+            west, _, east, north = region.bounds
+            ax.annotate(
+                f"{name}: {species[name]} species",
+                ((west + east) / 2, north),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                color=color,
+                zorder=4,
+                path_effects=[withStroke(linewidth=2.5, foreground="white")],
+            )
+    _frame_axes(ax, np.vstack(corners), own_axes)
+    observed = sum(1 for name in islands.regions if species[name] > 0)
+    count = len(islands.regions)
+    title = f"{count} region{'s' if count != 1 else ''}, {observed} with observations"
+    if islands.units:
+        title += f" ({len(islands.units)} more given by hand, not on the map)"
+    ax.set_title(title)
+    return ax

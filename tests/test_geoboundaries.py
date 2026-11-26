@@ -179,3 +179,27 @@ def test_units_bad_arguments(fake):
         samplesar.regions.admin_units("XYZ", level=9)
     with pytest.raises(ValueError, match="inside"):
         samplesar.regions.admin_units("XYZ", 2, inside=box(50, 50, 51, 51))
+
+
+def test_units_picked_by_name_in_the_order_asked(fake):
+    picked = samplesar.regions.admin_units("XYZ", names=["south", "XY-N"])
+    assert list(picked) == ["South", "North"]
+    assert list(samplesar.regions.admin_units("XYZ", names="North")) == ["North"]
+    north = samplesar.regions.admin("XYZ", 1, "North")
+    assert list(samplesar.regions.admin_units("XYZ", 2, names=["Hill"], inside=north)) == ["Hill"]
+
+
+def test_units_picked_by_a_name_that_is_wrong_or_shared(fake):
+    with pytest.raises(ValueError, match="No ADM1 unit of XYZ is named 'Nort'. Close: North"):
+        samplesar.regions.admin_units("XYZ", names=["Nort"])
+    with pytest.raises(ValueError, match=r"2 ADM2 units of XYZ are named 'Hill': Hill \(d1\)"):
+        samplesar.regions.admin_units("XYZ", 2, names=["Hill"])
+    # A shared name is picked as it is listed, or by its ID.
+    assert list(samplesar.regions.admin_units("XYZ", 2, names=["Hill (d2)", "d1"])) == [
+        "Hill (d2)",
+        "Hill (d1)",
+    ]
+    with pytest.raises(ValueError, match="can't be empty"):
+        samplesar.regions.admin_units("XYZ", 2, names=[""])
+    with pytest.raises(ValueError, match="No names given"):
+        samplesar.regions.admin_units("XYZ", names=[])

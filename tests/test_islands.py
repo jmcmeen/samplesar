@@ -117,7 +117,7 @@ def test_several_observations_at_a_point():
     )
     made = samplesar.designs.islands(samplesar.sources.dataframe(frame), [box(0, 0, 1, 1)])
     table = made.to_frame()
-    assert table.loc[0].tolist()[2:] == [3, 2, 4]
+    assert table.loc[0, ["species", "n_points", "n_observations"]].tolist() == [3, 2, 4]
     assert table["region"][0] == "region 0"
 
 
@@ -260,3 +260,211 @@ def test_many_regions_and_points_are_searched_together():
     assert len(table) == 900 and table["n_observations"].sum() == n
     inside = frame[(frame["lon"] < 1) & (frame["lat"] < 1)]
     assert table["species"][0] == inside["species"].nunique()
+
+
+def test_a_map_draws_every_region():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    regions = {**REGIONS, "empty": box(30, 0, 31, 1)}
+    made = samplesar.designs.islands(observations(), regions)
+    ax = samplesar.plot.islands(made)
+    # One outline per region, and its name with its species count.
+    assert len(ax.lines) == 4
+    written = sorted(t.get_text() for t in ax.texts)
+    assert written == [
+        "big: 8 species",
+        "empty: 0 species",
+        "mid: 4 species",
+        "small: 2 species",
+    ]
+    assert ax.get_title() == "4 regions, 3 with observations"
+    # The stray observation, in no region, is drawn apart from the regions' points.
+    drawn = [len(c.get_offsets()) for c in ax.collections]
+    assert drawn == [1, 40, 40, 40, 0]
+    west, east = ax.get_xlim()
+    assert west < 0 and east > 50  # framed around regions and points alike
+
+
+def test_a_map_without_labels_or_stray_points():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    made = samplesar.designs.islands(observations(), REGIONS)
+    _, ax = plt.subplots()
+    out = samplesar.plot.islands(made, ax=ax, labels=False, show_outside=False)
+    assert out is ax and not ax.texts
+    assert [len(c.get_offsets()) for c in ax.collections] == [40, 40, 40]
+    assert ax.get_xlim()[1] < 30  # framed around the regions only
+
+
+def test_a_region_with_a_hole_and_several_parts_is_outlined_whole():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    hole = box(0.4, 0.4, 0.6, 0.6).exterior.coords
+    ring = shapely.Polygon(box(0, 0, 1, 1).exterior.coords, [hole])
+    both = shapely.MultiPolygon([ring, box(10, 0, 12, 2)])
+    ax = samplesar.plot.islands(samplesar.designs.islands(observations(), {"both": both}))
+    assert len(ax.lines) == 3  # two shells and a hole
+
+
+def test_a_design_put_together_by_hand():
+    # Two regions from one source, one from another, a known area and a typed-in unit.
+    states = {"small": REGIONS["small"], "mid": REGIONS["mid"]}
+    parks = {"big": REGIONS["big"]}
+    made = samplesar.designs.islands(
+        observations(),
+        {**states, **parks},
+        known_areas={"big": 150_000},
+        units={"typed": (500_000, 12)},
+    )
+    table = made.to_frame()
+    assert table["region"].tolist() == ["small", "mid", "big", "typed"]
+    assert table["source"].tolist() == ["measured", "measured", "area given", "given"]
+    assert table["area"].tolist()[2:] == [150_000.0, 500_000.0]
+    assert table["species"].tolist() == [2, 4, 8, 12]
+    # The measured area is still there to compare with the one given.
+    assert table["region_area"][2] == pytest.approx(196_648, rel=2e-3)
+    assert pd.isna(table["n_observations"][3]) and table["n_observations"][0] == 40
+    assert len(made.sar_data()) == 4  # a unit given by hand is always kept
+    assert len(made.sar_data(min_observations=41)) == 1
+    assert np.isfinite(made.fit("power").params["z"])
+    assert made.names == ["small", "mid", "big", "typed"]
+    assert made.label == "islands (3 regions, 1 given by hand)"
+    assert list(table.columns)[-2:] == ["region_area", "source"]  # source comes last
+
+
+def test_units_alone_need_no_sample_or_boundaries():
+    made = samplesar.designs.islands(
+        units={"Smokies": (2114, 31), "Shenandoah": (806, 14), "Mammoth Cave": (214, 12)}
+    )
+    table = made.to_frame()
+    assert table[["area", "species"]].values.tolist() == [[2114, 31], [806, 14], [214, 12]]
+    assert table["source"].eq("given").all() and made.sample is None
+    assert made.label == "islands (3 given by hand)"
+    fit = made.fit("power")
+    import sars
+
+    same = sars.sar_power(table[["area", "species"]])
+    assert fit.params["z"] == pytest.approx(same.params["z"])
+    with pytest.raises(KeyError, match="given by hand"):
+        made.sample_of("Smokies")
+
+
+@pytest.mark.parametrize(
+    "units",
+    [
+        {"a": {"area": 10, "species": 3}},
+        pd.DataFrame({"region": ["a"], "area": [10.0], "species": [3]}),
+        pd.DataFrame({"area": [10.0], "species": [3]}, index=["a"]),
+        {"a": (10, ["x", "y", "z", "x"])},  # species listed by name
+        {"a": (np.float64(10), np.array(["x", "y", "z"]))},
+        {"a": {"area": 10, "species": pd.Series(["x", "y", "z", "z"])}},
+    ],
+)
+def test_units_in_any_of_their_forms(units):
+    table = samplesar.designs.islands(units=units).to_frame()
+    assert table.loc[0, ["region", "area", "species"]].tolist() == ["a", 10.0, 3]
+
+
+def test_adding_selecting_and_dropping():
+    base = samplesar.designs.islands(observations(), {"small": REGIONS["small"]})
+    more = base.add({"mid": REGIONS["mid"]}).add([REGIONS["big"]], names=["big"])
+    more = more.add(units={"typed": (9, 1)}, known_areas={"mid": 50_000})
+    assert more.names == ["small", "mid", "big", "typed"]
+    assert more.to_frame()["source"].tolist() == ["measured", "area given", "measured", "given"]
+    assert base.names == ["small"]  # adding returns a new design
+    picked = more.select(["typed", "big"])
+    assert picked.to_frame()["region"].tolist() == ["big", "typed"]
+    assert more.drop("mid").names == ["small", "big", "typed"]
+    # The sample stays with the design, so regions can be added back to units alone.
+    only_units = more.drop(["small", "mid", "big"])
+    assert only_units.names == ["typed"] and only_units.sample is not None
+    assert only_units.add({"small": REGIONS["small"]}).to_frame()["species"].tolist() == [2, 1]
+    started_from_a_table = samplesar.designs.islands(observations(), units={"typed": (9, 1)})
+    assert started_from_a_table.add(REGIONS).names == ["small", "mid", "big", "typed"]
+    assert more.select(["typed", "big", "small"]).names == ["big", "small", "typed"]
+    with pytest.raises(ValueError, match="Already in the design: mid"):
+        more.add({"mid": REGIONS["mid"]})
+    with pytest.raises(ValueError, match="Already in the design: typed"):
+        more.add(units={"typed": (1, 1)})
+    with pytest.raises(KeyError, match="nowhere"):
+        more.select(["nowhere"])
+    with pytest.raises(KeyError, match="nowhere"):
+        more.drop(["nowhere"])
+    with pytest.raises(ValueError, match="No regions or units"):
+        more.drop(more.names)
+
+
+@pytest.mark.parametrize(
+    ("options", "match"),
+    [
+        ({}, "No regions or units"),
+        ({"regions": REGIONS}, "need a sample"),
+        ({"units": {"a": (0, 3)}}, "area of unit 'a' must be positive"),
+        ({"units": {"a": (10, 2.5)}}, "whole number"),
+        ({"units": {"a": (10, -1)}}, "whole number"),
+        ({"units": {"a": 10}}, r"must be \(area"),
+        ({"units": {"a": {"area": 10}}}, "needs an area and a species count"),
+        ({"units": [("a", 10, 3)]}, "units must map"),
+        ({"units": pd.DataFrame({"area": [1.0]})}, "columns area and species"),
+        ({"units": {"a": ("ten", 3)}}, "must be a number"),
+        ({"units": {"a": (10, None)}}, "species count of unit 'a' is missing"),
+        ({"units": {1: (10, 3), "1": (20, 4)}}, "'1' is given twice"),
+    ],
+)
+def test_bad_hand_built_designs(options, match):
+    with pytest.raises(ValueError, match=match):
+        samplesar.designs.islands(**options)
+
+
+@pytest.mark.parametrize(
+    ("options", "match"),
+    [
+        ({"known_areas": {"nowhere": 5}}, "known_areas names no region: nowhere"),
+        ({"known_areas": {"small": -5}}, "must be positive"),
+        ({"known_areas": {"small": "big"}}, "must be a number"),
+        ({"known_areas": [5]}, "known_areas must map"),
+        ({"units": {"small": (5, 1)}}, "both a region and a unit: small"),
+    ],
+)
+def test_bad_areas_and_name_clashes(options, match):
+    with pytest.raises(ValueError, match=match):
+        samplesar.designs.islands(observations(), REGIONS, **options)
+
+
+def test_a_map_says_which_units_it_cannot_draw():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    made = samplesar.designs.islands(observations(), REGIONS, units={"typed": (9, 1)})
+    ax = samplesar.plot.islands(made)
+    assert ax.get_title() == "3 regions, 3 with observations (1 more given by hand, not on the map)"
+    assert len(ax.lines) == 3
+    curve = samplesar.plot.curve(made)
+    assert len(curve.collections[0].get_offsets()) == 4  # the curve has all four
+    with pytest.raises(ValueError, match="nothing to map"):
+        samplesar.plot.islands(samplesar.designs.islands(units={"a": (1, 1), "b": (2, 2)}))
+
+
+@pytest.mark.parametrize("options", [{"area": "hull"}, {"mask": box(-1, -1, 30, 1)}])
+def test_a_known_area_beside_hulls_or_a_mask(options):
+    made = samplesar.designs.islands(
+        observations(), REGIONS, known_areas={"big": 1234.0}, **options
+    )
+    table = made.to_frame().set_index("region")
+    assert table.loc["big", "area"] == 1234.0 and table.loc["big", "source"] == "area given"
+    assert table.loc["mid", "source"] == "measured"
+    assert table.loc["mid", "area"] < table.loc["mid", "region_area"]
+
+
+def test_a_design_of_units_alone_is_not_a_map():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    before = len(plt.get_fignums())
+    with pytest.raises(ValueError, match="nothing to map"):
+        samplesar.plot.islands(samplesar.designs.islands(observations(), units={"a": (1, 1)}))
+    assert len(plt.get_fignums()) == before  # no empty figure left behind
+    one = samplesar.plot.islands(samplesar.designs.islands(observations(), {"big": REGIONS["big"]}))
+    assert one.get_title() == "1 region, 1 with observations"

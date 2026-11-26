@@ -10,4 +10,11 @@ by name, for [`designs.islands`][samplesar.designs.islands].
 from samplesar._geoboundaries import admin, admin_units
 from samplesar._regions import ECOREGIONS, ecoregion, read, read_units
 
-__all__ = ["ECOREGIONS", "admin", "admin_units", "ecoregion", "read", "read_units"]
+__all__ = [
+    "ECOREGIONS",
+    "admin",
+    "admin_units",
+    "ecoregion",
+    "read",
+    "read_units",
+]

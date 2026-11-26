@@ -13,3 +13,7 @@
 ## plot.animate
 
 ::: samplesar.plot.animate
+
+## plot.islands
+
+::: samplesar.plot.islands
