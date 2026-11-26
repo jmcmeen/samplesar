@@ -66,6 +66,14 @@ All notable changes to this project are documented here. The format is based on
   resamples of the sample's points (drawn with replacement; each holds
   about 63% of them), for how much a deterministic strategy's fit owes to
   which places were sampled.
+- `sources.simulated(n_points, n_species, seed)`: a made-up landscape of
+  observations with elevations and dates (a ridge, species with home ranges
+  and preferred heights, effort piled around a few places), for examples,
+  teaching and trying strategies without data.
+- Example scripts in `examples/`: a first nest, comparing strategies
+  against a baseline, regions as islands, elevation and time, patches and
+  effort, and real observations from GBIF with a land mask. All but the
+  last run offline in seconds.
 - `regions.admin_units(country, level)` and `regions.read_units(source,
   column)`: many named regions at once, each as its own polygon.
 

@@ -5,7 +5,7 @@
 
 UV ?= uv
 SRC := src
-TESTS := tests
+TESTS := tests examples
 
 .PHONY: help install dev sync lock upgrade shell \
         test test-fast cov \

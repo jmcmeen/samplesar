@@ -1,5 +1,10 @@
 # Getting started
 
+To try things without data, `samplesar.sources.simulated(seed=1)` makes up a
+landscape of observations (with elevations and dates) that every strategy
+runs on; the [example scripts](https://github.com/jmcmeen/samplesar/tree/main/examples)
+start from it.
+
 ## A sample
 
 A `Sample` is a set of species observations, each at a longitude and latitude

@@ -1,0 +1,27 @@
+# Examples
+
+Short scripts, each doing one job from observations to a table and a
+figure. Run any of them from the repository's root:
+
+```sh
+pip install samplesar matplotlib
+python examples/01_first_nest.py
+```
+
+Each prints its table and saves its figure under `examples/output/` (or
+the folder given with `--out`). They run offline on
+`samplesar.sources.simulated()`, a made-up landscape of observations with
+elevations and dates, so they finish in seconds; each one says where to
+put your own data instead.
+
+| Script | What it shows |
+| --- | --- |
+| `01_first_nest.py` | Observations to a nest, its species-area table, a fitted curve and a map |
+| `02_compare_strategies.py` | Several strategies on one sample, and where each falls against a random baseline |
+| `03_regions_as_islands.py` | Regions (states, parks) as sampling units: one row per region, fitted as islands |
+| `04_elevation_and_time.py` | Nests by elevation and by date of first visit |
+| `05_patches_and_effort.py` | Clustered samples: split into patches, thin the piles, and a band from many random nests |
+| `06_real_observations.py` | iNaturalist or GBIF records for a country or state, with a land mask (needs the network) |
+
+The same journeys, with their figures, are notebooks in
+[the documentation](https://jmcmeen.github.io/samplesar/).
