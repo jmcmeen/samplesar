@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -2728,7 +2728,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pytest-xdist", extras = ["psutil"], marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17,<0.18" },
-    { name = "sars", specifier = ">=0.11.5" },
+    { name = "sars", specifier = ">=0.11.11" },
     { name = "scipy", specifier = ">=1.9.2" },
     { name = "shapely", specifier = ">=2.0" },
 ]
@@ -2736,7 +2736,7 @@ provides-extras = ["dev", "docs", "gbif", "geo", "inat", "opendata"]
 
 [[package]]
 name = "sars"
-version = "0.11.6"
+version = "0.11.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
@@ -2746,9 +2746,9 @@ dependencies = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b1/ae/ae639ef33802e146d2d21c5af1fe7e2e1db451bc8ea6005bbe75e7247bae/sars-0.11.6.tar.gz", hash = "sha256:ae937638408b55bba3c55ad00885c34820e8a3bc9308b0c23b794049c67e65fe", size = 1385548, upload-time = "2026-11-22T19:51:20.351Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/36/ce/4198e20e8362ba3af51267b687098205ffb1a10368ca2695f93df1e5a11d/sars-0.11.11.tar.gz", hash = "sha256:d580ce81e9ced09c7793061b6741208c16c7f313fbe7e912e48f2945366cc5ba", size = 1430370, upload-time = "2026-11-23T19:06:06.879Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/41/0e29f92777c43a9deeaf0f296dc67ea8686ca7448dfc2dd3750e246d21c7/sars-0.11.6-py3-none-any.whl", hash = "sha256:1b9342106ef3aefae3d2ce35494ee0d974f11db6302dc40b376d4479763a602a", size = 161898, upload-time = "2026-11-22T19:51:19.199Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/54/33830526c993263b4a8064e43ad5b2575354f9cafa3bf021e002a60cd16c/sars-0.11.11-py3-none-any.whl", hash = "sha256:09c5b4c78110bd311a2282eb4b8535afb2673529df5b23a99bf55cb00942923a", size = 168820, upload-time = "2026-11-23T19:06:05.177Z" },
 ]
 
 [[package]]

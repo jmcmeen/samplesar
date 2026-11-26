@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+
+- sars 0.11.11 or newer is required (was 0.11.5).
+
 ## [0.2.1] - 2026-11-23
 
 ### Added
