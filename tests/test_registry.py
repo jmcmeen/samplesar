@@ -50,6 +50,7 @@ def test_built_in_strategies_are_listed():
         "sweep",
         "density_peel",
         "grow",
+        "hull_rarity",
     ]
     assert listed["hull_peel"] == "Nest a sample by peeling off its whole convex hull at each step."
 

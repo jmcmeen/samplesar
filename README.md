@@ -83,7 +83,8 @@ name through `strategies.run(sample, "hull_peel")`:
   `grid_peel` and `concave_peel` remove whole layers.
 - **Greedy hull choices:** `hull_area`, `hull_species` and `hull_distance`
   remove the hull vertex that changes the area or species count least or
-  most, or lies farthest from or nearest to the center.
+  most, or lies farthest from or nearest to the center; `hull_rarity`
+  removes the one whose species are the most common, or the rarest.
 - **Fixed rankings**, fast on large samples: `radial` (shrinking discs),
   `sweep` (a line moving across), `density_peel` (sparsest first) and
   `grow` (growing out from a seed point, in reverse).

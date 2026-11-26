@@ -118,6 +118,31 @@ remaining points costs nothing, so species richness falls as late as
 possible. `keep="fewest"` removes first the vertices holding species found
 nowhere else, so richness falls as fast as possible.
 
+### By rarity
+
+`strategies.hull_rarity(sample, remove="common", measure="occupancy", score="sum")`
+removes the vertex whose species are the most common in the sample, so the
+rare species stay to the end and richness falls slowly. `remove="rare"`
+removes the vertex with the rarest species first, which shows how fast a
+shrinking region loses its distinctive species.
+
+A species' rarity is one over how common it is, by `measure`: the number of
+points it occurs at (`"occupancy"`), its observations (`"abundance"`) or the
+area of the convex hull of its own points (`"range"`). A vertex's score
+combines the rarities of the species observed at it: `"sum"` (with
+occupancy, this is rarity-weighted richness, which also favors rich
+vertices), `"mean"` or `"max"`. Commonness is measured once on the whole
+sample, or with `update=True` among the points remaining at each step.
+
+`hull_species` differs: it asks only whether a vertex holds a species found
+at no other remaining point, so it can't tell a widespread species from a
+scarce one until the scarce one is down to its last point.
+
+With `power`, the vertex is drawn at random with probability proportional to
+its score raised to that power (or the inverse, for `remove="common"`), as
+`hull_weighted` does with isolation: `power=0` is `hull_random`, and `seed`
+makes it reproducible.
+
 ### By distance from the center
 
 `strategies.hull_distance(sample, remove="farthest", min_points=3)` removes the

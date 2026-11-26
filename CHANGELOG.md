@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `strategies.hull_rarity(sample, remove="common")`: removes the hull vertex
+  whose species are the most common in the sample (or, with
+  `remove="rare"`, the rarest), by occupancy, abundance or range size, with
+  the vertex's species combined by sum (rarity-weighted richness), mean or
+  maximum. `update=True` measures commonness among the remaining points, and
+  `power` draws the vertex at random, weighted by its score.
+
 ### Changed
 
 - sars 0.11.12 or newer is required (was 0.11.5).

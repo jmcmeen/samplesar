@@ -38,6 +38,10 @@
 
 ::: samplesar.strategies.hull_species
 
+## strategies.hull_rarity
+
+::: samplesar.strategies.hull_rarity
+
 ## strategies.hull_distance
 
 ::: samplesar.strategies.hull_distance
