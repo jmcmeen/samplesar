@@ -13,7 +13,8 @@ All notable changes to this project are documented here. The format is based on
   `remove="rare"`, the rarest), by occupancy, abundance or range size, with
   the vertex's species combined by sum (rarity-weighted richness), mean or
   maximum. `update=True` measures commonness among the remaining points, and
-  `power` draws the vertex at random, weighted by its score.
+  `power` draws the vertex at random, favoring high scores for
+  `remove="rare"` and low ones for `remove="common"`.
 
 ### Changed
 
