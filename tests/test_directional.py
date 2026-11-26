@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 import samplesar
+from samplesar._ranked import _to_xy
 
 UTM_17N = "EPSG:32617"
 ORIGIN = np.array([500_000.0, 4_000_000.0])
@@ -149,12 +150,12 @@ def compass():
 
 def test_quadrants_go_clockwise_from_the_north_east_farthest_first():
     nest = samplesar.strategies.sector(compass(), min_points=1)
-    # NE holds bearings 22.5 and 67.5: outer ring (0, 1), then inner (8, 9);
-    # the center point belongs to the first sector and goes last in it.
-    assert removed(nest)[:5] == [0, 1, 8, 9, 16]
-    assert removed(nest)[5:9] == [2, 3, 10, 11]  # SE
-    assert removed(nest)[9:13] == [4, 5, 12, 13]  # SW
-    assert removed(nest)[13:] == [6, 7, 14]  # NW, down to one point
+    # NE holds bearings 22.5 and 67.5: outer ring (0, 1), then inner (8, 9).
+    assert removed(nest)[:4] == [0, 1, 8, 9]
+    assert removed(nest)[4:8] == [2, 3, 10, 11]  # SE
+    assert removed(nest)[8:12] == [4, 5, 12, 13]  # SW
+    assert removed(nest)[12:] == [6, 7, 14, 15]  # NW
+    assert list(nest.steps[-1]) == [16]  # the center belongs to the last sector
 
 
 def test_sectors_counterclockwise_from_a_start():
@@ -162,8 +163,8 @@ def test_sectors_counterclockwise_from_a_start():
         compass(), start=180.0, sectors=8, clockwise=False, min_points=1
     )
     # Counterclockwise from south: bearing 157.5 first, then 112.5, ...
-    assert removed(nest)[:3] == [3, 11, 16]
-    assert removed(nest)[3:7] == [2, 10, 1, 9]
+    assert removed(nest)[:6] == [3, 11, 2, 10, 1, 9]
+    assert removed(nest)[-2:] == [4, 12] and list(nest.steps[-1]) == [16]
 
 
 def test_a_point_on_a_sector_line_is_in_the_later_sector():
@@ -175,6 +176,55 @@ def test_a_point_on_a_sector_line_is_in_the_later_sector():
     # Due north (bearing 0) opens the first quadrant, due east (90) the
     # second, due south the third and due west the fourth.
     assert [*removed(nest), int(nest.steps[-1][0])] == [0, 4, 6, 1, 2, 5, 7, 3]
+
+
+@pytest.mark.parametrize(
+    ("sectors", "start", "clockwise"),
+    [
+        (4, 0.0, True),
+        (7, 0.0, True),
+        (7, 30.0, False),
+        (13, 200.0, True),
+        (np.int64(3), -45.0, False),
+    ],
+)
+def test_sector_order_by_brute_force(sample, sectors, start, clockwise):
+    center = (float(sample.points[:, 0].mean()), float(sample.points[:, 1].mean()))
+    nest = samplesar.strategies.sector(
+        sample, start=start, sectors=sectors, clockwise=clockwise, center=center, min_points=1
+    )
+    off = sample.xy - _to_xy(sample, *center)
+    bearing = np.degrees(np.arctan2(off[:, 0], off[:, 1]))
+    turned = np.mod(bearing - start if clockwise else start - bearing, 360.0)
+    which = (turned // (360.0 / int(sectors))).astype(int)
+    distance = np.hypot(off[:, 0], off[:, 1])
+    order = [*removed(nest), int(nest.steps[-1][0])]
+    assert order == sorted(range(sample.n_points), key=lambda i: (which[i], -distance[i], i))
+    assert isinstance(nest.options["sectors"], int | np.integer)
+
+
+@pytest.mark.parametrize("sectors", [7, 11, 13, 14])
+def test_a_point_on_any_sector_line_opens_that_sector(sectors):
+    # One point on each line between sectors, all at 1 km, and the center.
+    lines = np.radians(np.arange(sectors) * 360.0 / sectors)
+    sample = km_sample(np.vstack([np.column_stack([np.sin(lines), np.cos(lines)]), [[0, 0]]]))
+    origin = samplesar.sources.dataframe(
+        pd.DataFrame({"species": ["a"], "lon": [ORIGIN[0]], "lat": [ORIGIN[1]]}), crs=UTM_17N
+    ).points[0]
+    nest = samplesar.strategies.sector(
+        sample, sectors=sectors, center=(origin[0], origin[1]), min_points=1
+    )
+    assert removed(nest) == list(range(sectors))
+    back = samplesar.strategies.sector(
+        sample, sectors=sectors, clockwise=False, center=(origin[0], origin[1]), min_points=1
+    )
+    assert removed(back) == [0, *range(sectors - 1, 0, -1)]
+
+
+def test_points_all_at_the_center():
+    sample = km_sample([(0, 0), (0, 0.0)] + [(1e-12, 0)], species=["a", "b", "c"])
+    nest = samplesar.strategies.sector(sample, min_points=1)
+    assert nest.n_steps == sample.n_points
 
 
 def test_one_sector_is_radial(sample):
@@ -211,6 +261,12 @@ def test_losing_one_side_first_changes_the_curve():
         (samplesar.strategies.radial, {"stretch": 0.0}),
         (samplesar.strategies.radial, {"stretch": float("inf")}),
         (samplesar.strategies.radial, {"bearing": float("nan")}),
+        (samplesar.strategies.radial, {"bearing": "90"}),
+        (samplesar.strategies.radial, {"stretch": True}),
+        (samplesar.strategies.band, {"bearing": None}),
+        (samplesar.strategies.sweep, {"bearing": "east"}),
+        (samplesar.strategies.sector, {"start": "north"}),
+        (samplesar.strategies.sector, {"clockwise": "false"}),
     ],
 )
 def test_bad_options(sample, strategy, options):

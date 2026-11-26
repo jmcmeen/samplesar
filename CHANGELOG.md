@@ -22,7 +22,7 @@ All notable changes to this project are documented here. The format is based on
   sector after another, to test whether a curve depends on which side of a
   region is lost first.
 - `strategies.radial` takes `stretch` and `bearing`: the discs become
-  ellipses, so the sample shrinks faster in one direction than the other.
+  ellipses, so what remains is longer in one direction than the other.
 
 ### Changed
 

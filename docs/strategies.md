@@ -167,10 +167,9 @@ point-data analogue of nested circular plots around a focal site. `center` is
 a (longitude, latitude), by default the mean of the projected points.
 
 With `stretch` the discs become ellipses, `stretch` times longer along
-`bearing` (degrees clockwise from grid north) than across it, so the sample
-is pulled in faster in one direction than the other:
-`radial(sample, stretch=2, bearing=0)` shrinks twice as fast east-west as
-north-south.
+`bearing` (degrees clockwise from grid north) than across it:
+`radial(sample, stretch=2, bearing=0)` keeps, at each step, an ellipse twice
+as long north-south as east-west.
 
 ### Band
 
@@ -184,7 +183,7 @@ along it, to the end.
 
 ### Sector
 
-`strategies.sector(sample, start=0, sectors=4, clockwise=True, center=None)`
+`strategies.sector(sample, start=0, sectors=4, clockwise=True, center=None, min_points=3)`
 removes one compass sector after another, each from its far end inwards.
 With the defaults the north-east quadrant goes first, then the south-east,
 south-west and north-west. Running it from several `start` bearings tests
