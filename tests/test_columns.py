@@ -107,7 +107,10 @@ def test_dates_too_far_from_the_present_count_as_missing():
     assert np.isnat(made.dates).tolist() == [True, False, False, True]
     assert made.dates[2] == np.datetime64("2021-01-02T02:00:00")
     assert made.dates.dtype == "datetime64[ns]"
-    # Coarser datetimes, as a database returns them.
+    # Coarser datetimes, as a database returns them (pandas 1 holds nanoseconds only,
+    # so it can't be handed such a column in the first place).
+    if int(pd.__version__.split(".")[0]) < 2:
+        return
     coarse = frame(n=3)
     coarse["seen"] = np.array(["1200-01-01", "2020-05-05", "2020-05-06"], dtype="datetime64[s]")
     made = samplesar.sources.dataframe(coarse, crs=UTM_17N, date_col="seen")
