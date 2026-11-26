@@ -178,8 +178,9 @@ a line from both sides: each step removes the point farthest from the line
 through `center`, measured along `bearing`. The default keeps a belt of
 latitude that narrows from the north and the south, as a study of a
 latitudinal gradient might. `bearing=90` narrows from the east and the west
-instead, so the sample keeps its whole north-south span, and any gradient
-along it, to the end.
+instead, so what remains is a north-south strip: it keeps the sample's
+north-south span, and any gradient along it, as far as the points near the
+line reach.
 
 ### Sector
 

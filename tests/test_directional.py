@@ -260,6 +260,7 @@ def test_losing_one_side_first_changes_the_curve():
         (samplesar.strategies.sector, {"sectors": True}),
         (samplesar.strategies.radial, {"stretch": 0.0}),
         (samplesar.strategies.radial, {"stretch": float("inf")}),
+        (samplesar.strategies.radial, {"stretch": 1e-320}),
         (samplesar.strategies.radial, {"bearing": float("nan")}),
         (samplesar.strategies.radial, {"bearing": "90"}),
         (samplesar.strategies.radial, {"stretch": True}),

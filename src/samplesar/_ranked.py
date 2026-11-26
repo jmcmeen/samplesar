@@ -127,7 +127,14 @@ def radial(
     if _finite("stretch", stretch) <= 0:
         raise ValueError(f"stretch must be a positive number, got {stretch!r}.")
     along, across = _along_across(sample, bearing, _center_xy(sample, center))
-    return _by_rank(sample, -np.hypot(along / stretch, across), min_points)
+    with np.errstate(over="ignore"):
+        distance = np.hypot(along / stretch, across)
+    if not np.isfinite(distance).all():
+        raise ValueError(
+            f"stretch={stretch!r} is too small to rank these points; for a band use "
+            "strategies.band."
+        )
+    return _by_rank(sample, -distance, min_points)
 
 
 @register("band")
@@ -141,11 +148,11 @@ def band(
 
     At each step the point farthest from a line through ``center``, measured
     along ``bearing``, is removed, so each step keeps a band around the
-    line, as long across the bearing as the points in it reach. With the default
-    bearing of 0 the band is a belt of latitude closing in from the north
-    and the south; with 90 it closes in from the east and the west, keeping
-    the sample's north-south span, and whatever gradient runs along it, to
-    the end. It is the limit of [`radial`][samplesar.strategies.radial] on
+    line, as long across the bearing as the points in it reach. With the
+    default bearing of 0 the band is a belt of latitude closing in from the
+    north and the south; with 90 it closes in from the east and the west,
+    leaving a north-south strip that keeps whatever gradient runs along it.
+    It is the limit of [`radial`][samplesar.strategies.radial] on
     the same bearing as its ``stretch`` goes to 0.
 
     Parameters

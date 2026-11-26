@@ -17,7 +17,7 @@ All notable changes to this project are documented here. The format is based on
   `remove="rare"` and low ones for `remove="common"`.
 - `strategies.band(sample, bearing=0)`: closes in on a line from both
   sides, so each step keeps a band: a belt of latitude by default, or with
-  `bearing=90` a strip that keeps the sample's whole north-south span.
+  `bearing=90` a north-south strip, so a gradient along it survives.
 - `strategies.sector(sample, start=0, sectors=4)`: removes one compass
   sector after another, to test whether a curve depends on which side of a
   region is lost first.
