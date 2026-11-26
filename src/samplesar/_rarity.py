@@ -40,9 +40,7 @@ class _Commonness:
             # of ``self.species``.
             data = sample.data
             codes, _ = pd.factorize(data["species"])
-            keys = pd.MultiIndex.from_frame(data[["lon", "lat"]])
-            points = pd.MultiIndex.from_arrays([sample.points[:, 0], sample.points[:, 1]])
-            rows = np.asarray(points.get_indexer(keys))
+            rows = sample._point_of_row
             place = [{int(s): i for i, s in enumerate(found)} for found in self.species]
             self.observations = [np.zeros(len(found)) for found in self.species]
             pairs, counts = np.unique(np.column_stack([rows, codes]), axis=0, return_counts=True)

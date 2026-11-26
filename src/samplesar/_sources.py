@@ -19,13 +19,15 @@ def dataframe(
     lon_col: str = "lon",
     lat_col: str = "lat",
     crs: Any = None,
+    elevation_col: str | None = None,
+    date_col: str | None = None,
 ) -> Sample:
     """Build a sample from a DataFrame.
 
     Parameters
     ----------
     df : pd.DataFrame
-        One row per observation. Other columns are dropped.
+        One row per observation. Columns not named here are dropped.
     species_col : str
         The column holding the species name.
     lon_col : str
@@ -41,6 +43,15 @@ def dataframe(
         are converted to WGS84. Coordinates in a projected system are
         converted to WGS84 for ``data``, and areas and distances are
         measured in that system, so a grid laid out in it stays straight.
+    elevation_col : str, optional
+        A column holding each observation's elevation in meters above sea
+        level, kept for [`strategies.elevation`][samplesar.strategies.elevation].
+        Rows may be missing it.
+    date_col : str, optional
+        A column holding when each observation was made (dates, times or
+        text pandas can parse), kept for
+        [`strategies.temporal`][samplesar.strategies.temporal]. Times with a
+        zone are converted to UTC. Rows may be missing it.
 
     Returns
     -------
@@ -52,10 +63,20 @@ def dataframe(
         If a column is missing.
     ValueError
         If there are no rows, a species is missing, a coordinate is
-        missing, not numeric or out of range, or ``crs`` isn't a
-        coordinate reference system.
+        missing, not numeric or out of range, an elevation isn't a finite
+        number, a date can't be read, or ``crs`` isn't a coordinate
+        reference system.
     """
-    renamed = df.rename(columns={species_col: "species", lon_col: "lon", lat_col: "lat"})
+    names = {species_col: "species", lon_col: "lon", lat_col: "lat"}
+    for column, name in ((elevation_col, "elevation"), (date_col, "date")):
+        if column is None:
+            df = df.drop(columns=name, errors="ignore")  # not asked for: dropped like the rest
+        elif column not in df.columns:
+            raise KeyError(f"Missing column {column!r}.")
+        else:
+            names[column] = name
+    stale = [c for c in names.values() if c in df.columns and c not in names]
+    renamed = df.drop(columns=stale).rename(columns=names)
     parsed = _parse_crs(crs)
     projected = parsed if parsed is not None and parsed.is_projected else None
     return Sample(_validate(renamed, parsed), crs=projected)
@@ -113,7 +134,8 @@ def csv(path: str | Path, **kwargs: str) -> Sample:
     path : str or Path
         The CSV file, one row per observation.
     **kwargs : str
-        ``species_col``, ``lon_col`` and ``lat_col``, as in
+        ``species_col``, ``lon_col``, ``lat_col``, ``elevation_col`` and
+        ``date_col``, as in
         [`sources.dataframe`][samplesar.sources.dataframe]. Nothing else is passed to
         the CSV reader.
 
@@ -128,7 +150,7 @@ def csv(path: str | Path, **kwargs: str) -> Sample:
     ValueError
         As in [`sources.dataframe`][samplesar.sources.dataframe].
     TypeError
-        If a keyword other than the three column names is given.
+        If a keyword other than the column names is given.
     """
     return dataframe(pd.read_csv(path), **kwargs)
 
@@ -196,7 +218,7 @@ def inaturalist(
         raise ValueError(
             "No usable iNaturalist observations (see the filters on ranks and obscured)."
         )
-    return dataframe(frame)
+    return dataframe(frame, date_col="date")
 
 
 def open_data(
@@ -285,7 +307,7 @@ def open_data(
         frame = frame[inside(region, frame["lon"], frame["lat"])].reset_index(drop=True)
     if frame.empty:
         raise ValueError("No observations in the open data match these filters.")
-    return dataframe(frame)
+    return dataframe(frame, date_col="date")
 
 
 def gbif(
@@ -369,4 +391,4 @@ def gbif(
         raise ValueError(
             "No usable GBIF records (see the filters on ranks, uncertainty and boundary)."
         )
-    return dataframe(frame)
+    return dataframe(frame, elevation_col="elevation", date_col="date")

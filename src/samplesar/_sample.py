@@ -17,6 +17,8 @@ from pyproj.exceptions import ProjError
 from shapely.geometry import MultiPoint
 
 COLUMNS = ("species", "lon", "lat")
+# Kept when a frame has them: meters above sea level, and when it was observed.
+OPTIONAL = ("elevation", "date")
 
 
 WGS84 = CRS.from_epsg(4326)
@@ -29,7 +31,18 @@ def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
     missing = [c for c in COLUMNS if c not in df.columns]
     if missing:
         raise KeyError(f"Missing column(s): {missing}. Need {list(COLUMNS)}.")
-    out = df.loc[:, list(COLUMNS)].reset_index(drop=True)
+    extra = [c for c in OPTIONAL if c in df.columns]
+    out = df.loc[:, [*COLUMNS, *extra]].reset_index(drop=True)
+    if "elevation" in extra:
+        try:
+            elevation = pd.to_numeric(out["elevation"]).astype(float)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"elevation must be numeric (meters): {err}") from err
+        if np.isinf(elevation).any():
+            raise ValueError("elevation must be finite or missing.")
+        out["elevation"] = elevation
+    if "date" in extra:
+        out["date"] = _dates(out["date"])
     if len(out) == 0:
         raise ValueError("Sample has no observations")
     if out["species"].isna().any():
@@ -63,6 +76,23 @@ def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
     return out
 
 
+def _dates(column: pd.Series) -> pd.Series:
+    """A column of dates, times or text as UTC times without a zone. Text is
+    parsed in one pass when it shares a format, and value by value when it
+    doesn't (a date here, a time with a zone there)."""
+    try:
+        with warnings.catch_warnings():  # pandas warns before falling back itself
+            warnings.simplefilter("ignore", UserWarning)
+            when = pd.to_datetime(column, utc=True)
+    except (TypeError, ValueError):
+        try:
+            when = column.map(lambda v: pd.to_datetime(v, utc=True))
+            when = pd.to_datetime(when, utc=True)
+        except (TypeError, ValueError, OverflowError) as err:
+            raise ValueError(f"date must hold dates or times: {err}") from err
+    return when.dt.tz_localize(None).astype("datetime64[ns]")
+
+
 @dataclass(frozen=True)
 class Sample:
     """A set of georeferenced species observations.
@@ -75,8 +105,10 @@ class Sample:
     ----------
     data : pd.DataFrame
         One row per observation, with columns ``species`` (str), ``lon`` and
-        ``lat`` (float, decimal degrees). Several observations may share a
-        point. Treat it as read-only: the points and other derived values
+        ``lat`` (float, decimal degrees), and optionally ``elevation``
+        (float, meters above sea level) and ``date`` (when it was observed),
+        either of which may be missing on some rows. Several observations
+        may share a point. Treat it as read-only: the points and other derived values
         are computed once, so build a new sample rather than editing it.
     center : tuple of float, optional
         The (lon, lat) the points are projected about for areas and
@@ -141,6 +173,91 @@ class Sample:
         points = self.data[["lon", "lat"]].drop_duplicates().to_numpy(dtype=float)
         points.flags.writeable = False
         return points
+
+    @cached_property
+    def _point_of_row(self) -> np.ndarray:
+        """The row of ``points`` each observation is at."""
+        keys = pd.MultiIndex.from_frame(self.data[["lon", "lat"]])
+        points = pd.MultiIndex.from_arrays([self.points[:, 0], self.points[:, 1]])
+        return np.asarray(points.get_indexer(keys))
+
+    @cached_property
+    def elevations(self) -> np.ndarray:
+        """Each point's elevation in meters, in the order of
+        [`points`][samplesar.Sample.points]: the mean over its observations
+        that have one, and NaN where none does.
+
+        Raises
+        ------
+        ValueError
+            If the sample has no ``elevation`` column (see
+            [`sources.dataframe`][samplesar.sources.dataframe] and
+            [`with_elevations`][samplesar.Sample.with_elevations]).
+        """
+        if "elevation" not in self.data.columns:
+            raise ValueError(
+                "The sample has no elevations; give sources.dataframe an elevation_col, or "
+                "set them with Sample.with_elevations."
+            )
+        mean = self.data["elevation"].groupby(self._point_of_row).mean()
+        out = mean.reindex(range(self.n_points)).to_numpy(dtype=float)
+        out.flags.writeable = False
+        return out
+
+    @cached_property
+    def dates(self) -> np.ndarray:
+        """Each point's date, in the order of
+        [`points`][samplesar.Sample.points]: when it was first observed
+        (the earliest of its observations' dates), as ``datetime64[ns]``,
+        and NaT where no observation has one.
+
+        Raises
+        ------
+        ValueError
+            If the sample has no ``date`` column (see
+            [`sources.dataframe`][samplesar.sources.dataframe]).
+        """
+        if "date" not in self.data.columns:
+            raise ValueError("The sample has no dates; give sources.dataframe a date_col.")
+        first = self.data["date"].groupby(self._point_of_row).min()
+        out = first.reindex(range(self.n_points)).to_numpy(dtype="datetime64[ns]")
+        out.flags.writeable = False
+        return out
+
+    def with_elevations(self, elevations: Sequence[float] | np.ndarray) -> Sample:
+        """The same sample with an elevation for each point.
+
+        Parameters
+        ----------
+        elevations : sequence of float
+            Meters above sea level, one per row of
+            [`points`][samplesar.Sample.points]; NaN where unknown. Every
+            observation at a point gets its point's value, replacing any
+            elevations the sample had.
+
+        Returns
+        -------
+        Sample
+
+        Raises
+        ------
+        ValueError
+            If there isn't one value per point, or a value is infinite or
+            not a number.
+        """
+        try:
+            values = np.asarray(elevations, dtype=float)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"elevations must be numbers (meters): {err}") from err
+        if values.shape != (self.n_points,):
+            raise ValueError(
+                f"Need one elevation per point ({self.n_points}), got shape {values.shape}."
+            )
+        if np.isinf(values).any():
+            raise ValueError("elevations must be finite or NaN.")
+        data = self.data.copy()
+        data["elevation"] = values[self._point_of_row]
+        return Sample(data, center=self.center, crs=self.crs, mask=self.mask)
 
     @property
     def n_points(self) -> int:
@@ -418,8 +535,7 @@ class Sample:
                 "smaller distance keeps them nearer.",
                 stacklevel=2,
             )
-        keys = pd.MultiIndex.from_frame(self.data[["lon", "lat"]])
-        rows = pd.MultiIndex.from_arrays([self.points[:, 0], self.points[:, 1]]).get_indexer(keys)
+        rows = self._point_of_row
         data = self.data.copy()
         data["lon"], data["lat"] = target[rows, 0], target[rows, 1]
         return self._derived(data)

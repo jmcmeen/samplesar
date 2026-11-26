@@ -198,6 +198,32 @@ along a bearing (degrees clockwise from grid north), like a front moving
 across the sample: a transect walked from one end, or a range edge retreating.
 With the default of 90°, the westernmost point goes first.
 
+### Elevation
+
+`strategies.elevation(sample, remove="highest", around=None, min_points=3)`
+removes points in order of elevation. `"highest"` works from the summits
+down, so each step keeps everything below a falling contour; `"lowest"`
+works from the valleys up and keeps the high ground, as a climate envelope
+retreating upslope would. `"outer"` removes the point farthest in elevation
+from `around` (by default the median), so each step keeps a narrowing
+elevational band.
+
+The sample needs an elevation in meters at every point: from a column
+(`sources.dataframe(df, elevation_col="elevation")`; `sources.gbif` keeps
+GBIF's, where records have one) or set per point with
+`Sample.with_elevations`. Areas stay planimetric: each step's convex hull on
+the map, not surface area over the terrain.
+
+### Through time
+
+`strategies.temporal(sample, remove="newest", min_points=3)` removes the most
+recently found point at each step, so the nest runs back through time: each
+step holds the places visited by some date, and the curve shows how the
+sampled area and its species list grew with effort. `"oldest"` removes the
+earliest places first. A point's date is that of its first observation
+(`sources.dataframe(df, date_col="date")`; `sources.inaturalist`,
+`sources.open_data` and `sources.gbif` keep theirs).
+
 ### Density peeling
 
 `strategies.density_peel(sample, bandwidth_km=None, min_points=3)` smooths the

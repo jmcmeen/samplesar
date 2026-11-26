@@ -17,7 +17,16 @@ from samplesar._hull import (
     hull_weighted,
 )
 from samplesar._nest import from_order, random
-from samplesar._ranked import band, density_peel, grow, radial, sector, sweep
+from samplesar._ranked import (
+    band,
+    density_peel,
+    elevation,
+    grow,
+    radial,
+    sector,
+    sweep,
+    temporal,
+)
 from samplesar._rarity import hull_rarity
 from samplesar._registry import available, register, run
 
@@ -26,6 +35,7 @@ __all__ = [
     "band",
     "concave_peel",
     "density_peel",
+    "elevation",
     "from_order",
     "grid_peel",
     "grow",
@@ -43,4 +53,5 @@ __all__ = [
     "run",
     "sector",
     "sweep",
+    "temporal",
 ]

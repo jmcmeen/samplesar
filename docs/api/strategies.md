@@ -66,6 +66,14 @@
 
 ::: samplesar.strategies.sweep
 
+## strategies.elevation
+
+::: samplesar.strategies.elevation
+
+## strategies.temporal
+
+::: samplesar.strategies.temporal
+
 ## strategies.density_peel
 
 ::: samplesar.strategies.density_peel

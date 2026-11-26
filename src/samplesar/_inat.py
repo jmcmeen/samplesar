@@ -45,7 +45,7 @@ def inaturalist_frame(
     ranks: Iterable[str] | None = SPECIES_LEVEL,
     skip_obscured: bool = True,
 ) -> pd.DataFrame:
-    """iNaturalist observation records as ``species``, ``lon``, ``lat`` rows.
+    """iNaturalist observation records as ``species``, ``lon``, ``lat``, ``date`` rows.
 
     Records without a taxon or coordinates are dropped, as are those whose
     taxon isn't at one of ``ranks`` (``None`` keeps every rank) and, with
@@ -74,10 +74,30 @@ def inaturalist_frame(
         if point is None:
             dropped["coordinates"] += 1
             continue
-        rows.append({"species": _species_name(taxon), "lon": point[0], "lat": point[1]})
+        rows.append(
+            {
+                "species": _species_name(taxon),
+                "lon": point[0],
+                "lat": point[1],
+                "date": _observed(record),
+            }
+        )
     if any(dropped.values()):
         logger.info("Dropped iNaturalist records: %s", dropped)
-    return pd.DataFrame(rows, columns=["species", "lon", "lat"])
+    return pd.DataFrame(rows, columns=["species", "lon", "lat", "date"])
+
+
+def _observed(record: Mapping[str, Any]) -> Any:
+    """When the record was observed, as a UTC time without a zone; NaT when
+    it has no usable date."""
+    value = record.get("observed_on") or record.get("time_observed_at")
+    if not value:
+        return pd.NaT
+    try:
+        when = pd.to_datetime(value, utc=True)
+    except (TypeError, ValueError, OverflowError):
+        return pd.NaT
+    return when.tz_localize(None)
 
 
 def fetch_inaturalist(max_results: int | None = None, **query: Any) -> list[dict[str, Any]]:

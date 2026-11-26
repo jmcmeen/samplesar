@@ -225,7 +225,7 @@ def open_data_frame(
     max_accuracy: float | None = None,
 ) -> Any:
     """The rows of the Parquet file matching the filters, as ``species``,
-    ``lon``, ``lat``, with infraspecific taxa named as their species."""
+    ``lon``, ``lat``, ``date``, with infraspecific taxa named as their species."""
     duckdb = _duckdb()
     where: list[str] = []
     params: list[Any] = []
@@ -271,7 +271,7 @@ def open_data_frame(
             CASE WHEN rank IN ('subspecies', 'variety', 'form')
                  THEN array_to_string(string_split(name, ' ')[1:2], ' ')
                  ELSE name END AS species,
-            longitude AS lon, latitude AS lat
+            longitude AS lon, latitude AS lat, CAST(observed_on AS TIMESTAMP) AS date
         FROM read_parquet(?)
         WHERE {" AND ".join(where)}
     """

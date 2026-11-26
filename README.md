@@ -88,8 +88,9 @@ name through `strategies.run(sample, "hull_peel")`:
 - **Fixed rankings**, fast on large samples: `radial` (shrinking discs or
   ellipses), `sweep` (a line moving across), `band` (closing in on a line
   from both sides), `sector` (one compass sector after another),
-  `density_peel` (sparsest first) and `grow` (growing out from a seed
-  point, in reverse).
+  `density_peel` (sparsest first), `grow` (growing out from a seed
+  point, in reverse), `elevation` (from the summits down or the valleys
+  up) and `temporal` (back through time).
 
 [Sampling strategies](https://jmcmeen.github.io/samplesar/strategies/) describes each one.
 

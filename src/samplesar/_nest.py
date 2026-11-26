@@ -126,7 +126,8 @@ class Nest:
     def to_dict(self) -> dict[str, Any]:
         """The nest as plain data, ready for JSON.
 
-        Holds the observations (with their center, crs and mask), the strategy and its options, and the steps,
+        Holds the observations (with their elevations and dates, if any, and
+        their center, crs and mask), the strategy and its options, and the steps,
         stored as the points each step removes rather than in full. Options
         that are tuples or arrays are stored as lists.
 
@@ -156,11 +157,7 @@ class Nest:
             "samplesar": _package_version(),
             "strategy": self.strategy,
             "options": {k: _plain(k, v) for k, v in self.options.items()},
-            "observations": {
-                "species": data["species"].tolist(),
-                "lon": data["lon"].tolist(),
-                "lat": data["lat"].tolist(),
-            },
+            "observations": _observations(data),
             "center": list(self.sample.center) if self.sample.center is not None else None,
             "crs": self.sample.crs.to_wkt() if self.sample.crs is not None else None,
             "first": np.asarray(self.steps[0]).tolist(),
@@ -361,6 +358,21 @@ def _hull_vertices(xy: np.ndarray, idx: np.ndarray) -> np.ndarray | None:
         return idx[ConvexHull(xy[idx]).vertices]
     except QhullError:
         return None
+
+
+def _observations(data: pd.DataFrame) -> dict[str, list[Any]]:
+    """The observations as plain lists: missing elevations and dates as None,
+    dates as ISO text."""
+    saved: dict[str, list[Any]] = {
+        "species": data["species"].tolist(),
+        "lon": data["lon"].tolist(),
+        "lat": data["lat"].tolist(),
+    }
+    if "elevation" in data.columns:
+        saved["elevation"] = [None if np.isnan(v) else float(v) for v in data["elevation"]]
+    if "date" in data.columns:
+        saved["date"] = [None if pd.isna(v) else v.isoformat() for v in data["date"]]
+    return saved
 
 
 def _short(value: Any) -> str:

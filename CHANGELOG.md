@@ -23,6 +23,18 @@ All notable changes to this project are documented here. The format is based on
   region is lost first.
 - `strategies.radial` takes `stretch` and `bearing`: the discs become
   ellipses, so what remains is longer in one direction than the other.
+- Samples can carry each observation's elevation and date:
+  `sources.dataframe` and `sources.csv` take `elevation_col` and `date_col`,
+  `sources.gbif` keeps GBIF's elevation and event date, and
+  `sources.inaturalist` and `sources.open_data` the observation date.
+  `Sample.elevations` and `Sample.dates` give them per point (the mean
+  elevation and the first date), `Sample.with_elevations` sets an elevation
+  per point, and saved nests keep both.
+- `strategies.elevation(sample, remove="highest")`: removes points from the
+  summits down, from the valleys up (`"lowest"`), or outside a narrowing
+  elevational band (`"outer"`).
+- `strategies.temporal(sample, remove="newest")`: removes points in order of
+  when they were first observed, so the nest runs back through time.
 
 ### Changed
 

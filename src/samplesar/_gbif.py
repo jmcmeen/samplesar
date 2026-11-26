@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import warnings
 from collections.abc import Iterable, Mapping
 from typing import Any
@@ -30,7 +31,8 @@ def gbif_frame(
     ranks: Iterable[str] | None = SPECIES_LEVEL,
     max_uncertainty: float | None = None,
 ) -> pd.DataFrame:
-    """GBIF occurrence records as ``species``, ``lon``, ``lat`` rows.
+    """GBIF occurrence records as ``species``, ``lon``, ``lat``, ``elevation``
+    (meters; often missing) and ``date`` (the event's start) rows.
 
     A record needs coordinates, must not be marked absent or carry a
     geospatial issue, and needs a species-level name (GBIF's ``species``
@@ -62,9 +64,33 @@ def gbif_frame(
                 "species": name,
                 "lon": float(r["decimalLongitude"]),
                 "lat": float(r["decimalLatitude"]),
+                "elevation": _number(r.get("elevation")),
+                "date": _event_date(r.get("eventDate")),
             }
         )
-    return pd.DataFrame(rows, columns=["species", "lon", "lat"])
+    return pd.DataFrame(rows, columns=["species", "lon", "lat", "elevation", "date"])
+
+
+def _number(value: Any) -> float:
+    """A record's number, or NaN when it's missing or unusable."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+    return number if math.isfinite(number) else float("nan")
+
+
+def _event_date(value: Any) -> Any:
+    """A record's eventDate as a UTC time without a zone: the start of an
+    interval ("2020-05-01/2020-05-03"), the first day of a month or year
+    given alone, and NaT when it's missing or unreadable."""
+    if not value:
+        return pd.NaT
+    try:
+        when = pd.to_datetime(str(value).split("/")[0], utc=True)
+    except (TypeError, ValueError, OverflowError):
+        return pd.NaT
+    return when.tz_localize(None)
 
 
 def fetch_gbif(max_results: int | None = None, **query: Any) -> list[dict[str, Any]]:

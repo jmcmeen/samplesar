@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import heapq
 import numbers
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from pyproj import Transformer
@@ -456,3 +456,119 @@ def grow(sample: Sample, seed: tuple[float, float] | None = None, min_points: in
     distance = np.hypot(*(xy - _center_xy(sample, seed)).T)
     start = int(np.lexsort((np.arange(len(xy)), distance))[0])
     return from_order(sample, growth_order(xy, start)[::-1], min_points=min_points)
+
+
+def _complete(values: np.ndarray, what: str, how: str) -> None:
+    missing = int(np.count_nonzero(np.isnan(values)))
+    if missing:
+        raise ValueError(
+            f"{missing} of the sample's {len(values)} points have no {what}; {how}, or keep "
+            f"only the points that have one (Sample.subset)."
+        )
+
+
+@register("elevation")
+def elevation(
+    sample: Sample,
+    remove: Literal["highest", "lowest", "outer"] = "highest",
+    around: float | None = None,
+    min_points: int = 3,
+) -> Nest:
+    """Nest a sample by removing points in order of elevation.
+
+    ``remove="highest"`` takes the highest point at each step, from the
+    summits down, so each step keeps everything below a falling contour;
+    ``"lowest"`` works from the valleys up, keeping the high ground, as a
+    climate envelope retreating upslope would. ``"outer"`` removes the point
+    farthest in elevation from ``around``, so each step keeps a narrowing
+    elevational band. Areas are still each step's convex hull on the map
+    (planimetric), not surface area over the terrain.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest, with an elevation at every point (see
+        [`Sample.elevations`][samplesar.Sample.elevations]).
+    remove : {"highest", "lowest", "outer"}
+        Which point to remove at each step.
+    around : float, optional
+        For ``remove="outer"``, the elevation in meters the band closes in
+        on; by default the median of the points' elevations.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If the sample has no elevations or some points lack one, ``remove``
+        is unknown, ``around`` isn't finite or is given without
+        ``remove="outer"``, or ``min_points`` is below 1 or above the
+        sample's size.
+    """
+    check_size(sample, min_points)
+    if remove not in ("highest", "lowest", "outer"):
+        raise ValueError(f"remove must be 'highest', 'lowest' or 'outer', got {remove!r}")
+    if around is not None and remove != "outer":
+        raise ValueError("around is only used with remove='outer'.")
+    if around is not None and not np.isfinite(around):
+        raise ValueError(f"around must be a finite elevation in meters, got {around}.")
+    height = sample.elevations
+    _complete(height, "elevation", "set them with Sample.with_elevations")
+    if remove == "highest":
+        key = -height
+    elif remove == "lowest":
+        key = height
+    else:
+        key = -np.abs(height - (float(np.median(height)) if around is None else around))
+    return _by_rank(sample, key, min_points)
+
+
+@register("temporal")
+def temporal(
+    sample: Sample, remove: Literal["newest", "oldest"] = "newest", min_points: int = 3
+) -> Nest:
+    """Nest a sample by removing points in order of when they were first observed.
+
+    ``remove="newest"`` takes the most recently found point at each step, so
+    the nest runs back through time: each step holds the places that had
+    been visited by some date, and its curve shows how the sampled area and
+    its species list grew with effort. ``"oldest"`` removes the earliest
+    places first. A point's date is that of its first observation; a point
+    keeps all its observations while it remains, including later ones.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest, with a date at every point (see
+        [`Sample.dates`][samplesar.Sample.dates]).
+    remove : {"newest", "oldest"}
+        Which point to remove at each step.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If the sample has no dates or some points lack one, ``remove`` is
+        unknown, or ``min_points`` is below 1 or above the sample's size.
+    """
+    check_size(sample, min_points)
+    if remove not in ("newest", "oldest"):
+        raise ValueError(f"remove must be 'newest' or 'oldest', got {remove!r}")
+    dates = sample.dates
+    missing = np.isnat(dates)
+    when = np.where(missing, np.nan, dates.astype("datetime64[ns]").astype(np.int64) / 1e9)
+    _complete(when, "date", "give every observation one")
+    # Whole seconds, compared exactly: _tied's rounding would merge dates a
+    # billionth of the sample's span apart.
+    seconds = np.round(when).astype(np.int64)
+    order = np.lexsort((np.arange(sample.n_points), -seconds if remove == "newest" else seconds))
+    return from_order(sample, order, min_points=min_points)
