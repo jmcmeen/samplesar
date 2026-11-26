@@ -46,6 +46,7 @@ def test_built_in_strategies_are_listed():
         "hull_species",
         "hull_distance",
         "concave_peel",
+        "circle",
         "radial",
         "band",
         "sector",

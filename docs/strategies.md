@@ -145,6 +145,15 @@ its score raised to that power (or the inverse, for `remove="common"`), as
 `hull_weighted` does with isolation: `power=0` is `hull_random`, and `seed`
 makes it reproducible.
 
+### By the smallest enclosing circle
+
+`strategies.circle(sample, min_points=3)` finds the smallest circle around
+the remaining points, which rests on two or three of them, and removes the
+one whose loss shrinks the circle most. It trims the sample where it reaches
+farthest, as `radial` does, but toward no fixed center: the circle moves as
+it shrinks, so a sample with a long arm loses the arm first and then closes
+on its bulk.
+
 ### By distance from the center
 
 `strategies.hull_distance(sample, remove="farthest", min_points=3)` removes the
@@ -231,6 +240,11 @@ density of points once with a Gaussian kernel and removes the point of lowest
 density first. Each step keeps a superlevel set of that density, so the
 boundary follows where the observations are, not the outermost few, and
 isolated records go first. The default bandwidth uses Scott's rule.
+
+`method="voronoi"` measures density without a bandwidth: a point's density
+is one over the area of its Voronoi cell, the ground nearer to it than to
+any other point, within the sample's hull. The points that each stand for
+the most ground, where effort was thinnest, go first.
 
 ### Growing from a seed
 

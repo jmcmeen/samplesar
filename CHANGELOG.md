@@ -51,6 +51,11 @@ All notable changes to this project are documented here. The format is based on
   observed in it, for species-area data of the island type. `Islands` has
   `to_frame`, `sar_data`, `fit` and `sample_of`; areas are each region's own
   on the ellipsoid (optionally within a mask), or the hull of its points.
+- `strategies.circle(sample)`: shrinks the sample's smallest enclosing
+  circle as fast as possible, removing at each step the point the circle
+  rests on whose loss shrinks it most.
+- `strategies.density_peel` takes `method="voronoi"`: density as one over
+  the area of each point's Voronoi cell, with no bandwidth to choose.
 - `regions.admin_units(country, level)` and `regions.read_units(source,
   column)`: many named regions at once, each as its own polygon.
 

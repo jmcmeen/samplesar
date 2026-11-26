@@ -46,6 +46,10 @@
 
 ::: samplesar.strategies.hull_distance
 
+## strategies.circle
+
+::: samplesar.strategies.circle
+
 ## strategies.concave_peel
 
 ::: samplesar.strategies.concave_peel

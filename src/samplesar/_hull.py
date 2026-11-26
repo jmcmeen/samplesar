@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from typing import Literal
 
@@ -621,3 +622,130 @@ def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nes
             "sample's concave hull."
         )
     return Nest(sample=sample, steps=tuple(steps))
+
+
+def _circle2(ax: float, ay: float, bx: float, by: float) -> tuple[float, float, float]:
+    """The circle on two points as a diameter: (x, y, radius)."""
+    cx, cy = (ax + bx) / 2.0, (ay + by) / 2.0
+    return cx, cy, math.hypot(ax - cx, ay - cy)
+
+
+def _circle3(
+    ax: float, ay: float, bx: float, by: float, cx: float, cy: float
+) -> tuple[float, float, float]:
+    """The circle through three points: (x, y, radius). Three points in a
+    line (to within rounding) give the circle on the two farthest apart."""
+    d = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    span = max(abs(ax - bx), abs(ax - cx), abs(bx - cx), abs(ay - by), abs(ay - cy), abs(by - cy))
+    if abs(d) <= 1e-12 * span * span or span == 0:
+        pairs = ((ax, ay, bx, by), (bx, by, cx, cy), (ax, ay, cx, cy))
+        return _circle2(*max(pairs, key=lambda q: math.hypot(q[0] - q[2], q[1] - q[3])))
+    a2, b2, c2 = ax * ax + ay * ay, bx * bx + by * by, cx * cx + cy * cy
+    x = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d
+    y = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d
+    return x, y, math.hypot(ax - x, ay - y)
+
+
+def _circle_of(points: np.ndarray) -> tuple[np.ndarray, float]:
+    """The circle through one, two or three points: (center, radius)."""
+    flat = [float(v) for v in np.asarray(points, dtype=float).ravel()]
+    if len(flat) == 2:
+        return np.array(flat), 0.0
+    x, y, radius = _circle2(*flat) if len(flat) == 4 else _circle3(*flat)
+    return np.array([x, y]), radius
+
+
+def enclosing_circle(points: np.ndarray) -> tuple[np.ndarray, float]:
+    """The smallest circle around some points, as (center, radius): Welzl's
+    incremental algorithm, with the points taken in a fixed shuffled order
+    so it runs in about linear time and always gives the same answer. Plain
+    floats throughout: the point sets are hull vertices, a few dozen at
+    most, where array calls would cost more than the arithmetic."""
+    points = np.asarray(points, dtype=float)
+    if len(points) == 0:
+        raise ValueError("No points to enclose.")
+    # Measured from the points' own middle: far from the origin (projected
+    # coordinates run to thousands of km) the circle through three points
+    # loses most of its digits to cancellation.
+    origin = (points.min(axis=0) + points.max(axis=0)) / 2.0
+    order = np.random.default_rng(0).permutation(len(points))
+    p = [(float(x), float(y)) for x, y in points[order] - origin]
+    x, y, r = p[0][0], p[0][1], 0.0
+    for i in range(1, len(p)):
+        ix, iy = p[i]
+        if math.hypot(ix - x, iy - y) <= r * (1.0 + 1e-12):
+            continue
+        x, y, r = ix, iy, 0.0  # p[i] lies on the circle of p[: i + 1]
+        for j in range(i):
+            jx, jy = p[j]
+            if math.hypot(jx - x, jy - y) <= r * (1.0 + 1e-12):
+                continue
+            x, y, r = _circle2(ix, iy, jx, jy)  # and so does p[j]
+            for k in range(j):
+                kx, ky = p[k]
+                if math.hypot(kx - x, ky - y) > r * (1.0 + 1e-12):
+                    x, y, r = _circle3(ix, iy, jx, jy, kx, ky)
+    return np.array([x, y]) + origin, r
+
+
+def _outline(points: np.ndarray, idx: np.ndarray) -> np.ndarray:
+    """Rows of ``idx`` that include every vertex of their convex hull: from
+    qhull, which is fast, or all of them when it can't build a hull (few
+    points, or points in a line)."""
+    if len(idx) < 4:
+        return idx
+    from scipy.spatial import ConvexHull, QhullError
+
+    try:
+        return idx[ConvexHull(points[idx]).vertices]
+    except QhullError:
+        return idx
+
+
+@register("circle")
+def circle(sample: Sample, min_points: int = 3) -> Nest:
+    """Nest a sample by shrinking its smallest enclosing circle as fast as possible.
+
+    At each step the smallest circle around the remaining points is found.
+    It rests on two or three of them; the one whose removal leaves the
+    smallest circle goes. The sample is trimmed where it reaches farthest,
+    like [`radial`][samplesar.strategies.radial], but toward no fixed
+    center: the circle moves as it shrinks, so a sample with a long arm
+    loses the arm first and then closes on its bulk. Ties, to within
+    floating-point rounding, go to the lowest point index. Areas are still
+    convex hull areas.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``min_points`` is below 1 or the sample has fewer points.
+    """
+    points = np.asarray(sample.xy)
+
+    def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
+        # The circle rests on hull vertices only, so they stand for the rest.
+        center, radius = enclosing_circle(points[vertices])
+        distance = np.hypot(*(points[vertices] - center).T)
+        resting = vertices[distance >= radius * (1 - 1e-9)]
+        if len(resting) == 1 or len(remaining) <= 2:
+            return int(resting.min())
+        left = []
+        for v in resting:
+            rest = remaining[remaining != v]
+            left.append(enclosing_circle(points[_outline(points, rest)])[1])
+        radii = np.asarray(left)
+        tied = resting[radii <= radii.min() * (1 + 1e-9) + 1e-300]
+        return int(tied.min())
+
+    return _remove_one(sample, min_points, choose)

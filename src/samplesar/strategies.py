@@ -6,6 +6,7 @@ See the strategies page of the documentation for what each removes, and
 """
 
 from samplesar._hull import (
+    circle,
     concave_peel,
     grid_peel,
     hull_area,
@@ -34,6 +35,7 @@ from samplesar._split import partition, split
 __all__ = [
     "available",
     "band",
+    "circle",
     "concave_peel",
     "density_peel",
     "elevation",
