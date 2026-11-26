@@ -2,6 +2,7 @@
 outputs), and still running start to finish against the current code."""
 
 import copy
+import re
 from pathlib import Path
 
 import pytest
@@ -86,4 +87,7 @@ def _text(cell):
             parts.append(output.text)
         elif "text/plain" in output.get("data", {}) and "image/png" not in output.data:
             parts.append(output.data["text/plain"])
-    return "".join(parts)
+    # Numbers to three significant figures: the last digits of a float differ
+    # between platforms and library builds, and a table's column widths with them.
+    text = re.sub(r"-?\d+\.\d+(?:e[+-]?\d+)?", lambda m: f"{float(m.group()):.3g}", "".join(parts))
+    return " ".join(text.split())
