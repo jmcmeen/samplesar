@@ -46,11 +46,10 @@ choice changes the fitted relationship.
    (homogeneous, clustered, with a density gradient) carrying species placed
    so that the true SAR is known, to see which strategies recover it, and how
    observation clusters bias each.
-2. **A local iNaturalist sample.** Steele Creek Park, Bristol, Tennessee:
-   about 1,000 observations, 900 points, 760 species.
-3. **Regional iNaturalist samples**, from a local copy of iNaturalist's
-   open-data export (research grade), across several regions and taxa.
-4. **Plot-based data** (NEON, then FIA as a stretch) for the independent-plot
+2. **Regional iNaturalist samples**, from a local copy of iNaturalist's
+   open-data export (research grade), across several regions and taxa, so
+   that every sample can be drawn again by the analysis script.
+3. **Plot-based data** (NEON, then FIA as a stretch) for the independent-plot
    SARs to compare against (question 2).
 
 ## Analyses and figures
@@ -69,7 +68,8 @@ choice changes the fitted relationship.
 
 ## What the first run showed
 
-On the Steele Creek Park sample (all nine strategies):
+On an early test sample from one park (all nine strategies; it isn't one of
+the paper's samples, which all come from the open-data export):
 
 - **Strategies split into two groups.** Random removal (S1) and removing the
   vertex closest to the center (S9) keep nearly the full extent until the

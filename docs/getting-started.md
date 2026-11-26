@@ -1,5 +1,12 @@
 # Getting started
 
+To try things without data, `samplesar.sources.simulated(seed=1)` makes up a
+landscape of observations (with elevations and dates) that every strategy
+runs on. The [example scripts](https://github.com/jmcmeen/samplesar/tree/main/examples)
+and the notebooks under Examples ([a first nest](examples/first_nest.ipynb),
+[comparing strategies](examples/strategies.ipynb),
+[regions as islands](examples/islands.ipynb)) start from it.
+
 ## A sample
 
 A `Sample` is a set of species observations, each at a longitude and latitude

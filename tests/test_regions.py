@@ -1,6 +1,7 @@
 """Regions from boundary files and known ecoregion datasets."""
 
 import pytest
+import shapely
 from shapely.geometry import box
 
 import samplesar
@@ -168,3 +169,53 @@ def test_a_zip_at_a_url_with_a_query(tmp_path, monkeypatch):
     assert region.symmetric_difference(box(0, 0, 1, 1)).area < 1e-9
     assert [f.name.split("_", 1)[1] for f in cache.iterdir()] == ["download.zip"]
     samplesar.regions.read("https://example.org/download?id=3&format=shp", cache_dir=cache)
+
+
+def test_units_by_a_column(provinces):
+    units = samplesar.regions.read_units(provinces, "NAME")
+    assert list(units) == ["Blue Ridge", "Ridge and Valley", "Piedmont"]
+    assert units["Piedmont"].symmetric_difference(box(2, 0, 3, 2)).area < 1e-9
+    some = samplesar.regions.read_units(provinces, "CODE", [66, "45"])
+    assert list(some) == ["66", "45"]
+
+
+def test_units_rows_sharing_a_name_are_one_region(tmp_path):
+    frame = gpd.GeoDataFrame(
+        {"PARK": ["Smokies", "Smokies", "Roan", None]},
+        geometry=[box(0, 0, 1, 1), box(1, 0, 2, 1), box(5, 5, 6, 6), box(8, 8, 9, 9)],
+        crs=4326,
+    )
+    path = tmp_path / "parks.gpkg"
+    frame.to_file(path)
+    units = samplesar.regions.read_units(path, "PARK")
+    assert list(units) == ["Smokies", "Roan"]  # the unnamed row is left out
+    assert units["Smokies"].symmetric_difference(box(0, 0, 2, 1)).area < 1e-9
+
+
+def test_units_clipped(provinces):
+    units = samplesar.regions.read_units(provinces, "NAME", clip=(0.5, 0, 1.5, 1))
+    assert list(units) == ["Blue Ridge", "Ridge and Valley"]  # nothing of Piedmont is left
+    assert units["Blue Ridge"].symmetric_difference(box(0.5, 0, 1, 1)).area < 1e-9
+    with pytest.raises(ValueError, match="Nothing of the regions is left after clipping"):
+        samplesar.regions.read_units(provinces, "NAME", clip=(50, 50, 51, 51))
+
+
+def test_units_bad_selections(provinces):
+    with pytest.raises(KeyError, match="No column 'PARK'"):
+        samplesar.regions.read_units(provinces, "PARK")
+    with pytest.raises(ValueError, match="No row has CODE = 99"):
+        samplesar.regions.read_units(provinces, "CODE", [99])
+
+
+def test_units_a_bad_clip_is_reported_as_such(provinces):
+    with pytest.raises(ValueError, match="polygon"):
+        samplesar.regions.read_units(provinces, "NAME", clip=shapely.Point(0, 0))
+
+
+def test_units_from_a_float_column_are_named_as_whole_numbers(tmp_path):
+    frame = gpd.GeoDataFrame(
+        {"CODE": [66.0, 67.0]}, geometry=[box(0, 0, 1, 1), box(1, 0, 2, 1)], crs=4326
+    )
+    path = tmp_path / "codes.gpkg"
+    frame.to_file(path)
+    assert list(samplesar.regions.read_units(path, "CODE")) == ["66", "67"]

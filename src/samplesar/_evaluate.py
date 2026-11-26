@@ -291,3 +291,200 @@ def against_baseline(nest: Nest, baseline: pd.DataFrame, model: str = "power") -
         known = baseline["at_bounds"].dropna()
         table.attrs["at_bounds_share"] = float(known.map(bool).mean()) if len(known) else np.nan
     return table
+
+
+def _seeded(strategy: str) -> bool:
+    """Whether a registered strategy takes a seed; raises if it isn't registered."""
+    import inspect
+
+    from samplesar._registry import _REGISTRY
+
+    found = _REGISTRY.get(strategy)
+    if found is None:
+        raise ValueError(f"No strategy {strategy!r}; known: {', '.join(_REGISTRY)}.")
+    return "seed" in inspect.signature(found.original).parameters
+
+
+def ensemble(
+    sample: Any,
+    strategy: str = "hull_random",
+    n: int = 99,
+    seed: int = 0,
+    points: int = 50,
+    **options: Any,
+) -> pd.DataFrame:
+    """Average many seeded nests of a sample into one curve with a band.
+
+    One random nest is one draw: its curve wanders with the luck of its
+    removals. This runs ``n`` nests of a random strategy, reads each one's
+    species count at the same areas, and gives the mean and spread there:
+    the strategy's expected curve, and how far a single nest strays from it.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    strategy : str
+        A registered strategy that takes a ``seed``, such as
+        ``"hull_random"``, ``"hull_weighted"`` or ``"random"``.
+    n : int
+        How many nests.
+    seed : int
+        The first seed; nest ``i`` uses ``seed + i``.
+    points : int
+        How many areas to read the curves at, evenly spaced on a log scale
+        over the areas every nest spans: from the largest of the nests'
+        smallest areas up to the whole sample's. With 1, the whole sample's
+        area alone.
+    **options
+        Passed to the strategy, such as ``power`` or ``min_points``.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per area: ``area`` (km²), ``mean``, ``median``, ``q025`` and
+        ``q975`` (of the nests' species counts there) and ``n``, the nests
+        averaged. A nest's count at an area is interpolated between its
+        steps on log area. Its ``attrs`` record ``strategy``, ``options``
+        and ``seeds`` (those of the nests averaged).
+
+    Raises
+    ------
+    ValueError
+        If ``n`` or ``points`` is below 1, ``strategy`` isn't a registered
+        strategy that takes a seed, or no nest has two different positive
+        areas.
+
+    Examples
+    --------
+    >>> band = samplesar.evaluate.ensemble(sample, "hull_random", n=99)  # doctest: +SKIP
+    >>> ax.fill_between(band["area"], band["q025"], band["q975"], alpha=0.3)  # doctest: +SKIP
+    >>> ax.plot(band["area"], band["mean"])  # doctest: +SKIP
+    """
+    from samplesar._registry import run
+
+    if n < 1:
+        raise ValueError(f"n must be at least 1, got {n}.")
+    if points < 1:
+        raise ValueError(f"points must be at least 1, got {points}.")
+    if not _seeded(strategy):
+        raise ValueError(
+            f"strategy must be a registered strategy that takes a seed, got {strategy!r}."
+        )
+    curves, used = [], []
+    for i in range(n):
+        data = run(sample, strategy, seed=seed + i, **options).sar_data()
+        # One species count per area, in increasing area: steps that share
+        # an area (points removed inside the hull) keep their largest count.
+        by_area = data.groupby("area")["species"].max()
+        if len(by_area) >= 2:
+            curves.append((np.log(by_area.index.to_numpy(float)), by_area.to_numpy(float)))
+            used.append(seed + i)
+    if not curves:
+        raise ValueError("No nest has two different positive areas to make a curve from.")
+    # From the largest of the nests' smallest areas: below it only some
+    # nests reach, and a mean over those alone would mislead. Every nest
+    # starts at the whole sample, so they share their largest area.
+    low = max(c[0][0] for c in curves)
+    high = min(c[0][-1] for c in curves)
+    grid = np.linspace(low, high, points) if points > 1 else np.array([high])
+    values = np.array([np.interp(grid, log_area, species) for log_area, species in curves])
+    table = pd.DataFrame(
+        {
+            "area": np.exp(grid),
+            "mean": values.mean(axis=0),
+            "median": np.median(values, axis=0),
+            "q025": np.quantile(values, 0.025, axis=0),
+            "q975": np.quantile(values, 0.975, axis=0),
+            "n": len(curves),
+        }
+    )
+    table.attrs.update(strategy=strategy, options=dict(options), seeds=used)
+    return table
+
+
+def bootstrap(
+    sample: Any,
+    strategy: str = "hull_peel",
+    model: str = "power",
+    n: int = 99,
+    seed: int = 0,
+    **options: Any,
+) -> pd.DataFrame:
+    """Fit a model to nests of bootstrap resamples of a sample's points.
+
+    A deterministic strategy gives one nest, and one fit, per sample, with
+    nothing to say how much either owes to the particular points observed.
+    This draws the sample's points with replacement ``n`` times and keeps
+    the distinct points drawn (about 63% of them each time, with all the
+    observations at them: a point drawn twice is still one place), nests
+    each resample with the same strategy, and
+    fits each nest: the spread of the fits is the fit's sensitivity to which
+    places happened to be sampled. Steps within a nest aren't independent,
+    and each resample is smaller than the sample, so read the spread as a
+    description, not as a confidence interval of the usual kind, and don't
+    test the full sample's nest against it.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to resample.
+    strategy : str
+        A registered strategy. One that takes a ``seed`` is given
+        ``seed + i`` for resample ``i``.
+    model : str
+        A sars model with one fit per dataset, such as ``"power"``.
+    n : int
+        How many resamples.
+    seed : int
+        Seed for the resampling.
+    **options
+        Passed to the strategy.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per resample that could be nested and fitted, as
+        [`evaluate.compare`][samplesar.evaluate.compare] gives, indexed by
+        ``resample`` (0 to ``n - 1``), with ``n_points``, the distinct
+        points drawn. A resample is left out when a layer-peeling strategy
+        can't take a layer from it, it has fewer points than ``min_points``,
+        or its nest has fewer than three steps with an area to fit.
+
+    Raises
+    ------
+    ValueError
+        If ``n`` is below 1, ``strategy`` isn't registered or rejects its
+        options, or no resample could be nested and fitted.
+    """
+    from samplesar._nest import NoStepError
+    from samplesar._registry import run
+
+    if n < 1:
+        raise ValueError(f"n must be at least 1, got {n}.")
+    seeded = _seeded(strategy)
+    rng = np.random.default_rng(seed)
+    nests, sizes = {}, {}
+    for i in range(n):
+        drawn = np.unique(rng.integers(sample.n_points, size=sample.n_points))
+        own = {**options, "seed": seed + i} if seeded else options
+        if len(drawn) < options.get("min_points", 0):
+            continue
+        try:
+            nest = run(sample.subset(drawn), strategy, **own)
+        except NoStepError:
+            continue
+        if len(nest.sar_data()) < MIN_FIT_POINTS:
+            continue
+        nests[str(i)] = nest
+        sizes[i] = len(drawn)
+    if not nests:
+        raise ValueError(f"No resample could be nested and fitted with {strategy!r}.")
+    with warnings.catch_warnings():
+        # Bounds are reported per row instead; other warnings still show.
+        warnings.filterwarnings("ignore", message="Parameters stopped on a bound")
+        table = compare(nests, model=model)
+    table.index = table.index.astype(int)
+    table.index.name = "resample"
+    table.insert(0, "n_points", pd.Series(sizes))
+    return table

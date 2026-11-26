@@ -18,3 +18,5 @@ htmlcov/
 
 # mkdocs build output
 site/
+examples/output/
+.cache/

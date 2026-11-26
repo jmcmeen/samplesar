@@ -6,6 +6,7 @@ See the strategies page of the documentation for what each removes, and
 """
 
 from samplesar._hull import (
+    circle,
     concave_peel,
     grid_peel,
     hull_area,
@@ -17,13 +18,27 @@ from samplesar._hull import (
     hull_weighted,
 )
 from samplesar._nest import from_order, random
-from samplesar._ranked import density_peel, grow, radial, sweep
+from samplesar._ranked import (
+    band,
+    density_peel,
+    elevation,
+    grow,
+    radial,
+    sector,
+    sweep,
+    temporal,
+)
+from samplesar._rarity import hull_rarity
 from samplesar._registry import available, register, run
+from samplesar._split import partition, split
 
 __all__ = [
     "available",
+    "band",
+    "circle",
     "concave_peel",
     "density_peel",
+    "elevation",
     "from_order",
     "grid_peel",
     "grow",
@@ -32,11 +47,16 @@ __all__ = [
     "hull_masked_area",
     "hull_peel",
     "hull_random",
+    "hull_rarity",
     "hull_species",
     "hull_weighted",
+    "partition",
     "radial",
     "random",
     "register",
     "run",
+    "sector",
+    "split",
     "sweep",
+    "temporal",
 ]

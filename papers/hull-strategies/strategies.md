@@ -95,6 +95,63 @@ least $m$ points remain inside, at most one fewer than the number of layers
 because fewer than $m$ points lie strictly inside the hull, it raises an
 error rather than return a nest with nothing to fit.
 
+## Added strategies
+
+Strategies added to samplesar after the first analysis, compared with S1 to
+S10 in `results/tables/strategies_added.csv`. They keep the notation above.
+
+**Fixed rankings.** Each computes a key $k(p)$ once on the whole sample and
+removes points in increasing $k$, one per step; keys within $10^{-9}$ of the
+key's range tie, and ties go to the lowest index. The hull is never
+consulted, so interior points can go while vertices remain.
+
+| | Strategy | Key $k(p)$, removed in increasing order | Function |
+| --- | --- | --- | --- |
+| A1 | Radial | $-\lVert p - \bar{p} \rVert$, with $\bar{p}$ the mean of $P$: farthest from the center first | `strategies.radial` |
+| A2 | Sweep east | $p_x$: the westernmost point first, a front moving east | `strategies.sweep(bearing=90)` |
+| A3 | Sweep north | $p_y$: the southernmost point first | `strategies.sweep(bearing=0)` |
+| A4 | Density peeling | $\sum_{q \in P} \exp(-\lVert p - q \rVert^2 / 2\sigma^2)$, a Gaussian kernel density with $\sigma$ from Scott's rule: sparsest first | `strategies.density_peel` |
+| A5 | Growth, reversed | minus the order in which Prim's algorithm adds $p$ to a region grown from the point nearest $\bar{p}$ (each time the point nearest the region): last joined, first removed | `strategies.grow` |
+
+**Random, weighted.**
+
+| | Strategy | $r_t$ | Function |
+| --- | --- | --- | --- |
+| A6 | Isolation-weighted hull vertex | $v \in V(Q_t)$ with probability proportional to $\iota_{Q_t}(v)^2$, where $\iota_Q(v) = \min_{q \in Q \setminus \{v\}} \lVert v - q \rVert$ | `strategies.hull_weighted(power=2)` |
+
+**A layer of grid cells at a time.**
+
+| | Strategy | Step | Function |
+| --- | --- | --- | --- |
+| A7 to A9 | Grid peeling, fine, medium, coarse | Points are assigned to square cells of side $g$ anchored at the sample's south-west corner; each occupied cell is represented by the mean of its points; a step removes every point in the cells on the boundary of the hull of the remaining cells' representatives. $g = \sqrt{A(P)} / 40$, $/20$ and $/10$ | `strategies.grid_peel` |
+
+**Greedy hull vertex, by rarity and by enclosing circle.**
+
+Let $o(s) = h_P(s)$ be a species' occupancy in the whole sample and
+$w(v) = \sum_{s \in S(v)} 1 / o(s)$ the rarity-weighted richness of a point
+(Williams et al. 1996).
+
+| | Strategy | $r_t$ | Function |
+| --- | --- | --- | --- |
+| A10 | Common species first | minimizes $w(v)$ over $v \in V(Q_t)$ | `strategies.hull_rarity(remove="common")` |
+| A11 | Rare species first | maximizes $w(v)$ | `strategies.hull_rarity(remove="rare")` |
+| A12 | Smallest enclosing circle | among the vertices on the smallest circle enclosing $Q_t$, the one whose removal leaves the smallest such circle; ties by index only | `strategies.circle` |
+
+**With a mask.** For a sample with a mask $M$ (land, say), every area is
+$A_M(Q) = \operatorname{area}(H(Q) \cap M)$; the strategies above are
+unchanged and only their areas differ. Two strategies use $A_M$ in the
+choice itself:
+
+| | Strategy | $r_t$ | Function |
+| --- | --- | --- | --- |
+| M1 | Largest remaining masked area | maximizes $A_M(Q_t \setminus \{v\})$ over $v \in V(Q_t)$ | `strategies.hull_masked_area(keep="largest")` |
+| M2 | Smallest remaining masked area | minimizes it | `strategies.hull_masked_area(keep="smallest")` |
+
+In terms of the kind of area loss (Keil et al. 2015): A1, A4, A12 and the
+peeling strategies remove from the edge inward; A2 and A3 remove from one
+side; A5 keeps a connected region around a seed; and A10 and A11, like S6
+and S7, choose by species and not by geometry.
+
 ## Properties
 
 1. **Nested and monotone.** Every strategy gives $Q_{t+1} \subset Q_t$, so

@@ -88,6 +88,12 @@ its gaps: suited to L-shaped or scattered samples. `ratio` runs from 1 (the
 convex hull, as `strategies.hull_peel`) down towards 0 (tighter). Areas are still
 convex hull areas.
 
+A pair, `ratio=(0.6, 0.1)`, changes the ratio as the sample shrinks, in
+proportion to the points removed: loose while there are many points to
+outline, tighter as they go. shapely's ratio is already relative to the
+spacing of the points left, so a single value is the default; the pair is
+for testing how much a curve depends on it.
+
 ## Choosing a vertex
 
 The next strategies each remove one hull vertex per step, chosen by a rule
@@ -118,6 +124,42 @@ remaining points costs nothing, so species richness falls as late as
 possible. `keep="fewest"` removes first the vertices holding species found
 nowhere else, so richness falls as fast as possible.
 
+### By rarity
+
+`strategies.hull_rarity(sample, remove="common", measure="occupancy", score="sum")`
+removes the vertex whose species are the most common in the sample, so the
+rare species stay to the end and richness falls slowly. `remove="rare"`
+removes the vertex with the rarest species first, which shows how fast a
+shrinking region loses its distinctive species.
+
+A species' rarity is one over how common it is, by `measure`: the number of
+points it occurs at (`"occupancy"`), its observations (`"abundance"`) or the
+area of the convex hull of its own points (`"range"`). A vertex's score
+combines the rarities of the species observed at it: `"sum"` (with
+occupancy, this is rarity-weighted richness, which also favors rich
+vertices), `"mean"` or `"max"`. Commonness is measured once on the whole
+sample, or with `update=True` among the points remaining at each step. A
+species whose points make no hull (one or two points, or a line) has the
+smallest range any species has in the sample.
+
+`hull_species` differs: it asks only whether a vertex holds a species found
+at no other remaining point, so it can't tell a widespread species from a
+scarce one until the scarce one is down to its last point.
+
+With `power`, the vertex is drawn at random with probability proportional to
+its score raised to that power (or the inverse, for `remove="common"`), as
+`hull_weighted` does with isolation: `power=0` is `hull_random`, and `seed`
+makes it reproducible.
+
+### By the smallest enclosing circle
+
+`strategies.circle(sample, min_points=3)` finds the smallest circle around
+the remaining points, which rests on two or three of them (more when
+several lie on it), and removes the one whose loss shrinks the circle most. It trims the sample where it reaches
+farthest, as `radial` does, but toward no fixed center: the circle moves as
+it shrinks, so a sample with a long arm loses the arm first and then closes
+on its bulk.
+
 ### By distance from the center
 
 `strategies.hull_distance(sample, remove="farthest", min_points=3)` removes the
@@ -139,12 +181,74 @@ farthest from a center, so the sample shrinks as concentric discs: the
 point-data analogue of nested circular plots around a focal site. `center` is
 a (longitude, latitude), by default the mean of the projected points.
 
+With `stretch` the discs become ellipses, `stretch` times longer along
+`bearing` (degrees clockwise from grid north) than across it:
+`radial(sample, stretch=2, bearing=0)` keeps, at each step, an ellipse twice
+as long north-south as east-west.
+
+### Band
+
+`strategies.band(sample, bearing=0, center=None, min_points=3)` closes in on
+a line from both sides: each step removes the point farthest from the line
+through `center`, measured along `bearing`. The default keeps a belt of
+latitude that narrows from the north and the south, as a study of a
+latitudinal gradient might. `bearing=90` narrows from the east and the west
+instead, so what remains is a north-south strip: it keeps the sample's
+north-south span, and any gradient along it, as far as the points near the
+line reach.
+
+### Sector
+
+`strategies.sector(sample, start=0, sectors=4, clockwise=True, center=None, min_points=3)`
+removes one compass sector after another, each from its far end inwards.
+With the defaults the north-east quadrant goes first, then the south-east,
+south-west and north-west. Running it from several `start` bearings tests
+whether a curve depends on which side of a region is lost first, as when a
+range retreats toward a pole or upslope.
+
 ### Sweep
 
 `strategies.sweep(sample, bearing=90.0, min_points=3)` removes points in order
 along a bearing (degrees clockwise from grid north), like a front moving
 across the sample: a transect walked from one end, or a range edge retreating.
 With the default of 90°, the westernmost point goes first.
+
+### Elevation
+
+`strategies.elevation(sample, remove="highest", around=None, min_points=3)`
+removes points in order of elevation. `"highest"` works from the summits
+down, so each step keeps everything below a falling contour; `"lowest"`
+works from the valleys up and keeps the high ground, as a climate envelope
+retreating upslope would. `"outer"` removes the point farthest in elevation
+from `around` (by default the median), so each step keeps a narrowing
+elevational band.
+
+The sample needs an elevation in meters at every point: from a column
+(`sources.dataframe(df, elevation_col="elevation")`; `sources.gbif` keeps
+GBIF's, where records have one) or set per point with
+`Sample.with_elevations`. Areas stay planimetric: each step's convex hull on
+the map, not surface area over the terrain.
+
+Records often carry no elevation, or a rough one. `sources.dem_elevations`
+reads each point's from a digital elevation model: Copernicus GLO-30 by
+default (30 m cells, downloaded a tile at a time and cached; `pip install
+'samplesar[elevation]'`), or any raster of your own:
+
+```python
+heights = samplesar.sources.dem_elevations(sample)     # or dem_elevations(sample, "srtm.tif")
+sample = sample.with_elevations(heights)
+nest = samplesar.strategies.elevation(sample, remove="lowest")
+```
+
+### Through time
+
+`strategies.temporal(sample, remove="newest", min_points=3)` removes the most
+recently found point at each step, so the nest runs back through time: each
+step holds the places visited by some date, and the curve shows how the
+sampled area and its species list grew with effort. `"oldest"` removes the
+earliest places first. A point's date is that of its first observation
+(`sources.dataframe(df, date_col="date")`; `sources.inaturalist`,
+`sources.open_data` and `sources.gbif` keep theirs).
 
 ### Density peeling
 
@@ -154,6 +258,11 @@ density first. Each step keeps a superlevel set of that density, so the
 boundary follows where the observations are, not the outermost few, and
 isolated records go first. The default bandwidth uses Scott's rule.
 
+`method="voronoi"` measures density without a bandwidth: a point's density
+is one over the area of its Voronoi cell, the ground nearer to it than to
+any other point, within the sample's hull. The points that each stand for
+the most ground, where effort was thinnest, go first.
+
 ### Growing from a seed
 
 `strategies.grow(sample, seed=None, min_points=3)` grows a region from the
@@ -161,6 +270,63 @@ point nearest `seed` by adding, each time, the point nearest the region
 (Prim's algorithm), and removes points in the reverse of that order. The last
 points left are around the seed, and the region follows dense corridors of
 observations rather than convex shapes.
+
+## Several patches at once
+
+One hull around a sample of separate clusters (two valleys, a chain of
+reserves, an archipelago) spans the empty ground between them, and that
+ground is most of its area. `strategies.split` nests the clusters as
+separate patches instead:
+
+```python
+nest = samplesar.strategies.split(sample, "hull_peel", parts=4)
+nest.to_frame()   # area: the four hulls together; n_parts: parts with points left
+```
+
+It splits the sample into parts, runs the named strategy inside each, and
+joins their steps into one nest. Each step's area is the ground its parts'
+hulls cover together (overlaps counted once, and within the mask if the
+sample has one), so the curve is that of several patches shrinking at once.
+`plot.nest` draws every part's hull, and `evaluate.diagnostics` describes
+them together.
+
+`by` chooses the split, and `strategies.partition(sample, parts, by)` returns
+it on its own, as one label per point:
+
+- `"kmeans"` (the default): k-means clusters of the projected points. Give
+  a `seed`: without one the clusters can differ from run to run.
+- `"grid"`: equal rectangles over the points' bounding box, in the most
+  nearly square layout with at least `parts` cells, or
+  `parts=(columns, rows)`.
+- labels you give, one per point.
+- (longitude, latitude) seeds: each point joins its nearest seed.
+- polygons (shapely, or a GeoSeries or GeoDataFrame): ecoregions, islands,
+  counties.
+
+`pace` sets how the parts shrink together. With `"even"` (the default) each
+part goes at its own pace and all reach their last step together; with
+`"turn"` each part takes one step per round, so parts with few steps finish
+early. A part with no more than `min_points` points stays whole. For one
+curve per part instead of one curve for all, nest each part yourself:
+`strategies.hull_peel(sample.subset(np.flatnonzero(labels == 0)))`.
+
+## Thinning before nesting
+
+Observation data pile up where people go. `sample.thin(km)` keeps one point
+in each occupied grid cell of that size (the one nearest the cell's center,
+or with `seed` a random one), so no neighborhood holds more than its share
+and a nest doesn't spend most of its steps inside one trailhead:
+
+```python
+even = sample.thin(1.0)                      # at most one point per km²
+nest = samplesar.strategies.hull_peel(even)
+```
+
+The points not kept are dropped with their observations, as spatial
+thinning of occurrence records usually is, so species seen only at dropped
+points are lost. The cells start at the sample's own south-west corner, so
+thin the whole sample once, before taking parts of it. To keep every observation and only merge points a few
+meters apart, use `Sample.merge_within`.
 
 ## Comparing strategies
 
@@ -205,6 +371,34 @@ samplesar.evaluate.against_baseline(samplesar.strategies.hull_peel(sample), base
 
 Each parameter gets the nest's value, the baseline's mean, spread and 95%
 range, and a two-sided rank p-value.
+
+## One curve from many random nests
+
+A single random nest is one draw. `evaluate.ensemble` runs many and reads
+each one's species count at the same areas, giving the strategy's expected
+curve and the band a single nest falls in:
+
+```python
+band = samplesar.evaluate.ensemble(sample, "hull_random", n=99)
+ax.fill_between(band["area"], band["q025"], band["q975"], alpha=0.3)
+ax.plot(band["area"], band["mean"])
+```
+
+## How much a fit owes to the points sampled
+
+A deterministic strategy gives one nest per sample. `evaluate.bootstrap`
+draws the sample's points with replacement (each resample holds about 63%
+of them), nests each with the same strategy and fits it, so the spread of the fits shows how sensitive
+the result is to which places happened to be sampled:
+
+```python
+fits = samplesar.evaluate.bootstrap(sample, "hull_peel", n=99)
+fits["z"].quantile([0.025, 0.5, 0.975])
+```
+
+Steps within a nest aren't independent and each resample is smaller than
+the sample, so this spread describes sensitivity; it isn't a confidence
+interval of the usual kind.
 
 ## Adding a strategy
 

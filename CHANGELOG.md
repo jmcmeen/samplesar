@@ -6,6 +6,96 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `strategies.hull_rarity(sample, remove="common")`: removes the hull vertex
+  whose species are the most common in the sample (or, with
+  `remove="rare"`, the rarest), by occupancy, abundance or range size, with
+  the vertex's species combined by sum (rarity-weighted richness), mean or
+  maximum. `update=True` measures commonness among the remaining points, and
+  `power` draws the vertex at random, favoring high scores for
+  `remove="rare"` and low ones for `remove="common"`.
+- `strategies.band(sample, bearing=0)`: closes in on a line from both
+  sides, so each step keeps a band: a belt of latitude by default, or with
+  `bearing=90` a north-south strip, so a gradient along it survives.
+- `strategies.sector(sample, start=0, sectors=4)`: removes one compass
+  sector after another, to test whether a curve depends on which side of a
+  region is lost first.
+- `strategies.radial` takes `stretch` and `bearing`: the discs become
+  ellipses, so what remains is longer in one direction than the other.
+- Samples can carry each observation's elevation and date:
+  `sources.dataframe` and `sources.csv` take `elevation_col` and `date_col`,
+  `sources.gbif` keeps GBIF's elevation and event date, and
+  `sources.inaturalist` and `sources.open_data` the observation date.
+  `Sample.elevations` and `Sample.dates` give them per point (the mean
+  elevation and the first date), `Sample.with_elevations` sets an elevation
+  per point, and saved nests keep both.
+- `strategies.elevation(sample, remove="highest")`: removes points from the
+  summits down, from the valleys up (`"lowest"`), or outside a narrowing
+  elevational band (`"outer"`).
+- `strategies.temporal(sample, remove="newest")`: removes points in order of
+  when they were first observed, so the nest runs back through time.
+- `strategies.split(sample, "hull_peel", parts=4)`: splits the sample into
+  parts (k-means clusters, a grid, your labels, nearest seeds or polygons)
+  and runs a strategy inside each, giving one nest of several patches
+  shrinking at once. `strategies.partition` returns the split alone.
+- Nests can have `parts`: each step's area is then the ground its parts'
+  convex hulls cover together, not one hull around them all. `to_frame`
+  adds `n_parts`, `plot.nest` draws each part's hull, `evaluate.diagnostics`
+  describes them together, and saved nests keep the parts (nest format 5;
+  nests without parts are saved as before). `Nest.groups`, `Nest.footprint`
+  and `Nest.areas_at` give a step's points by part, the ground it covers
+  and its areas.
+- `designs.islands(sample, regions)`: regions as sampling units (states,
+  parks, real islands), one row each with the region's area and the species
+  observed in it, for species-area data of the island type. `Islands` has
+  `to_frame`, `sar_data`, `fit` and `sample_of`; areas are each region's own
+  on the ellipsoid (optionally within a mask), or the hull of its points.
+- `strategies.circle(sample)`: shrinks the sample's smallest enclosing
+  circle as fast as possible, removing at each step the point the circle
+  rests on whose loss shrinks it most.
+- `strategies.density_peel` takes `method="voronoi"`: density as one over
+  the area of each point's Voronoi cell, with no bandwidth to choose.
+- `Sample.thin(km, seed=None)`: thins the sample to at most one point per
+  grid cell, to even out sampling effort before nesting.
+- `strategies.concave_peel` takes `ratio=(start, end)`: the ratio changes
+  as the sample shrinks, in proportion to the points removed.
+- `evaluate.ensemble(sample, strategy, n)`: many seeded nests of a random
+  strategy averaged into one curve, with the band a single nest falls in.
+- `evaluate.bootstrap(sample, strategy, model, n)`: fits to nests of
+  resamples of the sample's points (drawn with replacement; each holds
+  about 63% of them), for how much a deterministic strategy's fit owes to
+  which places were sampled.
+- `sources.simulated(n_points, n_species, seed)`: a made-up landscape of
+  observations with elevations and dates (a ridge, species with home ranges
+  and preferred heights, effort piled around a few places), for examples,
+  teaching and trying strategies without data.
+- Example scripts in `examples/`: a first nest, comparing strategies
+  against a baseline, regions as islands, elevation and time, patches and
+  effort, and real observations from GBIF with a land mask. All but the
+  last run offline in seconds.
+- Example notebooks in the documentation, run in the tests: a first nest,
+  comparing strategies, and regions as islands.
+- `sources.dem_elevations(sample, raster=None)`: each point's elevation
+  from a digital elevation model, for `Sample.with_elevations`: Copernicus
+  GLO-30 by default (tiles downloaded once and cached), or any raster. Needs
+  the new `elevation` extra (rasterio).
+- `regions.admin_units(country, level)` and `regions.read_units(source,
+  column)`: many named regions at once, each as its own polygon.
+
+### Fixed
+
+- Downloads name samplesar and its repository as their client. geoBoundaries now refuses
+  Python's default `User-Agent` with a 403, so `regions.admin` failed for
+  any boundary not already cached.
+
+### Changed
+
+- The README is reorganized around the two designs (nests and regions),
+  with a table of the strategies by how they shrink a sample, how to get
+  observations in, and the examples.
+- sars 0.11.12 or newer is required (was 0.11.5).
+
 ## [0.2.1] - 2026-11-23
 
 ### Added

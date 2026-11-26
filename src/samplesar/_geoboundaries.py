@@ -8,11 +8,14 @@ import logging
 import os
 import re
 import urllib.request
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import shapely
 from shapely.geometry import shape
+
+from samplesar._http import request
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,7 @@ TIMEOUT = 120  # seconds without data before a download fails
 
 
 def _fetch(url: str) -> bytes:
-    with urllib.request.urlopen(url, timeout=TIMEOUT) as response:
+    with urllib.request.urlopen(request(url), timeout=TIMEOUT) as response:
         return response.read()
 
 
@@ -76,6 +79,108 @@ def _features(iso: str, level: int, simplified: bool, cache: Path) -> tuple[list
     if not geo_path.exists():
         logger.info("Downloading %s ADM%d boundaries from geoBoundaries", iso, level)
     return json.loads(_cached(geo_path, meta[key]))["features"], meta
+
+
+def _units(
+    country: str, level: int, simplified: bool, inside: Any, cache_dir: str | Path | None
+) -> tuple[str, list[dict]]:
+    """The country's code and its units at a level (those lying inside a
+    region, if one is given), each with its repaired ``_geometry``."""
+    if not (isinstance(country, str) and re.fullmatch(r"[A-Za-z]{3}", country)):
+        raise ValueError(
+            f"country must be an ISO 3166-1 alpha-3 code such as 'CRI', got {country!r}."
+        )
+    if level not in range(6):
+        raise ValueError(f"level must be 0 to 5, got {level!r}.")
+    iso = country.upper()
+    features, _ = _features(iso, level, simplified, _cache_dir(cache_dir))
+    # Some published rings self-intersect; repair them so unions and tests work.
+    for f in features:
+        f["_geometry"] = shapely.make_valid(shape(f["geometry"]))
+    if inside is not None:
+        from samplesar._boundary import as_geometry
+
+        region = as_geometry(inside)
+        shapely.prepare(region)
+        features = [f for f in features if region.contains(f["_geometry"].representative_point())]
+        if not features:
+            raise ValueError(f"No ADM{level} unit of {iso} lies inside the given region.")
+    return iso, features
+
+
+def _polygons(geometry: Any) -> Any:
+    """A geometry's polygons as one: make_valid can leave stray lines or
+    points beside them."""
+    parts = [
+        g
+        for g in getattr(geometry, "geoms", [geometry])
+        if g.geom_type in ("Polygon", "MultiPolygon")
+    ]
+    return parts[0] if len(parts) == 1 else shapely.union_all(parts)
+
+
+def admin_units(
+    country: str,
+    level: int = 1,
+    *,
+    simplified: bool = False,
+    inside: Any = None,
+    cache_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """Every state, county or district of a country, each as its own polygon.
+
+    For [`designs.islands`][samplesar.designs.islands] and
+    [`strategies.partition`][samplesar.strategies.partition], which take
+    many regions at once; [`admin`][samplesar.regions.admin] returns one.
+    From the same geoBoundaries release, with the same licenses.
+
+    Parameters
+    ----------
+    country : str
+        The country's ISO 3166-1 alpha-3 code, such as ``"USA"``.
+    level : int
+        1 for first-level units (states, provinces), 2 for the next
+        (counties, districts), up to 5 where a country has them.
+    simplified : bool
+        Use geoBoundaries' simplified geometry.
+    inside : polygon, optional
+        Keep only units lying in this region (by a point inside each unit):
+        ``inside=samplesar.regions.admin("USA", 1, "Tennessee")`` with
+        ``level=2`` gives Tennessee's counties.
+    cache_dir : str or Path, optional
+        Where downloads are kept, as in [`admin`][samplesar.regions.admin].
+
+    Returns
+    -------
+    dict of str to shapely.Polygon or shapely.MultiPolygon
+        Each unit's name and outline, in WGS84 longitude and latitude, in
+        the order of the file. Units sharing a name are told apart by their
+        geoBoundaries ID in parentheses.
+
+    Raises
+    ------
+    ValueError
+        If the country code or level is invalid or unavailable, a download
+        fails, or no unit lies ``inside`` the region.
+
+    Examples
+    --------
+    >>> states = samplesar.regions.admin_units("USA")  # doctest: +SKIP
+    >>> tennessee = samplesar.regions.admin("USA", 1, "Tennessee")  # doctest: +SKIP
+    >>> counties = samplesar.regions.admin_units("USA", 2, inside=tennessee)  # doctest: +SKIP
+    """
+    _, features = _units(country, level, simplified, inside, cache_dir)
+    names = [str(f["properties"].get("shapeName") or "") for f in features]
+    shared = {name for name, count in Counter(names).items() if count > 1 or not name}
+    units: dict[str, Any] = {}
+    for position, (f, name) in enumerate(zip(features, names, strict=True)):
+        if name in shared:
+            tag = f["properties"].get("shapeID") or f"unit {position}"
+            name = f"{name} ({tag})".strip()
+        if name in units:  # the same ID twice: still keep both
+            name = f"{name} ({position})"
+        units[name] = _polygons(f["_geometry"])
+    return units
 
 
 def admin(
@@ -140,25 +245,7 @@ def admin(
     >>> tennessee = samplesar.regions.admin("USA", level=1, name="Tennessee")  # doctest: +SKIP
     >>> county = samplesar.regions.admin("USA", 2, "Sullivan", inside=tennessee)  # doctest: +SKIP
     """
-    if not (isinstance(country, str) and re.fullmatch(r"[A-Za-z]{3}", country)):
-        raise ValueError(
-            f"country must be an ISO 3166-1 alpha-3 code such as 'CRI', got {country!r}."
-        )
-    if level not in range(6):
-        raise ValueError(f"level must be 0 to 5, got {level!r}.")
-    iso = country.upper()
-    features, _ = _features(iso, level, simplified, _cache_dir(cache_dir))
-    # Some published rings self-intersect; repair them so unions and tests work.
-    for f in features:
-        f["_geometry"] = shapely.make_valid(shape(f["geometry"]))
-    if inside is not None:
-        from samplesar._boundary import as_geometry
-
-        region = as_geometry(inside)
-        shapely.prepare(region)
-        features = [f for f in features if region.contains(f["_geometry"].representative_point())]
-        if not features:
-            raise ValueError(f"No ADM{level} unit of {iso} lies inside the given region.")
+    iso, features = _units(country, level, simplified, inside, cache_dir)
     if name is not None:
         wanted = name.casefold()
         matches = [
@@ -185,9 +272,4 @@ def admin(
                 "Narrow them with inside=, a boundary of the level above."
             )
         features = matches
-    merged = shapely.union_all([f["_geometry"] for f in features])
-    # make_valid can leave stray lines or points beside the polygons.
-    parts = [
-        g for g in getattr(merged, "geoms", [merged]) if g.geom_type in ("Polygon", "MultiPolygon")
-    ]
-    return parts[0] if len(parts) == 1 else shapely.union_all(parts)
+    return _polygons(shapely.union_all([f["_geometry"] for f in features]))

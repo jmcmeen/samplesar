@@ -38,9 +38,17 @@
 
 ::: samplesar.strategies.hull_species
 
+## strategies.hull_rarity
+
+::: samplesar.strategies.hull_rarity
+
 ## strategies.hull_distance
 
 ::: samplesar.strategies.hull_distance
+
+## strategies.circle
+
+::: samplesar.strategies.circle
 
 ## strategies.concave_peel
 
@@ -50,9 +58,25 @@
 
 ::: samplesar.strategies.radial
 
+## strategies.band
+
+::: samplesar.strategies.band
+
+## strategies.sector
+
+::: samplesar.strategies.sector
+
 ## strategies.sweep
 
 ::: samplesar.strategies.sweep
+
+## strategies.elevation
+
+::: samplesar.strategies.elevation
+
+## strategies.temporal
+
+::: samplesar.strategies.temporal
 
 ## strategies.density_peel
 
@@ -69,6 +93,14 @@
 ## strategies.available
 
 ::: samplesar.strategies.available
+
+## strategies.split
+
+::: samplesar.strategies.split
+
+## strategies.partition
+
+::: samplesar.strategies.partition
 
 ## strategies.register
 

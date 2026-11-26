@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import numbers
 from collections.abc import Callable
 from typing import Literal
 
@@ -9,7 +11,7 @@ import numpy as np
 import shapely
 from shapely.geometry import MultiPoint, Polygon
 
-from samplesar._nest import Nest, check_size
+from samplesar._nest import Nest, NoStepError, check_size
 from samplesar._registry import register
 from samplesar._sample import Sample, point_species
 from samplesar._sample import hull_area as convex_area
@@ -261,7 +263,7 @@ def hull_peel(sample: Sample, min_points: int = 3) -> Nest:
         remaining = inside
         steps.append(remaining.copy())
     if len(steps) == 1:
-        raise ValueError(
+        raise NoStepError(
             f"No layer can be peeled: fewer than {min_points} points lie strictly inside the "
             "sample's convex hull."
         )
@@ -330,7 +332,7 @@ def grid_peel(sample: Sample, cell_km: float, min_points: int = 3) -> Nest:
         remaining = inside
         steps.append(remaining.copy())
     if len(steps) == 1:
-        raise ValueError(
+        raise NoStepError(
             f"No layer of {cell_km} km cells can be peeled: fewer than {min_points} points "
             "lie in cells strictly inside the hull of the occupied cells."
         )
@@ -559,7 +561,9 @@ def hull_distance(
 
 
 @register("concave_peel")
-def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nest:
+def concave_peel(
+    sample: Sample, ratio: float | tuple[float, float] = 0.3, min_points: int = 3
+) -> Nest:
     """Nest a sample by peeling off its concave hull at each step.
 
     Like [`strategies.hull_peel`][samplesar.strategies.hull_peel], but each step removes
@@ -573,9 +577,13 @@ def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nes
     ----------
     sample : Sample
         The sample to nest.
-    ratio : float
+    ratio : float or tuple of float
         Between 0 and 1: 1 is the convex hull (the same as ``strategies.hull_peel``),
-        smaller values follow the outline more tightly.
+        smaller values follow the outline more tightly. A pair
+        ``(start, end)`` changes it as the sample shrinks, in proportion to
+        the points removed: ``(0.6, 0.1)`` peels loosely at first and more
+        tightly as it goes. The ratio would reach ``end`` with ``min_points``
+        left; peeling usually stops a layer or two short of that.
     min_points : int
         Stop rather than leave fewer than this many points.
 
@@ -586,14 +594,21 @@ def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nes
     Raises
     ------
     ValueError
-        If ``ratio`` is outside 0 to 1, ``min_points`` is below 1, the sample
-        has fewer points, or no layer can be peeled.
+        If ``ratio`` (or either end of a pair) isn't a number from 0 to 1,
+        ``min_points`` is below 1, the sample has fewer points, or no layer
+        can be peeled.
     RuntimeError
         If shapely is built on a GEOS older than 3.11 (the PyPI wheels of
         shapely 2.0 and later aren't).
     """
-    if not 0 <= ratio <= 1:
-        raise ValueError(f"ratio must be between 0 and 1, got {ratio!r}.")
+    ends = tuple(ratio) if isinstance(ratio, tuple | list) else (ratio, ratio)
+    if len(ends) != 2 or any(
+        isinstance(v, bool) or not isinstance(v, numbers.Real) or not 0 <= v <= 1 for v in ends
+    ):
+        raise ValueError(
+            f"ratio must be between 0 and 1 (a number, or a (start, end) pair), got {ratio!r}."
+        )
+    start, end = float(ends[0]), float(ends[1])
     if shapely.geos_version < (3, 11):
         raise RuntimeError(
             f"strategies.concave_peel needs GEOS 3.11 or newer for shapely's concave_hull; this "
@@ -604,7 +619,10 @@ def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nes
     remaining = np.arange(sample.n_points)
     steps = [remaining.copy()]
     while True:
-        hull = shapely.concave_hull(MultiPoint(points[remaining]), ratio=ratio)
+        # The share of the points to be removed that already are.
+        done = (sample.n_points - len(remaining)) / max(sample.n_points - min_points, 1)
+        now = start + (end - start) * done
+        hull = shapely.concave_hull(MultiPoint(points[remaining]), ratio=now)
         if isinstance(hull, Polygon):
             distance = shapely.distance(hull.exterior, shapely.points(points[remaining]))
             on = remaining[distance <= _tolerance(hull)]
@@ -616,8 +634,144 @@ def concave_peel(sample: Sample, ratio: float = 0.3, min_points: int = 3) -> Nes
         remaining = inside
         steps.append(remaining.copy())
     if len(steps) == 1:
-        raise ValueError(
+        raise NoStepError(
             f"No layer can be peeled: fewer than {min_points} points lie inside the "
             "sample's concave hull."
         )
     return Nest(sample=sample, steps=tuple(steps))
+
+
+def _circle2(ax: float, ay: float, bx: float, by: float) -> tuple[float, float, float]:
+    """The circle on two points as a diameter: (x, y, radius)."""
+    cx, cy = (ax + bx) / 2.0, (ay + by) / 2.0
+    return cx, cy, math.hypot(ax - cx, ay - cy)
+
+
+def _circle3(
+    ax: float, ay: float, bx: float, by: float, cx: float, cy: float
+) -> tuple[float, float, float]:
+    """The circle through three points: (x, y, radius). Three points in a
+    line (to within rounding) give the circle on the two farthest apart."""
+    d = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    span = max(abs(ax - bx), abs(ax - cx), abs(bx - cx), abs(ay - by), abs(ay - cy), abs(by - cy))
+    if abs(d) <= 1e-12 * span * span or span == 0:
+        pairs = ((ax, ay, bx, by), (bx, by, cx, cy), (ax, ay, cx, cy))
+        return _circle2(*max(pairs, key=lambda q: math.hypot(q[0] - q[2], q[1] - q[3])))
+    a2, b2, c2 = ax * ax + ay * ay, bx * bx + by * by, cx * cx + cy * cy
+    x = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d
+    y = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d
+    return x, y, math.hypot(ax - x, ay - y)
+
+
+def _circle_of(points: np.ndarray) -> tuple[np.ndarray, float]:
+    """The circle through one, two or three points: (center, radius)."""
+    flat = [float(v) for v in np.asarray(points, dtype=float).ravel()]
+    if len(flat) == 2:
+        return np.array(flat), 0.0
+    x, y, radius = _circle2(*flat) if len(flat) == 4 else _circle3(*flat)
+    return np.array([x, y]), radius
+
+
+def enclosing_circle(points: np.ndarray) -> tuple[np.ndarray, float]:
+    """The smallest circle around some points, as (center, radius): Welzl's
+    incremental algorithm, with the points taken in a fixed shuffled order
+    so it runs in about linear time and always gives the same answer. Plain
+    floats throughout: the point sets are hull vertices, a few dozen at
+    most, where array calls would cost more than the arithmetic."""
+    points = np.asarray(points, dtype=float)
+    if len(points) == 0:
+        raise ValueError("No points to enclose.")
+    # Measured from the points' own middle: far from the origin (projected
+    # coordinates run to thousands of km) the circle through three points
+    # loses most of its digits to cancellation.
+    origin = (points.min(axis=0) + points.max(axis=0)) / 2.0
+    order = np.random.default_rng(0).permutation(len(points))
+    p = [(float(x), float(y)) for x, y in points[order] - origin]
+    x, y, r = p[0][0], p[0][1], 0.0
+    for i in range(1, len(p)):
+        ix, iy = p[i]
+        if math.hypot(ix - x, iy - y) <= r * (1.0 + 1e-12):
+            continue
+        x, y, r = ix, iy, 0.0  # p[i] lies on the circle of p[: i + 1]
+        for j in range(i):
+            jx, jy = p[j]
+            if math.hypot(jx - x, jy - y) <= r * (1.0 + 1e-12):
+                continue
+            x, y, r = _circle2(ix, iy, jx, jy)  # and so does p[j]
+            for k in range(j):
+                kx, ky = p[k]
+                if math.hypot(kx - x, ky - y) > r * (1.0 + 1e-12):
+                    x, y, r = _circle3(ix, iy, jx, jy, kx, ky)
+    return np.array([x, y]) + origin, r
+
+
+def _outline(points: np.ndarray, idx: np.ndarray) -> np.ndarray:
+    """Rows of ``idx`` that include every vertex of their convex hull: from
+    qhull, which is fast, or all of them when it can't build a hull (few
+    points, or points in a line)."""
+    if len(idx) < 4:
+        return idx
+    from scipy.spatial import ConvexHull, QhullError
+
+    try:
+        return idx[ConvexHull(points[idx]).vertices]
+    except QhullError:
+        return idx
+
+
+@register("circle")
+def circle(sample: Sample, min_points: int = 3) -> Nest:
+    """Nest a sample by shrinking its smallest enclosing circle as fast as possible.
+
+    At each step the smallest circle around the remaining points is found.
+    It rests on two or three of them (more when several lie on it, or share
+    a position); the one whose removal leaves the smallest circle goes,
+    even when no removal shrinks it. The sample is trimmed where it reaches farthest,
+    like [`radial`][samplesar.strategies.radial], but toward no fixed
+    center: the circle moves as it shrinks, so a sample with a long arm
+    loses the arm first and then closes on its bulk. Ties, to within
+    floating-point rounding, go to the lowest point index. Areas are still
+    convex hull areas. Each step rebuilds a hull for every point the circle
+    rests on, so it is slower than the other vertex strategies on samples
+    of many thousands of points.
+
+    Parameters
+    ----------
+    sample : Sample
+        The sample to nest.
+    min_points : int
+        Stop when this many points remain.
+
+    Returns
+    -------
+    Nest
+
+    Raises
+    ------
+    ValueError
+        If ``min_points`` is below 1 or the sample has fewer points.
+    """
+    points = np.asarray(sample.xy)
+
+    def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
+        # The circle rests on hull vertices only, so they stand for the
+        # rest. Measured about their own middle: in projected coordinates
+        # thousands of km from the origin, a circle a meter across would be
+        # lost in rounding.
+        corners = points[vertices]
+        local = corners - (corners.min(axis=0) + corners.max(axis=0)) / 2.0
+        center, radius = enclosing_circle(local)
+        distance = np.hypot(*(local - center).T)
+        slack = 1e-9 * radius + 1e-12 * float(np.abs(local).max())
+        resting = vertices[distance >= radius - slack]
+        if len(resting) == 1 or len(remaining) <= 2:
+            return int(resting.min())
+        left = []
+        for v in resting:
+            rest = remaining[remaining != v]
+            left.append(enclosing_circle(points[_outline(points, rest)])[1])
+        radii = np.asarray(left)
+        tied = resting[radii <= radii.min() * (1 + 1e-9) + 1e-300]
+        return int(tied.min())
+
+    return _remove_one(sample, min_points, choose)

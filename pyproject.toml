@@ -32,7 +32,7 @@ dependencies = [
   "shapely>=2.0",
   "pyproj>=3.5",
   "scipy>=1.9.2",
-  "sars>=0.11.5",
+  "sars>=0.11.12",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +44,10 @@ dev = [
   "pandas-stubs",
   "geopandas>=0.14",  # sources.geodataframe and regions tests; the geo extra at run time
   "duckdb>=1.1",  # open-data tests; the opendata extra at run time
+  "rasterio>=1.3",  # elevation-model tests; the elevation extra at run time
+  "matplotlib>=3.7",  # plots, the example scripts and notebooks
+  "nbclient>=0.10",  # runs the example notebooks
+  "ipykernel>=6.29",
   "ruff>=0.17,<0.18",  # pinned: minor releases change formatting; upgrade on purpose
 ]
 inat = [
@@ -58,9 +62,13 @@ geo = [
 gbif = [
   "pygbif>=0.6",
 ]
+elevation = [
+  "rasterio>=1.3",
+]
 docs = [
   "mkdocs-material>=9.5",
   "mkdocstrings[python]",
+  "mkdocs-jupyter>=0.25",  # renders the example notebooks
 ]
 
 [project.urls]
@@ -86,6 +94,7 @@ addopts = [
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
   "integration: marks tests as integration tests",
+  "notebook: runs an example notebook end to end",
 ]
 
 [tool.coverage.run]
@@ -98,7 +107,7 @@ warn_redundant_casts = true
 
 [[tool.mypy.overrides]]
 # No type information published for these.
-module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*", "duckdb.*", "scipy.*", "geopandas.*", "pygbif.*"]
+module = ["shapely.*", "sars.*", "pyproj.*", "pyinaturalist.*", "duckdb.*", "scipy.*", "geopandas.*", "pygbif.*", "rasterio.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

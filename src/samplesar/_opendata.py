@@ -14,6 +14,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from samplesar._http import request
+
 logger = logging.getLogger(__name__)
 
 BUCKET_URL = "https://inaturalist-open-data.s3.amazonaws.com"
@@ -34,8 +36,7 @@ def _duckdb() -> Any:
 
 def _remote(url: str) -> tuple[int, str]:
     """The remote file's size and version (its ETag, else Last-Modified)."""
-    request = urllib.request.Request(url, method="HEAD")
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request(url, method="HEAD")) as response:
         length = response.headers.get("Content-Length")
         if length is None:
             raise OSError(f"{url} gave no Content-Length; can't check the download.")
@@ -67,8 +68,7 @@ def _download(url: str, path: Path, retries: int = 5) -> bool:
                 headers["Range"] = f"bytes={have}-"
                 if version:
                     headers["If-Range"] = version  # the whole file if it changed meanwhile
-            request = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(request) as response:
+            with urllib.request.urlopen(request(url, headers=headers)) as response:
                 resumed = have and response.status == 206
                 with path.open("ab" if resumed else "wb") as out:
                     while chunk := response.read(CHUNK):
@@ -225,7 +225,7 @@ def open_data_frame(
     max_accuracy: float | None = None,
 ) -> Any:
     """The rows of the Parquet file matching the filters, as ``species``,
-    ``lon``, ``lat``, with infraspecific taxa named as their species."""
+    ``lon``, ``lat``, ``date``, with infraspecific taxa named as their species."""
     duckdb = _duckdb()
     where: list[str] = []
     params: list[Any] = []
@@ -271,7 +271,7 @@ def open_data_frame(
             CASE WHEN rank IN ('subspecies', 'variety', 'form')
                  THEN array_to_string(string_split(name, ' ')[1:2], ' ')
                  ELSE name END AS species,
-            longitude AS lon, latitude AS lat
+            longitude AS lon, latitude AS lat, CAST(observed_on AS TIMESTAMP) AS date
         FROM read_parquet(?)
         WHERE {" AND ".join(where)}
     """

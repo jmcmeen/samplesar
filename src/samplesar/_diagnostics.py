@@ -6,9 +6,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from shapely.geometry import MultiPoint, Polygon
 
-from samplesar._nest import Nest
+from samplesar._nest import Nest, _cover_areas
 
 
 def diagnostics(nest: Nest) -> pd.DataFrame:
@@ -32,22 +31,24 @@ def diagnostics(nest: Nest) -> pd.DataFrame:
         step's points don't make a polygon. With a mask, also
         ``mask_share``: the share of the step's hull inside the mask. Shape
         columns describe the whole hull; ``area_share`` and ``density`` use
-        ``area``.
+        ``area``. For a nest with parts (see
+        [`strategies.split`][samplesar.strategies.split]) the hull is the
+        parts' hulls together: the perimeter sums their outlines, and the
+        centroid is that of the ground they cover.
     """
     sample = nest.sample
     masked = sample.mask is not None
-    xy = sample.xy
     scale = sample.area_scale
     # A distorting crs stretches lengths by about the root of its areal scale.
     length = float(np.sqrt(scale))
-    first = MultiPoint(xy[nest.steps[0]]).convex_hull
+    first = nest.footprint(0)
     origin = np.asarray(first.centroid.coords[0])
-    area0 = sample.hull_area_of(nest.steps[0]) if isinstance(first, Polygon) else np.nan
+    area0 = _cover_areas(sample, first)[0] if first.area > 0 else np.nan
     rows = []
     for i, idx in enumerate(nest.steps):
-        hull = MultiPoint(xy[idx]).convex_hull
-        polygon = isinstance(hull, Polygon)
-        area = sample.areas_of(idx)[0] if polygon else 0.0
+        hull = nest.footprint(i)
+        polygon = hull.area > 0
+        area = _cover_areas(sample, hull)[0] if polygon else 0.0
         perimeter = hull.length / length if polygon else np.nan
         row = {
             "step": i,

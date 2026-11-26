@@ -17,6 +17,8 @@ from pyproj.exceptions import ProjError
 from shapely.geometry import MultiPoint
 
 COLUMNS = ("species", "lon", "lat")
+# Kept when a frame has them: meters above sea level, and when it was observed.
+OPTIONAL = ("elevation", "date")
 
 
 WGS84 = CRS.from_epsg(4326)
@@ -29,7 +31,18 @@ def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
     missing = [c for c in COLUMNS if c not in df.columns]
     if missing:
         raise KeyError(f"Missing column(s): {missing}. Need {list(COLUMNS)}.")
-    out = df.loc[:, list(COLUMNS)].reset_index(drop=True)
+    extra = [c for c in OPTIONAL if c in df.columns]
+    out = df.loc[:, [*COLUMNS, *extra]].reset_index(drop=True)
+    if "elevation" in extra:
+        try:
+            elevation = pd.to_numeric(out["elevation"]).astype(float)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"elevation must be numeric (meters): {err}") from err
+        if np.isinf(elevation).any():
+            raise ValueError("elevation must be finite or missing.")
+        out["elevation"] = elevation
+    if "date" in extra:
+        out["date"] = _dates(out["date"])
     if len(out) == 0:
         raise ValueError("Sample has no observations")
     if out["species"].isna().any():
@@ -63,6 +76,53 @@ def _validate(df: pd.DataFrame, crs: CRS | None = None) -> pd.DataFrame:
     return out
 
 
+def _one_date(value: Any) -> Any:
+    """One value as a UTC time; NaT when missing or too far from the present
+    for pandas to hold."""
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return pd.NaT
+    if isinstance(value, bool | numbers.Number):
+        raise ValueError(f"{value!r} is a number, not a date")
+    try:
+        return pd.to_datetime(value, utc=True)
+    except pd.errors.OutOfBoundsDatetime:
+        return pd.NaT
+
+
+def _dates(column: pd.Series) -> pd.Series:
+    """A column of dates, times or text as UTC times without a zone, at
+    nanosecond resolution. Text is parsed in one pass when it shares a
+    format, and value by value when it doesn't (a date here, a time with a
+    zone there). Dates pandas can't hold at that resolution (before 1678 or
+    after 2261) become missing. Numbers aren't dates: a column of years
+    would be read as nanoseconds since 1970."""
+    numeric = pd.api.types.is_numeric_dtype(column) or pd.api.types.is_bool_dtype(column)
+    if numeric and not column.isna().all():
+        raise ValueError(
+            "date must hold dates, times or text, not numbers; build dates from a year "
+            "column with pandas.to_datetime(years, format='%Y')."
+        )
+    try:
+        if (
+            column.dtype == object
+            and column.map(lambda v: isinstance(v, bool | numbers.Number) and v == v).any()
+        ):
+            raise ValueError("date holds numbers among its values")
+        with warnings.catch_warnings():  # pandas warns before falling back itself
+            warnings.simplefilter("ignore", UserWarning)
+            when = pd.to_datetime(column, utc=True)
+    except (TypeError, ValueError, OverflowError):
+        try:
+            when = pd.to_datetime(column.map(_one_date), utc=True)
+        except (TypeError, ValueError, OverflowError) as err:
+            raise ValueError(f"date must hold dates or times: {err}") from err
+    when = when.dt.tz_localize(None)
+    try:
+        return when.astype("datetime64[ns]")
+    except (ValueError, OverflowError):  # some lie outside what nanoseconds can hold
+        return when.where(when.dt.year.between(1678, 2261)).astype("datetime64[ns]")
+
+
 @dataclass(frozen=True)
 class Sample:
     """A set of georeferenced species observations.
@@ -75,8 +135,11 @@ class Sample:
     ----------
     data : pd.DataFrame
         One row per observation, with columns ``species`` (str), ``lon`` and
-        ``lat`` (float, decimal degrees). Several observations may share a
-        point. Treat it as read-only: the points and other derived values
+        ``lat`` (float, decimal degrees), and optionally ``elevation``
+        (float, meters above sea level) and ``date`` (when it was observed),
+        either of which may be missing on some rows (the sources parse and
+        check them; a frame passed here directly must already hold floats
+        and ``datetime64[ns]``). Several observations may share a point. Treat it as read-only: the points and other derived values
         are computed once, so build a new sample rather than editing it.
     center : tuple of float, optional
         The (lon, lat) the points are projected about for areas and
@@ -141,6 +204,91 @@ class Sample:
         points = self.data[["lon", "lat"]].drop_duplicates().to_numpy(dtype=float)
         points.flags.writeable = False
         return points
+
+    @cached_property
+    def _point_of_row(self) -> np.ndarray:
+        """The row of ``points`` each observation is at."""
+        keys = pd.MultiIndex.from_frame(self.data[["lon", "lat"]])
+        points = pd.MultiIndex.from_arrays([self.points[:, 0], self.points[:, 1]])
+        return np.asarray(points.get_indexer(keys))
+
+    @cached_property
+    def elevations(self) -> np.ndarray:
+        """Each point's elevation in meters, in the order of
+        [`points`][samplesar.Sample.points]: the mean over its observations
+        that have one, and NaN where none does.
+
+        Raises
+        ------
+        ValueError
+            If the sample has no ``elevation`` column (see
+            [`sources.dataframe`][samplesar.sources.dataframe] and
+            [`with_elevations`][samplesar.Sample.with_elevations]).
+        """
+        if "elevation" not in self.data.columns:
+            raise ValueError(
+                "The sample has no elevations; give sources.dataframe an elevation_col, or "
+                "set them with Sample.with_elevations."
+            )
+        mean = self.data["elevation"].groupby(self._point_of_row).mean()
+        out = mean.reindex(range(self.n_points)).to_numpy(dtype=float)
+        out.flags.writeable = False
+        return out
+
+    @cached_property
+    def dates(self) -> np.ndarray:
+        """Each point's date, in the order of
+        [`points`][samplesar.Sample.points]: when it was first observed
+        (the earliest of its observations' dates), as ``datetime64[ns]``,
+        and NaT where no observation has one.
+
+        Raises
+        ------
+        ValueError
+            If the sample has no ``date`` column (see
+            [`sources.dataframe`][samplesar.sources.dataframe]).
+        """
+        if "date" not in self.data.columns:
+            raise ValueError("The sample has no dates; give sources.dataframe a date_col.")
+        first = self.data["date"].groupby(self._point_of_row).min()
+        out = first.reindex(range(self.n_points)).to_numpy(dtype="datetime64[ns]")
+        out.flags.writeable = False
+        return out
+
+    def with_elevations(self, elevations: Sequence[float] | np.ndarray) -> Sample:
+        """The same sample with an elevation for each point.
+
+        Parameters
+        ----------
+        elevations : sequence of float
+            Meters above sea level, one per row of
+            [`points`][samplesar.Sample.points]; NaN where unknown. Every
+            observation at a point gets its point's value, replacing any
+            elevations the sample had.
+
+        Returns
+        -------
+        Sample
+
+        Raises
+        ------
+        ValueError
+            If there isn't one value per point, or a value is infinite or
+            not a number.
+        """
+        try:
+            values = np.asarray(elevations, dtype=float)
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"elevations must be numbers (meters): {err}") from err
+        if values.shape != (self.n_points,):
+            raise ValueError(
+                f"Need one elevation per point ({self.n_points}), got shape {values.shape}."
+            )
+        if np.isinf(values).any():
+            raise ValueError("elevations must be finite or NaN.")
+        data = self.data.copy()
+        data["elevation"] = values[self._point_of_row]
+        return Sample(data, center=self.center, crs=self.crs, mask=self.mask)
 
     @property
     def n_points(self) -> int:
@@ -418,11 +566,72 @@ class Sample:
                 "smaller distance keeps them nearer.",
                 stacklevel=2,
             )
-        keys = pd.MultiIndex.from_frame(self.data[["lon", "lat"]])
-        rows = pd.MultiIndex.from_arrays([self.points[:, 0], self.points[:, 1]]).get_indexer(keys)
+        rows = self._point_of_row
         data = self.data.copy()
         data["lon"], data["lat"] = target[rows, 0], target[rows, 1]
         return self._derived(data)
+
+    def thin(self, km: float, seed: int | None = None) -> Sample:
+        """Thin the sample to at most one point per grid cell, evening out effort.
+
+        Observation data pile up where people go: a trailhead can hold more
+        points than the rest of a valley. A nest of such a sample spends most
+        of its steps inside the pile. Thinning lays square cells of ``km``
+        over the points (anchored at their south-west corner, on
+        [`xy`][samplesar.Sample.xy]) and keeps one point in each occupied
+        cell, so no neighborhood has more than its share. Unlike
+        [`merge_within`][samplesar.Sample.merge_within], the points not kept
+        are dropped with their observations, as spatial thinning of
+        occurrence records usually is: species seen only at dropped points
+        are lost. The cells start at this sample's own corner, so thinning a
+        part of a sample isn't the same as taking that part of the thinned
+        sample, and thinning twice can drop a few more points.
+
+        Parameters
+        ----------
+        km : float
+            The side of a cell, in km on the ground (positive); with a
+            distorting ``crs`` it is corrected by the projection's scale at
+            the sample's center, as areas are.
+        seed : int, optional
+            Keep a random point of each cell, reproducibly. By default the
+            point nearest its cell's center is kept (ties to the lowest
+            index).
+
+        Returns
+        -------
+        Sample
+            With the same projection and mask as this one.
+
+        Raises
+        ------
+        ValueError
+            If ``km`` isn't a positive number, or is too small for the
+            sample's extent to count cells in.
+        """
+        if isinstance(km, bool) or not isinstance(km, numbers.Real):
+            raise ValueError(f"km must be a positive number, got {km!r}.")
+        km = float(km)
+        if not (np.isfinite(km) and km > 0):
+            raise ValueError(f"km must be a positive number, got {km!r}.")
+        xy = np.asarray(self.xy)
+        corner = xy.min(axis=0)
+        # xy is in the projection's km; a distorting crs stretches lengths by
+        # about the square root of its areal scale.
+        km = km * float(np.sqrt(self.area_scale))
+        if float((xy.max(axis=0) - corner).max()) / km > 2.0**52:
+            raise ValueError(f"km={km:g} is too small for a sample this wide.")
+        ij = np.floor((xy - corner) / km + 1e-9).astype(np.int64)
+        _, cell = np.unique(ij, axis=0, return_inverse=True)
+        cell = np.asarray(cell).ravel()
+        if seed is None:
+            off = xy - (corner + (ij + 0.5) * km)
+            rank = np.hypot(off[:, 0], off[:, 1])
+        else:
+            rank = np.random.default_rng(seed).random(len(xy))
+        order = np.lexsort((np.arange(len(xy)), rank, cell))
+        kept = order[np.unique(cell[order], return_index=True)[1]]
+        return self.subset(np.sort(kept))
 
     def within(self, boundary: Any, mask: bool = False) -> Sample:
         """The observations inside a region (or on its edge).

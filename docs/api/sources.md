@@ -29,3 +29,11 @@
 ## sources.download_open_data
 
 ::: samplesar.sources.download_open_data
+
+## sources.simulated
+
+::: samplesar.sources.simulated
+
+## sources.dem_elevations
+
+::: samplesar.sources.dem_elevations
