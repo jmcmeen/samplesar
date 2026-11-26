@@ -145,8 +145,10 @@ def admin_units(
         (counties, districts), up to 5 where a country has them.
     names : iterable of str, optional
         Only these units, matched without regard to case against each
-        unit's name (``"Alabama"``) or ISO 3166-2 code (``"US-AL"``), and
-        returned in the order asked for. By default every unit.
+        unit's name (``"Alabama"``), ISO 3166-2 code (``"US-AL"``) or
+        geoBoundaries ID, and returned in the order asked for. A name
+        several units share is told apart as this function lists it,
+        ``"Name (ID)"``. By default every unit.
     simplified : bool
         Use geoBoundaries' simplified geometry.
     inside : polygon, optional
@@ -183,7 +185,9 @@ def admin_units(
             names = [names]
         chosen = []
         for wanted in names:
-            key = str(wanted).casefold()
+            key = str(wanted).strip().casefold()
+            if not key:
+                raise ValueError("A unit's name can't be empty.")
             matches = [
                 f
                 for f in features
@@ -191,6 +195,9 @@ def admin_units(
                 in (
                     str(f["properties"].get("shapeName", "")).casefold(),
                     str(f["properties"].get("shapeISO", "")).casefold(),
+                    str(f["properties"].get("shapeID", "")).casefold(),
+                    # As a unit sharing its name is listed: "Name (shapeID)".
+                    f"{f['properties'].get('shapeName', '')} ({f['properties'].get('shapeID')})".casefold(),
                 )
             ]
             if not matches:
@@ -199,9 +206,14 @@ def admin_units(
                 hint = f" Close: {', '.join(close)}." if close else ""
                 raise ValueError(f"No ADM{level} unit of {iso} is named {wanted!r}.{hint}")
             if len(matches) > 1:
+                listed = ", ".join(
+                    f"{f['properties'].get('shapeName')} ({f['properties'].get('shapeID')})"
+                    for f in matches
+                )
                 raise ValueError(
-                    f"{len(matches)} ADM{level} units of {iso} are named {wanted!r}. Narrow "
-                    "them with inside=, a boundary of the level above."
+                    f"{len(matches)} ADM{level} units of {iso} are named {wanted!r}: {listed}. "
+                    "Name the one you want that way, or narrow them with inside=, a boundary "
+                    "of the level above."
                 )
             if matches[0] not in chosen:
                 chosen.append(matches[0])

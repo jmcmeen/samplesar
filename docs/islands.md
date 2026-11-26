@@ -13,7 +13,7 @@ import samplesar
 states = samplesar.regions.admin_units("USA", level=1)      # name -> polygon
 islands = samplesar.designs.islands(sample, states)
 
-islands.to_frame()     # region, area (km²), species, n_points, n_observations
+islands.to_frame()     # region, area (km²), species, n_points, n_observations, source
 islands.fit("power")   # sars fits the regions' areas and species counts
 ```
 
@@ -51,6 +51,8 @@ mapping of name to polygon, so you choose which ones go in and where each
 comes from:
 
 ```python
+import shapely
+
 tennessee = samplesar.regions.admin("USA", 1, "Tennessee")
 
 # A few counties, by name.
@@ -67,12 +69,12 @@ mine = {"Study plot": shapely.box(-83.6, 35.5, -83.4, 35.7)}
 islands = samplesar.designs.islands(
     sample,
     {**counties, **parks, **mine},              # several sources, one design
-    areas={"Shenandoah": 806},                  # use the park's official km², not the outline's
+    known_areas={"Shenandoah": 806},                  # use the park's official km², not the outline's
     units={"Mammoth Cave": (214, 12)},          # a row typed in: km² and species, nothing else
 )
 ```
 
-- **`areas`** replaces a region's measured area with one you know. Its
+- **`known_areas`** replaces a region's measured area with one you know. Its
   species are still counted from the observations inside it.
 - **`units`** adds rows you give outright, from a paper or a checklist: a
   name with its area and species count, as `(km², species)`, as

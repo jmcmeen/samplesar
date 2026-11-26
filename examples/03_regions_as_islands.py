@@ -72,7 +72,7 @@ print(f"\nSaved {out / '03_regions_as_islands.png'}")
 by_hand = samplesar.designs.islands(
     sample,
     {name: parks[name] for name in ("North Fork", "Ridge Top", "Hollow")},  # a subset
-    areas={"Ridge Top": 400.0},  # an official area, in place of the outline's
+    known_areas={"Ridge Top": 400.0},  # an official area, in place of the outline's
     units={"Far Ridge": (1200.0, 14), "Old Mill": (25.0, 3)},  # from a checklist: km², species
 )
 by_hand = by_hand.add({"Cove": parks["Cove"]})  # and one more region, from anywhere

@@ -303,12 +303,12 @@ def islands(
     import matplotlib.pyplot as plt
     from matplotlib.patheffects import withStroke
 
+    sample = islands.sample
+    if sample is None or not islands.regions:
+        raise ValueError("This design has only units given by hand: there is nothing to map.")
     own_axes = ax is None
     if ax is None:
         _, ax = plt.subplots()
-    sample = islands.sample
-    if sample is None:
-        raise ValueError("This design has only units given by hand: there is nothing to map.")
     points = sample.points
     frame = islands.to_frame()
     species = dict(zip(frame["region"], frame["species"].astype(int), strict=True))
@@ -343,7 +343,8 @@ def islands(
             )
     _frame_axes(ax, np.vstack(corners), own_axes)
     observed = sum(1 for name in islands.regions if species[name] > 0)
-    title = f"{len(islands.regions)} regions, {observed} with observations"
+    count = len(islands.regions)
+    title = f"{count} region{'s' if count != 1 else ''}, {observed} with observations"
     if islands.units:
         title += f" ({len(islands.units)} more given by hand, not on the map)"
     ax.set_title(title)

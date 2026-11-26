@@ -315,7 +315,7 @@ def test_a_design_put_together_by_hand():
     made = samplesar.designs.islands(
         observations(),
         {**states, **parks},
-        areas={"big": 150_000},
+        known_areas={"big": 150_000},
         units={"typed": (500_000, 12)},
     )
     table = made.to_frame()
@@ -329,7 +329,9 @@ def test_a_design_put_together_by_hand():
     assert len(made.sar_data()) == 4  # a unit given by hand is always kept
     assert len(made.sar_data(min_observations=41)) == 1
     assert np.isfinite(made.fit("power").params["z"])
-    assert made.names == ["small", "mid", "big", "typed"] and made.label == "islands (4 regions)"
+    assert made.names == ["small", "mid", "big", "typed"]
+    assert made.label == "islands (3 regions, 1 given by hand)"
+    assert list(table.columns)[-2:] == ["region_area", "source"]  # source comes last
 
 
 def test_units_alone_need_no_sample_or_boundaries():
@@ -339,6 +341,7 @@ def test_units_alone_need_no_sample_or_boundaries():
     table = made.to_frame()
     assert table[["area", "species"]].values.tolist() == [[2114, 31], [806, 14], [214, 12]]
     assert table["source"].eq("given").all() and made.sample is None
+    assert made.label == "islands (3 given by hand)"
     fit = made.fit("power")
     import sars
 
@@ -355,6 +358,8 @@ def test_units_alone_need_no_sample_or_boundaries():
         pd.DataFrame({"region": ["a"], "area": [10.0], "species": [3]}),
         pd.DataFrame({"area": [10.0], "species": [3]}, index=["a"]),
         {"a": (10, ["x", "y", "z", "x"])},  # species listed by name
+        {"a": (np.float64(10), np.array(["x", "y", "z"]))},
+        {"a": {"area": 10, "species": pd.Series(["x", "y", "z", "z"])}},
     ],
 )
 def test_units_in_any_of_their_forms(units):
@@ -365,14 +370,20 @@ def test_units_in_any_of_their_forms(units):
 def test_adding_selecting_and_dropping():
     base = samplesar.designs.islands(observations(), {"small": REGIONS["small"]})
     more = base.add({"mid": REGIONS["mid"]}).add([REGIONS["big"]], names=["big"])
-    more = more.add(units={"typed": (9, 1)}, areas={"mid": 50_000})
+    more = more.add(units={"typed": (9, 1)}, known_areas={"mid": 50_000})
     assert more.names == ["small", "mid", "big", "typed"]
     assert more.to_frame()["source"].tolist() == ["measured", "area given", "measured", "given"]
     assert base.names == ["small"]  # adding returns a new design
     picked = more.select(["typed", "big"])
     assert picked.to_frame()["region"].tolist() == ["big", "typed"]
     assert more.drop("mid").names == ["small", "big", "typed"]
-    assert more.drop(["small", "mid", "big"]).sample is None
+    # The sample stays with the design, so regions can be added back to units alone.
+    only_units = more.drop(["small", "mid", "big"])
+    assert only_units.names == ["typed"] and only_units.sample is not None
+    assert only_units.add({"small": REGIONS["small"]}).to_frame()["species"].tolist() == [2, 1]
+    started_from_a_table = samplesar.designs.islands(observations(), units={"typed": (9, 1)})
+    assert started_from_a_table.add(REGIONS).names == ["small", "mid", "big", "typed"]
+    assert more.select(["typed", "big", "small"]).names == ["big", "small", "typed"]
     with pytest.raises(ValueError, match="Already in the design: mid"):
         more.add({"mid": REGIONS["mid"]})
     with pytest.raises(ValueError, match="Already in the design: typed"):
@@ -398,6 +409,8 @@ def test_adding_selecting_and_dropping():
         ({"units": [("a", 10, 3)]}, "units must map"),
         ({"units": pd.DataFrame({"area": [1.0]})}, "columns area and species"),
         ({"units": {"a": ("ten", 3)}}, "must be a number"),
+        ({"units": {"a": (10, None)}}, "species count of unit 'a' is missing"),
+        ({"units": {1: (10, 3), "1": (20, 4)}}, "'1' is given twice"),
     ],
 )
 def test_bad_hand_built_designs(options, match):
@@ -408,10 +421,10 @@ def test_bad_hand_built_designs(options, match):
 @pytest.mark.parametrize(
     ("options", "match"),
     [
-        ({"areas": {"nowhere": 5}}, "areas names no region: nowhere"),
-        ({"areas": {"small": -5}}, "must be positive"),
-        ({"areas": {"small": "big"}}, "must be a number"),
-        ({"areas": [5]}, "areas must map"),
+        ({"known_areas": {"nowhere": 5}}, "known_areas names no region: nowhere"),
+        ({"known_areas": {"small": -5}}, "must be positive"),
+        ({"known_areas": {"small": "big"}}, "must be a number"),
+        ({"known_areas": [5]}, "known_areas must map"),
         ({"units": {"small": (5, 1)}}, "both a region and a unit: small"),
     ],
 )
@@ -431,3 +444,27 @@ def test_a_map_says_which_units_it_cannot_draw():
     assert len(curve.collections[0].get_offsets()) == 4  # the curve has all four
     with pytest.raises(ValueError, match="nothing to map"):
         samplesar.plot.islands(samplesar.designs.islands(units={"a": (1, 1), "b": (2, 2)}))
+
+
+@pytest.mark.parametrize("options", [{"area": "hull"}, {"mask": box(-1, -1, 30, 1)}])
+def test_a_known_area_beside_hulls_or_a_mask(options):
+    made = samplesar.designs.islands(
+        observations(), REGIONS, known_areas={"big": 1234.0}, **options
+    )
+    table = made.to_frame().set_index("region")
+    assert table.loc["big", "area"] == 1234.0 and table.loc["big", "source"] == "area given"
+    assert table.loc["mid", "source"] == "measured"
+    assert table.loc["mid", "area"] < table.loc["mid", "region_area"]
+
+
+def test_a_design_of_units_alone_is_not_a_map():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    before = len(plt.get_fignums())
+    with pytest.raises(ValueError, match="nothing to map"):
+        samplesar.plot.islands(samplesar.designs.islands(observations(), units={"a": (1, 1)}))
+    assert len(plt.get_fignums()) == before  # no empty figure left behind
+    one = samplesar.plot.islands(samplesar.designs.islands(observations(), {"big": REGIONS["big"]}))
+    assert one.get_title() == "1 region, 1 with observations"

@@ -124,7 +124,7 @@ class Islands:
     regions: Mapping[str, Any]
     area: str = "region"
     mask: Any = None
-    areas: Mapping[str, float] = field(default_factory=dict)
+    known_areas: Mapping[str, float] = field(default_factory=dict)
     units: Mapping[str, tuple[float, int]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -135,10 +135,10 @@ class Islands:
         both = sorted(set(self.regions) & set(self.units))
         if both:
             raise ValueError(f"Names must differ; both a region and a unit: {', '.join(both[:5])}.")
-        unknown = sorted(set(self.areas) - set(self.regions))
+        unknown = sorted(set(self.known_areas) - set(self.regions))
         if unknown:
             raise ValueError(
-                f"areas names no region: {', '.join(unknown[:5])}. A unit's area is given with it."
+                f"known_areas names no region: {', '.join(unknown[:5])}. A unit's area is given with it."
             )
         if not self.regions and not self.units:
             raise ValueError("No regions or units given.")
@@ -150,8 +150,14 @@ class Islands:
 
     @property
     def label(self) -> str:
-        """``islands (n regions)``, for plots and tables."""
-        return f"islands ({len(self.names)} regions)"
+        """``islands (n regions)``, with the units given by hand counted
+        apart, for plots and tables."""
+        parts = []
+        if self.regions:
+            parts.append(f"{len(self.regions)} region{'s' if len(self.regions) != 1 else ''}")
+        if self.units:
+            parts.append(f"{len(self.units)} given by hand")
+        return f"islands ({', '.join(parts)})"
 
     def add(
         self,
@@ -159,7 +165,7 @@ class Islands:
         names: Sequence[str] | str | None = None,
         *,
         units: Any = None,
-        areas: Mapping[str, float] | None = None,
+        known_areas: Mapping[str, float] | None = None,
     ) -> Islands:
         """The same design with more regions or units, from any source.
 
@@ -172,7 +178,7 @@ class Islands:
             Their names, as ``designs.islands`` takes them.
         units : mapping or DataFrame, optional
             More units given by hand, as ``designs.islands`` takes them.
-        areas : mapping of str to float, optional
+        known_areas : mapping of str to float, optional
             Areas (km²) to use for regions instead of measuring them, added
             to those already set.
 
@@ -198,12 +204,13 @@ class Islands:
             regions={**self.regions, **more_regions},
             area=self.area,
             mask=self.mask,
-            areas={**self.areas, **_areas(areas)},
+            known_areas={**self.known_areas, **_areas(known_areas)},
             units={**self.units, **more_units},
         )
 
     def select(self, names: Iterable[str]) -> Islands:
-        """The design with only the units named, in the order named.
+        """The design with only the units named: its regions in the order
+        named, then its units given by hand in the order named.
 
         Raises
         ------
@@ -218,11 +225,11 @@ class Islands:
                 f"{', '.join(self.names[:10])}."
             )
         return Islands(
-            sample=self.sample if any(n in self.regions for n in wanted) else None,
+            sample=self.sample,
             regions={n: self.regions[n] for n in wanted if n in self.regions},
             area=self.area,
             mask=self.mask,
-            areas={n: self.areas[n] for n in wanted if n in self.areas},
+            known_areas={n: self.known_areas[n] for n in wanted if n in self.known_areas},
             units={n: self.units[n] for n in wanted if n in self.units},
         )
 
@@ -325,12 +332,12 @@ class Islands:
         if sample is not None and self.regions:
             species, _ = point_species(sample)
             observations = np.bincount(sample._point_of_row, minlength=sample.n_points)
-        extra = self.area == "hull" or self.mask is not None or bool(self.areas)
+        extra = self.area == "hull" or self.mask is not None or bool(self.known_areas)
         for name, region in self.regions.items():
             inside = self._members[name]
             whole = geodesic_area(region)
-            if name in self.areas:
-                area, source = float(self.areas[name]), "area given"
+            if name in self.known_areas:
+                area, source = float(self.known_areas[name]), "area given"
             elif self.area == "hull":
                 area, source = self._hull_area(inside, region), "measured"
             elif self.mask is not None:
@@ -345,10 +352,10 @@ class Islands:
                 "species": len(found),
                 "n_points": len(inside),
                 "n_observations": int(observations[inside].sum()),
-                "source": source,
             }
             if extra:
                 row["region_area"] = whole
+            row["source"] = source
             rows.append(row)
         for name, (area, count) in self.units.items():
             row = {
@@ -357,10 +364,10 @@ class Islands:
                 "species": int(count),
                 "n_points": pd.NA,
                 "n_observations": pd.NA,
-                "source": "given",
             }
             if extra:
                 row["region_area"] = np.nan
+            row["source"] = "given"
             rows.append(row)
         frame = pd.DataFrame(rows)
         if self.units:
@@ -387,8 +394,9 @@ class Islands:
             regions of no area.
         """
         frame = self.to_frame()
-        enough = (frame["n_observations"] >= min_observations).fillna(True).astype(bool)
-        keep = (enough | (frame["source"] == "given")) & (frame["area"] > 0)
+        given = frame["source"] == "given"  # no observations behind them to count
+        enough = frame["n_observations"].where(~given, min_observations) >= min_observations
+        keep = enough.astype(bool) & (frame["area"] > 0)
         return frame.loc[keep, ["area", "species"]].reset_index(drop=True)
 
     def fit(self, model: str = "power", min_observations: int = 1, **kwargs: Any) -> Any:
@@ -432,7 +440,7 @@ def _areas(areas: Any) -> dict[str, float]:
     if areas is None:
         return {}
     if not isinstance(areas, Mapping):
-        raise ValueError(f"areas must map region names to km², got {type(areas).__name__}.")
+        raise ValueError(f"known_areas must map region names to km², got {type(areas).__name__}.")
     out = {}
     for name, value in areas.items():
         if isinstance(value, bool) or not isinstance(value, numbers.Real):
@@ -440,6 +448,8 @@ def _areas(areas: Any) -> dict[str, float]:
         km2 = float(value)
         if not (np.isfinite(km2) and km2 > 0):
             raise ValueError(f"The area of {name!r} must be positive, got {value!r}.")
+        if str(name) in out:
+            raise ValueError(f"Region names must differ as text; {str(name)!r} is given twice.")
         out[str(name)] = km2
     return out
 
@@ -479,9 +489,11 @@ def _units(units: Any) -> dict[str, tuple[float, int]]:
                 raise ValueError(
                     f"Unit {name!r} must be (area in km², species), got {value!r}."
                 ) from None
-        if isinstance(count, list | tuple | set | frozenset):  # a list of species names
-            count = len(set(count))
+        if isinstance(count, list | tuple | set | frozenset | np.ndarray | pd.Series | pd.Index):
+            count = len(set(count))  # species listed by name
         for what, number in (("area", area), ("species count", count)):
+            if number is None or number is pd.NA or number is pd.NaT:
+                raise ValueError(f"The {what} of unit {name!r} is missing.")
             if isinstance(number, bool) or not isinstance(number, numbers.Real):
                 raise ValueError(f"The {what} of unit {name!r} must be a number, got {number!r}.")
         if not (np.isfinite(area) and area > 0):
@@ -490,6 +502,8 @@ def _units(units: Any) -> dict[str, tuple[float, int]]:
             raise ValueError(
                 f"The species count of unit {name!r} must be a whole number, got {count!r}."
             )
+        if str(name) in out:
+            raise ValueError(f"Unit names must differ as text; {str(name)!r} is given twice.")
         out[str(name)] = (float(area), int(count))
     return out
 
@@ -501,7 +515,7 @@ def islands(
     area: Literal["region", "hull"] = "region",
     mask: Any = None,
     *,
-    areas: Mapping[str, float] | None = None,
+    known_areas: Mapping[str, float] | None = None,
     units: Any = None,
 ) -> Islands:
     """Divide a sample among regions, each one a sampling unit.
@@ -518,7 +532,7 @@ def islands(
 
     A design can be put together by hand from several sources. Regions are
     a plain mapping of name to polygon, so mappings from different places
-    combine (``{**counties, **parks}``); ``areas`` replaces a region's
+    combine (``{**counties, **parks}``); ``known_areas`` replaces a region's
     measured area with one you know (a park's official area); and ``units``
     adds rows you give outright, a name with its area and species count,
     with no boundary or observations behind them. The result's
@@ -530,7 +544,8 @@ def islands(
     sample : Sample, optional
         The observations. Those outside every region are ignored; one in
         two overlapping regions counts in both. Not needed for a design of
-        ``units`` only.
+        ``units`` only, though one given then is kept, so regions can be
+        added later.
     regions : mapping, sequence, GeoSeries or GeoDataFrame, optional
         The regions: a mapping of name to shapely polygon in WGS84 (as
         [`regions.admin_units`][samplesar.regions.admin_units] and
@@ -552,7 +567,7 @@ def islands(
         (land, say): a shapely polygon in WGS84, or a GeoDataFrame or
         GeoSeries. The sample's own mask isn't used: it is kept only near
         the sample's points.
-    areas : mapping of str to float, optional
+    known_areas : mapping of str to float, optional
         An area in km² to use for a region instead of measuring it, by the
         region's name. Its species are still counted from the observations.
     units : mapping or DataFrame, optional
@@ -570,7 +585,7 @@ def islands(
     ------
     ValueError
         If neither regions nor units are given, regions are given without a
-        sample, a name is used twice, ``areas`` names no region, an area
+        sample, a name is used twice, ``known_areas`` names no region, an area
         isn't positive or a species count isn't a whole number;
         ``regions`` isn't polygons, is empty, has repeated names or not
         as many names as regions, or a region is empty or unusable;
@@ -596,7 +611,7 @@ def islands(
     >>> islands = samplesar.designs.islands(  # doctest: +SKIP
     ...     sample,
     ...     {**counties, **parks},
-    ...     areas={"Shenandoah": 806},            # its official area
+    ...     known_areas={"Shenandoah": 806},      # its official area
     ...     units={"Mammoth Cave": (214, 12)},    # a row typed in
     ... )
     """
@@ -605,10 +620,10 @@ def islands(
     named = {} if regions is None else _named(regions, names)
     ground = None if mask is None else shapely.make_valid(as_geometry(mask))
     return Islands(
-        sample=sample if named else None,
+        sample=sample,
         regions=named,
         area=area,
         mask=ground,
-        areas=_areas(areas),
+        known_areas=_areas(known_areas),
         units=_units(units),
     )

@@ -143,7 +143,7 @@ choose (states, parks, real islands) as the units instead, one row each:
 ```python
 states = samplesar.regions.admin_units("USA", level=1)   # name -> polygon
 islands = samplesar.designs.islands(sample, states)
-islands.to_frame()     # region, area (km²), species, n_points, n_observations
+islands.to_frame()     # region, area (km²), species, n_points, n_observations, source
 islands.fit("power")
 ```
 
@@ -158,10 +158,10 @@ parks = samplesar.regions.read_units("parks.gpkg", "UNIT_NAME", ["Shenandoah"])
 islands = samplesar.designs.islands(
     sample,
     {**three, **parks},
-    areas={"Shenandoah": 806},            # its official km²
+    known_areas={"Shenandoah": 806},            # its official km²
     units={"Mammoth Cave": (214, 12)},    # km² and species, no boundary needed
 )
-islands = islands.add(more_regions).drop(["Texas"])
+islands = islands.add({"Study plot": my_polygon}).drop(["Texas"])
 ```
 
 ![Eight regions on a map, each with its points and species count, and their species-area curve, one point per region](https://raw.githubusercontent.com/jmcmeen/samplesar/main/docs/assets/islands.webp)

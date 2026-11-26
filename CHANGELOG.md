@@ -80,7 +80,7 @@ All notable changes to this project are documented here. The format is based on
   from a digital elevation model, for `Sample.with_elevations`: Copernicus
   GLO-30 by default (tiles downloaded once and cached), or any raster. Needs
   the new `elevation` extra (rasterio).
-- Island designs can be built by hand. `designs.islands` takes `areas`
+- Island designs can be built by hand. `designs.islands` takes `known_areas`
   (an area to use for a region instead of measuring it) and `units` (rows
   given outright: a name, its area and its species count, with no boundary
   or observations; a design can be units alone). `Islands.add`, `select`

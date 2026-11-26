@@ -192,7 +192,14 @@ def test_units_picked_by_name_in_the_order_asked(fake):
 def test_units_picked_by_a_name_that_is_wrong_or_shared(fake):
     with pytest.raises(ValueError, match="No ADM1 unit of XYZ is named 'Nort'. Close: North"):
         samplesar.regions.admin_units("XYZ", names=["Nort"])
-    with pytest.raises(ValueError, match="2 ADM2 units of XYZ are named 'Hill'"):
+    with pytest.raises(ValueError, match=r"2 ADM2 units of XYZ are named 'Hill': Hill \(d1\)"):
         samplesar.regions.admin_units("XYZ", 2, names=["Hill"])
+    # A shared name is picked as it is listed, or by its ID.
+    assert list(samplesar.regions.admin_units("XYZ", 2, names=["Hill (d2)", "d1"])) == [
+        "Hill (d2)",
+        "Hill (d1)",
+    ]
+    with pytest.raises(ValueError, match="can't be empty"):
+        samplesar.regions.admin_units("XYZ", 2, names=[""])
     with pytest.raises(ValueError, match="No names given"):
         samplesar.regions.admin_units("XYZ", names=[])
