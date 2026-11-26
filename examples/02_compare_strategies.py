@@ -3,15 +3,25 @@
 python examples/02_compare_strategies.py
 """
 
+import argparse
+from pathlib import Path
+
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from _common import output_dir
 
 import samplesar
 
-out = output_dir(__doc__)
+parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+parser.add_argument(
+    "--out",
+    type=Path,
+    default=Path(__file__).resolve().parent / "output",
+    help="folder for figures (default: examples/output)",
+)
+out = parser.parse_args().out
+out.mkdir(parents=True, exist_ok=True)
 sample = samplesar.sources.simulated(n_points=300, seed=2).merge_within(20)
 
 # Every strategy is a function, and can also be run by name.

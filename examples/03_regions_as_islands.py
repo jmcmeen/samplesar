@@ -3,16 +3,26 @@
 python examples/03_regions_as_islands.py
 """
 
+import argparse
+from pathlib import Path
+
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from _common import output_dir
 from shapely.geometry import box
 
 import samplesar
 
-out = output_dir(__doc__)
+parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+parser.add_argument(
+    "--out",
+    type=Path,
+    default=Path(__file__).resolve().parent / "output",
+    help="folder for figures (default: examples/output)",
+)
+out = parser.parse_args().out
+out.mkdir(parents=True, exist_ok=True)
 sample = samplesar.sources.simulated(n_points=1500, seed=3)
 
 # Regions are named polygons in longitude and latitude. Made-up "parks" of

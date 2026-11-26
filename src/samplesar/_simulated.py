@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from samplesar._sample import Sample
+from samplesar._sources import dataframe
 
 EARTH_KM_PER_DEGREE = 111.32
 
@@ -28,7 +29,8 @@ def simulated(
       north-east, about 1,800 m at its crest, above valleys near 300 m.
     - **Species.** Each has a home (a point, a radius of a few to a few tens
       of km) and an elevation it prefers, so richness varies over the
-      square and with height, and some species are rare.
+      square and with height, and some species are rare. A place where no
+      species turned up records the one best suited to it.
     - **Effort.** A share of the points pile up around a few places (a town,
       trailheads), the rest are scattered; the piles were visited first and
       the scattered points later, between 2005 and 2024.
@@ -46,8 +48,8 @@ def simulated(
     center : tuple of float
         The (longitude, latitude) of the square's center.
     clustered : float
-        The share of points piled around a few places, from 0 (evenly
-        scattered) to 1.
+        The share of points piled around a few places, from 0 (all
+        scattered at random) to 1.
 
     Returns
     -------
@@ -57,9 +59,10 @@ def simulated(
     Raises
     ------
     ValueError
-        If ``n_points`` or ``n_species`` is below 1, ``side_km`` isn't
-        positive, ``clustered`` is outside 0 to 1, or ``center`` isn't a
-        longitude and latitude.
+        If ``n_points`` or ``n_species`` isn't a whole number of at least
+        1, ``seed`` isn't a whole number, ``side_km`` isn't positive (or is
+        over 1,000), ``clustered`` is outside 0 to 1, or ``center`` is
+        within 10° of the antimeridian or 15° of a pole.
 
     Examples
     --------
@@ -67,16 +70,20 @@ def simulated(
     >>> sample.n_points
     600
     """
-    if n_points < 1 or n_species < 1:
-        raise ValueError("n_points and n_species must be at least 1.")
-    if not (np.isfinite(side_km) and side_km > 0):
-        raise ValueError(f"side_km must be positive, got {side_km}.")
+    for name, count in (("n_points", n_points), ("n_species", n_species)):
+        if isinstance(count, bool) or not isinstance(count, int | np.integer) or count < 1:
+            raise ValueError(f"{name} must be a whole number of at least 1, got {count!r}.")
+    if isinstance(seed, bool) or not isinstance(seed, int | np.integer):
+        raise ValueError(f"seed must be a whole number, got {seed!r}.")
+    if not (np.isfinite(side_km) and 0 < side_km <= 1000):
+        raise ValueError(f"side_km must be positive and at most 1,000, got {side_km}.")
     if not 0 <= clustered <= 1:
         raise ValueError(f"clustered must be between 0 and 1, got {clustered}.")
     lon0, lat0 = (float(v) for v in center)
-    if not (-180 <= lon0 <= 180 and -85 <= lat0 <= 85):
+    if not (-170 <= lon0 <= 170 and -75 <= lat0 <= 75):
         raise ValueError(
-            f"center must be a (longitude, latitude) within 85° of the equator, got {center}."
+            "center must be a (longitude, latitude) within 170° of the prime meridian and "
+            f"75° of the equator, got {center}."
         )
     rng = np.random.default_rng(seed)
     half = side_km / 2.0
@@ -110,9 +117,12 @@ def simulated(
     suited = np.exp(-(((elevation[:, None] - prefers[None, :]) / tolerance[None, :]) ** 2))
     chance = 0.9 * suited * (distance <= reach[None, :])
     seen = rng.random((n_points, n_species)) < chance
-    # Every place has at least one record: the species most likely there.
+    # Every place has at least one record: the species best suited to it
+    # among those whose range reaches it, or of them all where none does.
     empty = ~seen.any(axis=1)
-    seen[empty, np.argmax(suited[empty] / (1.0 + distance[empty]), axis=1)] = True
+    within = distance[empty] <= reach[None, :]
+    reachable = np.where(within.any(axis=1, keepdims=True), within, True)
+    seen[empty, np.argmax(np.where(reachable, suited[empty], -1.0), axis=1)] = True
 
     place, species = np.nonzero(seen)
     lat = lat0 + xy[:, 1] / EARTH_KM_PER_DEGREE
@@ -127,6 +137,4 @@ def simulated(
             "date": (start + day.astype("timedelta64[D]"))[place].astype("datetime64[ns]"),
         }
     )
-    from samplesar._sources import dataframe
-
     return dataframe(frame, elevation_col="elevation", date_col="date")

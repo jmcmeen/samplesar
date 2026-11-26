@@ -3,15 +3,25 @@
 python examples/05_patches_and_effort.py
 """
 
+import argparse
+from pathlib import Path
+
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from _common import output_dir
 
 import samplesar
 
-out = output_dir(__doc__)
+parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+parser.add_argument(
+    "--out",
+    type=Path,
+    default=Path(__file__).resolve().parent / "output",
+    help="folder for figures (default: examples/output)",
+)
+out = parser.parse_args().out
+out.mkdir(parents=True, exist_ok=True)
 
 # Most points piled around a few places, as observation data are.
 sample = samplesar.sources.simulated(n_points=500, clustered=0.9, seed=5).merge_within(20)

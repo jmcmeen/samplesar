@@ -3,15 +3,25 @@
 python examples/01_first_nest.py
 """
 
+import argparse
+from pathlib import Path
+
 import matplotlib
 
 matplotlib.use("Agg")  # save figures without opening a window
 import matplotlib.pyplot as plt
-from _common import output_dir
 
 import samplesar
 
-out = output_dir(__doc__)
+parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+parser.add_argument(
+    "--out",
+    type=Path,
+    default=Path(__file__).resolve().parent / "output",
+    help="folder for figures (default: examples/output)",
+)
+out = parser.parse_args().out
+out.mkdir(parents=True, exist_ok=True)
 
 # 1. Observations. A made-up landscape here; for your own data use
 #    samplesar.sources.csv("observations.csv"), with columns species, lon, lat.

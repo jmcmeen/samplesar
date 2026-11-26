@@ -64,9 +64,26 @@ def test_it_nests_by_every_kind_of_strategy():
         {"side_km": 0},
         {"clustered": 1.5},
         {"center": (0.0, 89.0)},
-        {"center": (200.0, 0.0)},
+        {"center": (179.5, 0.0)},
+        {"n_points": 10.5},
+        {"n_points": float("nan")},
+        {"seed": None},
+        {"side_km": 5000},
     ],
 )
 def test_bad_arguments(options):
     with pytest.raises(ValueError):
         samplesar.sources.simulated(**options)
+
+
+def test_the_default_landscape_is_pinned():
+    # The examples and notebooks quote these: a change here means re-running them.
+    sample = samplesar.sources.simulated(seed=1)
+    assert (sample.n_points, sample.n_species, sample.n_observations) == (600, 49, 1023)
+    fit = samplesar.strategies.hull_peel(sample.merge_within(20)).fit("power")
+    assert fit.params["z"] == pytest.approx(0.465, abs=0.003)
+
+
+def test_a_place_with_no_luck_records_a_species_whose_range_reaches_it():
+    sample = samplesar.sources.simulated(n_points=400, n_species=8, seed=3)
+    assert sample.n_points == 400  # every place has a record

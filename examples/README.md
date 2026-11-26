@@ -1,15 +1,17 @@
 # Examples
 
 Short scripts, each doing one job from observations to a table and a
-figure. Run any of them from the repository's root:
+figure. Each stands alone: download one, or clone the repository, and run
+it with samplesar installed:
 
 ```sh
-pip install samplesar matplotlib
-python examples/01_first_nest.py
+pip install samplesar
+git clone https://github.com/jmcmeen/samplesar.git
+python samplesar/examples/01_first_nest.py
 ```
 
-Each prints its table and saves its figure under `examples/output/` (or
-the folder given with `--out`). They run offline on
+Each prints its table and saves its figure in an `output` folder beside
+the script (or the folder given with `--out`). They run offline on
 `samplesar.sources.simulated()`, a made-up landscape of observations with
 elevations and dates, so they finish in seconds; each one says where to
 put your own data instead.

@@ -3,15 +3,25 @@
 python examples/04_elevation_and_time.py
 """
 
+import argparse
+from pathlib import Path
+
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from _common import output_dir
 
 import samplesar
 
-out = output_dir(__doc__)
+parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+parser.add_argument(
+    "--out",
+    type=Path,
+    default=Path(__file__).resolve().parent / "output",
+    help="folder for figures (default: examples/output)",
+)
+out = parser.parse_args().out
+out.mkdir(parents=True, exist_ok=True)
 
 # The simulated observations carry an elevation (m) and a date. For your
 # own table, name the columns:

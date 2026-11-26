@@ -2,7 +2,7 @@
 
 This one needs the network and the optional sources:
 
-    pip install 'samplesar[gbif,inat]' matplotlib
+    pip install 'samplesar[gbif,inat]'
     python examples/06_real_observations.py --country CRI --taxon-key 952
 
 Records are fetched from GBIF (taxon 952 is the frogs, Anura), restricted to
@@ -39,8 +39,7 @@ country = samplesar.regions.admin(args.country)
 # Records inside it. boundary= keeps only those within the outline.
 sample = samplesar.sources.gbif(
     taxonKey=args.taxon_key,
-    country=None,
-    boundary=country,
+    boundary=country,  # the query is narrowed to its bounding box, then cut to the outline
     max_results=args.max_results,
     max_uncertainty=1000,  # coordinates good to a km
 )
