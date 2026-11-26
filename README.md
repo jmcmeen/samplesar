@@ -31,8 +31,7 @@ Documentation: <https://jmcmeen.github.io/samplesar/>
 pip install samplesar
 ```
 
-Plots need matplotlib (`pip install matplotlib`). Optional extras add data
-sources:
+Optional extras add data sources:
 
 | Extra | For |
 | --- | --- |
@@ -47,8 +46,9 @@ No data needed: `sources.simulated` makes up a landscape of observations
 (a ridge, species with home ranges, visits piled around a few places, with
 elevations and dates) that everything below runs on.
 
-- [Example scripts](examples/): six short scripts, each from observations
-  to a table and a figure. `python examples/01_first_nest.py`
+- [Example scripts](https://github.com/jmcmeen/samplesar/tree/main/examples):
+  six short scripts, each from observations to a table and a figure. Each
+  stands alone: download one and run it.
 - Notebooks in the documentation:
   [a first nest](https://jmcmeen.github.io/samplesar/examples/first_nest/),
   [comparing strategies](https://jmcmeen.github.io/samplesar/examples/strategies/) and
@@ -79,7 +79,8 @@ Then, before nesting:
 - `Sample.within(region)` keeps the observations inside a region.
   `samplesar.regions` gives regions: countries, states and counties from
   geoBoundaries (`admin`), US EPA and RESOLVE ecoregions (`ecoregion`), or
-  any boundary file or URL (`read`).
+  any boundary file or URL (`read`). `admin_units` and `read_units` give
+  many named regions at once.
 - `Sample.merge_within(meters)` merges records made at one spot (a
   trailhead, a feeder) that differ only by GPS jitter. Left apart, they make
   the last steps of a hull nest measure hulls centimeters across.
@@ -91,16 +92,17 @@ Then, before nesting:
 ## Strategies
 
 Each strategy is one function in `samplesar.strategies`, also callable by
-name through `strategies.run(sample, "hull_peel")`.
+name through `strategies.run(sample, "hull_peel")`;
+`strategies.available()` lists the names.
 
 | How it shrinks the sample | Strategies |
 | --- | --- |
-| **At random** (baselines) | `random`: any point. `hull_random`: a hull vertex. `hull_weighted`: a hull vertex, favoring isolated ones. `from_order`: an order you give |
+| **At random** (baselines) | `random`: any point. `hull_random`: a hull vertex. `hull_weighted`: a hull vertex, favoring isolated ones. `from_order` (by name, `"order"`): an order you give |
 | **A layer at a time** | `hull_peel`: the whole convex hull. `concave_peel`: a concave hull that follows the outline. `grid_peel`: the hull of occupied grid cells |
 | **The hull vertex that...** | `hull_area`: changes the area least or most (`hull_masked_area`: within a mask). `hull_species`: loses the fewest or most species. `hull_rarity`: holds the most common, or the rarest, species. `hull_distance`: is farthest from or nearest to the center. `circle`: shrinks the smallest enclosing circle most |
 | **By position**, ranked once | `radial`: farthest from a center first (discs or ellipses). `sweep`: a front moving across. `band`: closing in on a line from both sides. `sector`: one compass sector after another. `density_peel`: sparsest first. `grow`: outward from a seed, reversed |
 | **By elevation or date** | `elevation`: from the summits down, the valleys up, or toward a band. `temporal`: back through time |
-| **As several patches** | `split`: divide the sample into parts (clusters, a grid, your polygons) and run any strategy inside each; areas are the parts' hulls together |
+| **As several patches** | `split`: divide the sample into parts (clusters, a grid, your polygons) and run any strategy inside each; areas are the parts' hulls together (`partition` gives the parts alone) |
 
 [Sampling strategies](https://jmcmeen.github.io/samplesar/strategies/)
 describes each one.
@@ -169,6 +171,6 @@ with its power fit (`curve`), and the whole nest as an animation
 
 ```sh
 make install   # create .venv with dev tooling
-make check     # lint, format check, type check, tests
+make check     # lint, format check, type check, tests, docs build
 make docs      # build the documentation site
 ```
