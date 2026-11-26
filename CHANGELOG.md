@@ -76,6 +76,10 @@ All notable changes to this project are documented here. The format is based on
   last run offline in seconds.
 - Example notebooks in the documentation, run in the tests: a first nest,
   comparing strategies, and regions as islands.
+- `sources.dem_elevations(sample, raster=None)`: each point's elevation
+  from a digital elevation model, for `Sample.with_elevations`: Copernicus
+  GLO-30 by default (tiles downloaded once and cached), or any raster. Needs
+  the new `elevation` extra (rasterio).
 - `regions.admin_units(country, level)` and `regions.read_units(source,
   column)`: many named regions at once, each as its own polygon.
 

@@ -39,6 +39,7 @@ Optional extras add data sources:
 | `samplesar[opendata]` | `sources.open_data`: iNaturalist's open-data export, read from a local copy |
 | `samplesar[gbif]` | `sources.gbif`: occurrences from GBIF |
 | `samplesar[geo]` | `regions.read`, `regions.read_units` and `regions.ecoregion`: regions from boundary files |
+| `samplesar[elevation]` | `sources.dem_elevations`: each point's elevation from Copernicus GLO-30 or your own raster |
 
 ## Try it
 
@@ -87,7 +88,8 @@ Then, before nesting:
 - `Sample.thin(km)` keeps one point per grid cell, so a pile of records in
   one place counts once.
 - Elevations and dates come along when a source has them (GBIF,
-  iNaturalist) or you name the columns (`elevation_col`, `date_col`).
+  iNaturalist) or you name the columns (`elevation_col`, `date_col`);
+  `sources.dem_elevations` looks elevations up from an elevation model.
 
 ## Strategies
 

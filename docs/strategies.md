@@ -229,6 +229,17 @@ GBIF's, where records have one) or set per point with
 `Sample.with_elevations`. Areas stay planimetric: each step's convex hull on
 the map, not surface area over the terrain.
 
+Records often carry no elevation, or a rough one. `sources.dem_elevations`
+reads each point's from a digital elevation model: Copernicus GLO-30 by
+default (30 m cells, downloaded a tile at a time and cached; `pip install
+'samplesar[elevation]'`), or any raster of your own:
+
+```python
+heights = samplesar.sources.dem_elevations(sample)     # or dem_elevations(sample, "srtm.tif")
+sample = sample.with_elevations(heights)
+nest = samplesar.strategies.elevation(sample, remove="lowest")
+```
+
 ### Through time
 
 `strategies.temporal(sample, remove="newest", min_points=3)` removes the most
