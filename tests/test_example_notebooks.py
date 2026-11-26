@@ -63,7 +63,27 @@ def test_example_notebook_is_committed_executed_and_runs(path, kernel_dir):
     # NotebookClient leaves a kernel manager it was handed running when the run ends; have
     # it shut the kernel down and close its channels as soon as the notebook finishes or fails.
     try:
-        client.execute(cleanup_kc=True)  # raises CellExecutionError on the first failing cell
+        fresh = client.execute(cleanup_kc=True)  # raises CellExecutionError on a failing cell
     finally:
         if km.has_kernel:
             km.shutdown_kernel(now=True)
+    # The stored outputs are what the docs show: they must be what the code gives now.
+    for before, after in zip(code_cells, _code_cells(fresh), strict=True):
+        assert _text(before) == _text(after), (
+            f"stale output in {path.name}; re-run and commit it:\n{before.source}"
+        )
+
+
+def _code_cells(notebook):
+    return [c for c in notebook.cells if c.cell_type == "code"]
+
+
+def _text(cell):
+    """A cell's printed and returned text (not its images, whose bytes vary by platform)."""
+    parts = []
+    for output in cell.outputs:
+        if output.output_type == "stream":
+            parts.append(output.text)
+        elif "text/plain" in output.get("data", {}) and "image/png" not in output.data:
+            parts.append(output.data["text/plain"])
+    return "".join(parts)
