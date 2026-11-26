@@ -8,13 +8,27 @@ import samplesar
 from samplesar import _elevation
 from samplesar._elevation import glo30_tile
 
-rasterio = pytest.importorskip("rasterio")
-from rasterio.transform import from_origin  # noqa: E402
 
+def write_raster(
+    path,
+    west,
+    north,
+    cell,
+    values,
+    crs="EPSG:4326",
+    nodata=-9999.0,
+    dtype="float32",
+    south_up=False,
+):
+    """A raster whose top-left corner is (west, north); south-up, its first
+    row is the southernmost."""
+    rasterio = pytest.importorskip("rasterio")
+    from rasterio.transform import Affine, from_origin
 
-def write_raster(path, west, north, cell, values, crs="EPSG:4326", nodata=-9999.0):
-    """A north-up raster whose top-left corner is (west, north)."""
-    values = np.asarray(values, dtype="float32")
+    values = np.asarray(values, dtype=dtype)
+    transform = from_origin(west, north, cell, cell)
+    if south_up:
+        transform = Affine(cell, 0, west, 0, cell, north - cell * values.shape[0])
     with rasterio.open(
         path,
         "w",
@@ -22,9 +36,9 @@ def write_raster(path, west, north, cell, values, crs="EPSG:4326", nodata=-9999.
         height=values.shape[0],
         width=values.shape[1],
         count=1,
-        dtype="float32",
+        dtype=dtype,
         crs=crs,
-        transform=from_origin(west, north, cell, cell),
+        transform=transform,
         nodata=nodata,
     ) as out:
         out.write(values, 1)
@@ -41,6 +55,8 @@ def test_tile_names_by_south_west_corner():
     assert glo30_tile(10.2, -0.5) == "Copernicus_DSM_COG_10_S01_00_E010_00_DEM"
     assert glo30_tile(-0.1, 0.0) == "Copernicus_DSM_COG_10_N00_00_W001_00_DEM"
     assert glo30_tile(179.9, 59.99) == "Copernicus_DSM_COG_10_N59_00_E179_00_DEM"
+    assert glo30_tile(180.0, 10.5) == "Copernicus_DSM_COG_10_N10_00_E179_00_DEM"
+    assert glo30_tile(-180.0, -10.5) == "Copernicus_DSM_COG_10_S11_00_W180_00_DEM"
 
 
 def test_elevations_from_a_raster_in_degrees(tmp_path):
@@ -78,6 +94,15 @@ def test_a_raster_in_another_coordinate_system(tmp_path):
     assert samplesar.sources.dem_elevations(sample, path).tolist() == [0.0, 4.0, 9.0]
 
 
+def not_found(url):
+    """The error a missing tile gives: _fetch_to's, caused by an HTTP 404."""
+    import urllib.error
+
+    err = ValueError(f"Couldn't download {url}: HTTP Error 404: Not Found")
+    err.__cause__ = urllib.error.HTTPError(url, 404, "Not Found", None, None)
+    return err
+
+
 def test_the_default_model_downloads_each_tile_once(tmp_path, monkeypatch):
     fetched = []
 
@@ -85,7 +110,7 @@ def test_the_default_model_downloads_each_tile_once(tmp_path, monkeypatch):
         fetched.append(url)
         name = url.rsplit("/", 1)[-1]
         if "N35" not in name:  # only one tile has land
-            raise ValueError(f"Couldn't download {url}: HTTP Error 404: Not Found")
+            raise not_found(url)
         write_raster(path, -84.0, 36.0, 0.5, [[1.0, 2.0], [3.0, 4.0]])
 
     monkeypatch.setattr(_elevation, "_fetch_to", fetch)
@@ -137,3 +162,82 @@ def test_without_rasterio(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", no_rasterio)
     with pytest.raises(ImportError, match=r"samplesar\[elevation\]"):
         samplesar.sources.dem_elevations(sample_at([(1.5, 1.5)]))
+
+
+def test_a_server_error_is_not_remembered_as_sea(tmp_path, monkeypatch):
+    import urllib.error
+
+    def fetch(url, path):
+        err = ValueError(f"Couldn't download {url}: HTTP Error 503 (ticket 404)")
+        err.__cause__ = urllib.error.HTTPError(url, 503, "Unavailable", None, None)
+        raise err
+
+    monkeypatch.setattr(_elevation, "_fetch_to", fetch)
+    with pytest.raises(ValueError, match="503"):
+        samplesar.sources.dem_elevations(sample_at([(1.5, 1.5)]), cache_dir=tmp_path)
+    assert not list(tmp_path.glob("*.none"))
+
+
+def glo30_like(path, south, west, value):
+    """A tile laid out as GLO-30's are: half a cell north-west of its whole degrees."""
+    cell = 1.0 / 20.0
+    grid = np.full((20, 20), float(value))
+    write_raster(path, west - cell / 2, south + 1 + cell / 2, cell, grid, nodata=None)
+
+
+def test_points_within_half_a_cell_of_a_tile_edge_read_the_next_tile(tmp_path, monkeypatch):
+    def fetch(url, path):
+        name = url.rsplit("/", 1)[-1]
+        south = int(name.split("_N")[1][:2])
+        west = -int(name.split("_W")[1][:3])
+        if (south, west) not in {(35, -84), (34, -84), (35, -83), (34, -83)}:
+            raise not_found(url)
+        glo30_like(path, south, west, 1000 * south + abs(west))
+
+    monkeypatch.setattr(_elevation, "_fetch_to", fetch)
+    points = [
+        (-83.5, 35.5),  # well inside N35 W084
+        (-83.5, 35.0001),  # by whole degrees N35, but below that tile's south edge
+        (-83.0001, 35.5),  # by whole degrees W084, but east of that tile's east edge
+        (-83.0001, 35.0001),  # both
+    ]
+    heights = samplesar.sources.dem_elevations(sample_at(points), cache_dir=tmp_path)
+    assert heights.tolist() == [35084.0, 34084.0, 35083.0, 34083.0]
+
+
+def test_a_south_up_raster_and_whole_numbers(tmp_path):
+    grid = np.array([[1, 2], [3, 4]])  # first row is the southern one
+    path = write_raster(
+        tmp_path / "south_up.tif", 10.0, 52.0, 1.0, grid, nodata=-1, dtype="int16", south_up=True
+    )
+    sample = sample_at([(10.5, 50.5), (11.5, 50.5), (10.5, 51.5), (11.5, 51.5)])
+    assert samplesar.sources.dem_elevations(sample, path).tolist() == [1.0, 2.0, 3.0, 4.0]
+
+
+def test_a_raster_without_nodata_or_a_crs(tmp_path):
+    path = write_raster(tmp_path / "plain.tif", 0.0, 1.0, 1.0, [[-9999.0]], nodata=None)
+    assert samplesar.sources.dem_elevations(sample_at([(0.5, 0.5)]), path).tolist() == [-9999.0]
+    bare = write_raster(tmp_path / "bare.tif", 0.0, 1.0, 1.0, [[5.0]], crs=None)
+    with pytest.raises(ValueError, match="no coordinate reference system"):
+        samplesar.sources.dem_elevations(sample_at([(0.5, 0.5)]), bare)
+
+
+def test_a_large_raster_is_read_point_by_point(tmp_path, monkeypatch):
+    grid = 100 * np.arange(4)[:, None] + np.arange(4)[None, :]
+    path = write_raster(tmp_path / "dem.tif", 10.0, 51.0, 0.25, grid)
+    sample = sample_at([(10.1, 50.9), (10.9, 50.1), (20.0, 20.0)])
+    whole = samplesar.sources.dem_elevations(sample, path)
+    monkeypatch.setattr(_elevation, "WHOLE", 4)
+    by_point = samplesar.sources.dem_elevations(sample, path)
+    assert np.array_equal(whole, by_point, equal_nan=True)
+    assert whole[:2].tolist() == [0.0, 303.0] and np.isnan(whole[2])
+
+
+def test_a_damaged_cached_tile_is_removed(tmp_path, monkeypatch):
+    def fetch(url, path):
+        path.write_text("half a download")
+
+    monkeypatch.setattr(_elevation, "_fetch_to", fetch)
+    with pytest.raises(ValueError, match="removed from the cache"):
+        samplesar.sources.dem_elevations(sample_at([(1.5, 1.5)]), cache_dir=tmp_path)
+    assert not list(tmp_path.glob("*.tif"))

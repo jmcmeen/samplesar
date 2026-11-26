@@ -6,6 +6,7 @@ import hashlib
 import logging
 import os
 import urllib.request
+import uuid
 import zipfile
 from collections.abc import Iterable
 from pathlib import Path
@@ -58,7 +59,8 @@ def cache_root(given: str | Path | None, subdir: str) -> Path:
 def _fetch_to(url: str, path: Path) -> None:
     """Download ``url`` to ``path`` through a temporary file, so an
     interrupted download leaves nothing behind."""
-    partial = path.with_name(path.name + ".partial")
+    # A name of its own, so two processes fetching one file don't write over each other.
+    partial = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.partial")
     try:
         with (
             urllib.request.urlopen(request(url), timeout=TIMEOUT) as response,

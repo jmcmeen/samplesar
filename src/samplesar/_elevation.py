@@ -20,9 +20,12 @@ GLO30 = "https://copernicus-dem-30m.s3.amazonaws.com/{name}/{name}.tif"
 
 
 def glo30_tile(lon: float, lat: float) -> str:
-    """The name of the Copernicus GLO-30 tile holding a point: the one whose
-    south-west corner is the whole degrees at or below it."""
-    south, west = math.floor(lat), math.floor(lon)
+    """The name of the Copernicus GLO-30 tile for a point: the one whose
+    south-west corner is the whole degrees at or below it (the 180th
+    meridian belongs to the tile west of it)."""
+    south, west = min(math.floor(lat), 89), math.floor(lon)
+    if west >= 180:
+        west = 179
     ns = f"{'N' if south >= 0 else 'S'}{abs(south):02d}"
     ew = f"{'E' if west >= 0 else 'W'}{abs(west):03d}"
     return f"Copernicus_DSM_COG_10_{ns}_00_{ew}_00_DEM"
@@ -38,27 +41,70 @@ def _rasterio() -> Any:
     return rasterio
 
 
+WHOLE = 60_000_000  # cells: a raster up to this size is read whole, a larger one point by point
+
+
 def _read(path: Path | str, lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
     """The raster's first band at some (lon, lat) points, as floats: NaN at
-    its nodata value and outside its extent."""
+    its nodata value and outside it."""
     rasterio = _rasterio()
-    from pyproj import Transformer
+    from pyproj import CRS, Transformer
+    from rasterio.transform import rowcol
 
     with rasterio.open(path) as raster:
-        x, y = lon, lat
-        if raster.crs is not None and raster.crs.to_wkt() != WGS84.to_wkt():
-            to_raster = Transformer.from_crs(WGS84, raster.crs.to_wkt(), always_xy=True)
-            x, y = to_raster.transform(lon, lat)
-        values = np.array(
-            [v[0] for v in raster.sample(list(zip(x, y, strict=True)), indexes=1, masked=True)],
-            dtype=object,
-        )
-        out = np.array([np.nan if v is np.ma.masked else float(v) for v in values], dtype=float)
-        left, bottom, right, top = raster.bounds
-        outside = (np.asarray(x) < left) | (np.asarray(x) > right)
-        outside |= (np.asarray(y) < bottom) | (np.asarray(y) > top)
-        out[outside] = np.nan
-    return out
+        if raster.crs is None:
+            raise ValueError("the raster has no coordinate reference system")
+        crs = CRS.from_wkt(raster.crs.to_wkt())
+        x, y = np.asarray(lon, dtype=float), np.asarray(lat, dtype=float)
+        if crs != WGS84:
+            x, y = Transformer.from_crs(WGS84, crs, always_xy=True).transform(x, y)
+        if raster.width * raster.height > WHOLE:
+            read = raster.sample(list(zip(x, y, strict=True)), indexes=1, masked=True)
+            return np.array([np.nan if v[0] is np.ma.masked else float(v[0]) for v in read])
+        band = raster.read(1, masked=True)
+        rows, cols = (np.asarray(v, dtype=int) for v in rowcol(raster.transform, x, y))
+        inside = (rows >= 0) & (rows < raster.height) & (cols >= 0) & (cols < raster.width)
+        out = np.full(len(x), np.nan)
+        found = band[rows[inside], cols[inside]]
+        out[inside] = np.ma.filled(found.astype(float), np.nan)
+        return out
+
+
+def _tile(name: str, cache: Path) -> Path | None:
+    """A GLO-30 tile's local file, downloaded if need be, or None where
+    there is no tile (open sea)."""
+    path = cache / f"{name}.tif"
+    sea = cache / f"{name}.none"  # remembered, so the sea isn't asked for again
+    if sea.exists():
+        return None
+    if not path.exists():
+        logger.info("Downloading elevation tile %s", name)
+        try:
+            _fetch_to(GLO30.format(name=name), path)
+        except ValueError as err:
+            if getattr(err.__cause__, "code", None) == 404:  # no such tile: open sea
+                sea.touch()
+                return None
+            raise
+    return path
+
+
+def _from_tiles(tiles: np.ndarray, lon: np.ndarray, lat: np.ndarray, cache: Path) -> np.ndarray:
+    heights = np.full(len(lon), np.nan)
+    for name in sorted(set(tiles)):
+        path = _tile(name, cache)
+        if path is None:
+            continue
+        here = tiles == name
+        try:
+            heights[here] = _read(path, lon[here], lat[here])
+        except Exception as err:
+            path.unlink(missing_ok=True)  # a damaged download: fetched again next time
+            raise ValueError(
+                f"Couldn't read the elevation tile {name} ({err}); it was removed from the "
+                "cache, so try again."
+            ) from err
+    return heights
 
 
 def dem_elevations(
@@ -72,9 +118,12 @@ def dem_elevations(
 
     By default the model is Copernicus GLO-30 (about 30 m cells, worldwide
     land): the one-degree tiles the points fall in are downloaded once, about
-    40 MB each, and cached. Give ``raster`` to read your own model instead
-    (SRTM, a lidar mosaic, a national model): any single-band raster rasterio
-    opens, in any coordinate system. Needs ``pip install
+    40 MB each, and cached. It is a surface model, so heights include forest
+    canopy and buildings. Give ``raster`` to read your own model instead
+    (SRTM, a lidar mosaic, a national model): the first band of any raster
+    rasterio opens, in any coordinate system it declares. Cells equal to the
+    raster's declared nodata value are missing; a raster that declares none
+    returns its sentinel values (-9999, say) as heights. Needs ``pip install
     'samplesar[elevation]'``.
 
     Copernicus DEM is free to use with attribution: "produced using
@@ -96,7 +145,8 @@ def dem_elevations(
     Returns
     -------
     np.ndarray
-        Meters above sea level, one per row of
+        Meters above sea level (above the EGM2008 geoid, for GLO-30), one
+        per row of
         [`points`][samplesar.Sample.points]; NaN where the model has no
         value (the sea in GLO-30, which has no tiles there; outside your
         raster, or at its nodata value).
@@ -106,8 +156,8 @@ def dem_elevations(
     ImportError
         If rasterio isn't installed.
     ValueError
-        If ``raster`` doesn't exist or can't be read, or a tile can't be
-        downloaded.
+        If ``raster`` doesn't exist, has no coordinate reference system or
+        can't be read, or a tile can't be downloaded or read.
 
     Examples
     --------
@@ -130,21 +180,23 @@ def dem_elevations(
     cache = cache_root(cache_dir, "elevation")
     cache.mkdir(parents=True, exist_ok=True)
     tiles = np.array([glo30_tile(x, y) for x, y in zip(lon, lat, strict=True)])
-    heights = np.full(sample.n_points, np.nan)
-    for name in sorted(set(tiles)):
-        path = cache / f"{name}.tif"
-        sea = cache / f"{name}.none"  # remembered, so the sea isn't asked for again
-        if sea.exists():
-            continue
-        if not path.exists():
-            logger.info("Downloading elevation tile %s", name)
-            try:
-                _fetch_to(GLO30.format(name=name), path)
-            except ValueError as err:
-                if "404" in str(err):  # no tile: open sea
-                    sea.touch()
-                    continue
-                raise
-        here = tiles == name
-        heights[here] = _read(path, lon[here], lat[here])
+    heights = _from_tiles(tiles, lon, lat, cache)
+    # Each tile sits half a cell north-west of its whole degrees, so a point
+    # within half a cell of a tile's south or east edge is in the next one.
+    for east, south in ((0.0, 1.0), (1.0, 0.0), (1.0, 1.0)):
+        missing = np.flatnonzero(np.isnan(heights))
+        if not len(missing):
+            break
+        cell = 1.0 / 1200.0  # the widest cells, at high latitudes
+        near = np.array(
+            [
+                glo30_tile(x + east * cell, y - south * cell)
+                for x, y in zip(lon[missing], lat[missing], strict=True)
+            ]
+        )
+        moved = near != tiles[missing]
+        if moved.any():
+            heights[missing[moved]] = _from_tiles(
+                near[moved], lon[missing[moved]], lat[missing[moved]], cache
+            )
     return heights

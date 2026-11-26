@@ -21,7 +21,8 @@ design turns a `Sample` of points into an area and richness table, and
    strategy only decides which point (or points) to drop next; it returns a `Nest` whose
    `steps[i]` are row indices into `sample.points`, each step a subset of the one before.
    Don't copy observation data per step.
-2. **The API is grouped by job.** `samplesar.sources` gets observations into a `Sample`,
+2. **The API is grouped by job.** `samplesar.sources` gets observations into a `Sample`
+   (and data about them, such as elevations from an elevation model),
    `samplesar.regions` gives regions (polygons) to restrict them to, `samplesar.strategies`
    nests them, `samplesar.designs` holds designs that aren't nests (regions as sampling
    units), `samplesar.evaluate` fits and compares nests, and `samplesar.plot` draws
