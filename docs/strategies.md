@@ -376,8 +376,8 @@ ax.plot(band["area"], band["mean"])
 ## How much a fit owes to the points sampled
 
 A deterministic strategy gives one nest per sample. `evaluate.bootstrap`
-draws the sample's points with replacement, nests each resample with the
-same strategy and fits it, so the spread of the fits shows how sensitive
+draws the sample's points with replacement (each resample holds about 63%
+of them), nests each with the same strategy and fits it, so the spread of the fits shows how sensitive
 the result is to which places happened to be sampled:
 
 ```python
@@ -385,8 +385,9 @@ fits = samplesar.evaluate.bootstrap(sample, "hull_peel", n=99)
 fits["z"].quantile([0.025, 0.5, 0.975])
 ```
 
-Steps within a nest aren't independent, so this spread describes
-sensitivity; it isn't a confidence interval of the usual kind.
+Steps within a nest aren't independent and each resample is smaller than
+the sample, so this spread describes sensitivity; it isn't a confidence
+interval of the usual kind.
 
 ## Adding a strategy
 

@@ -33,7 +33,7 @@ def test_the_band_holds_the_nests_it_was_made_from(sample):
     assert (band["q025"] <= band["mean"] + 1e-9).all() and (
         band["mean"] <= band["q975"] + 1e-9
     ).all()
-    assert band["n"].max() == 30 and band["n"].min() >= 1
+    assert band["n"].eq(30).all()
     # More area, more species, on average.
     assert band["mean"].iloc[-1] > band["mean"].iloc[5]
     assert band.attrs["strategy"] == "hull_random" and band.attrs["seeds"] == list(range(5, 35))
@@ -50,13 +50,25 @@ def test_one_nest_is_its_own_curve(sample):
     assert band["q025"].equals(band["q975"]) and band["n"].eq(1).all()
     assert band["area"].iloc[0] == pytest.approx(data.index.min())
     assert band["area"].iloc[-1] == pytest.approx(data.index.max())
+    alone = samplesar.evaluate.ensemble(sample, "hull_random", n=1, seed=3, points=1)
+    assert alone["area"].tolist() == pytest.approx([data.index.max()])
 
 
-def test_a_nest_is_not_extrapolated(sample):
-    # With few points kept, nests end at different areas: the smallest
-    # areas are spanned by only some of them.
-    band = samplesar.evaluate.ensemble(sample, "hull_random", n=20, points=60, min_points=3)
-    assert band["n"].iloc[0] < 20 and band["n"].iloc[-1] == 20
+def test_the_band_covers_only_areas_every_nest_spans(sample):
+    # Nests end on triangles of very different sizes: the band starts at
+    # the largest of them, where every nest still has a step.
+    smallest = [
+        samplesar.strategies.hull_random(sample, seed=s).sar_data()["area"].min() for s in range(20)
+    ]
+    band = samplesar.evaluate.ensemble(sample, "hull_random", n=20, points=60)
+    assert band["area"].iloc[0] == pytest.approx(max(smallest))
+    assert band["n"].eq(20).all() and band.notna().all().all()
+    assert max(smallest) > 5 * min(smallest)
+
+
+def test_split_nests_can_be_averaged(sample):
+    band = samplesar.evaluate.ensemble(sample, "split", n=4, parts=3, points=10)
+    assert len(band) == 10 and band["n"].eq(4).all()
 
 
 def test_options_reach_the_strategy(sample):
@@ -75,7 +87,7 @@ def test_options_reach_the_strategy(sample):
         ({"points": 0}, "points must be"),
         ({"strategy": "hull_peel"}, "takes a seed"),
         ({"strategy": "nothing"}, "No strategy"),
-        ({"min_points": 120}, "No nest has two steps"),
+        ({"min_points": 120}, "No nest has two different positive areas"),
     ],
 )
 def test_ensemble_bad_arguments(sample, options, match):
@@ -106,7 +118,7 @@ def test_bootstrap_matches_nesting_each_resample_by_hand(sample):
         assert table.loc[i, "n_points"] == len(drawn)
 
 
-def test_bootstrap_seeds_random_strategies_and_places_a_nest(sample):
+def test_bootstrap_seeds_random_strategies(sample):
     table = samplesar.evaluate.bootstrap(sample, "hull_random", n=6, seed=4)
     again = samplesar.evaluate.bootstrap(sample, "hull_random", n=6, seed=4)
     assert table["z"].tolist() == pytest.approx(again["z"].tolist())
@@ -116,8 +128,21 @@ def test_bootstrap_seeds_random_strategies_and_places_a_nest(sample):
         else None
     )
     assert fixed is None
-    placed = samplesar.evaluate.against_baseline(samplesar.strategies.hull_peel(sample), table)
-    assert {"value", "mean", "p"} <= set(placed.columns)
+    rng = np.random.default_rng(4)
+    for i in range(6):
+        drawn = np.unique(rng.integers(sample.n_points, size=sample.n_points))
+        nest = samplesar.strategies.hull_random(sample.subset(drawn), seed=4 + i)
+        assert table.loc[i, "z"] == pytest.approx(nest.fit("power").params["z"])
+
+
+def test_resamples_with_too_few_points_are_left_out(sample):
+    few = sample.subset(range(20))
+    table = samplesar.evaluate.bootstrap(few, "radial", n=40, seed=0, min_points=13)
+    rng = np.random.default_rng(0)
+    sizes = [len(np.unique(rng.integers(20, size=20))) for _ in range(40)]
+    assert 0 < len(table) < 40
+    assert all(sizes[i] >= 13 for i in table.index)
+    assert all(i in table.index for i, size in enumerate(sizes) if size >= 16)
 
 
 def ring_sample(center):
@@ -155,11 +180,13 @@ def test_resamples_that_cannot_be_nested_or_fitted_are_left_out(sample, monkeypa
     monkeypatch.setitem(_registry._REGISTRY, "hull_peel", dataclasses.replace(real, func=sometimes))
     table = samplesar.evaluate.bootstrap(sample, "hull_peel", n=9, seed=1)
     assert list(table.index) == [1, 4, 7]
-    # A ring with nothing inside can never be peeled, nor fitted with its center alone.
-    for center in (False, True):
-        monkeypatch.undo()
-        with pytest.raises(ValueError, match="No resample could be nested and fitted"):
-            samplesar.evaluate.bootstrap(ring_sample(center), "hull_peel", n=5, min_points=1)
+
+
+@pytest.mark.parametrize("center", [False, True])
+def test_a_ring_can_never_be_peeled_or_fitted(center):
+    # Nothing inside: no layer to peel. Its center alone: a nest with no area to fit.
+    with pytest.raises(ValueError, match="No resample could be nested and fitted"):
+        samplesar.evaluate.bootstrap(ring_sample(center), "hull_peel", n=5, min_points=1)
 
 
 def test_bootstrap_bad_arguments(sample):
