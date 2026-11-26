@@ -168,3 +168,53 @@ def test_voronoi_cells_match_the_points_nearest_ground():
     nearest = np.argmin(((cells[:, None, :] - xy[None, :, :]) ** 2).sum(axis=2), axis=1)
     estimate = np.bincount(nearest, minlength=12) * (10 / 399) ** 2
     assert 1.0 / voronoi_density(xy) == pytest.approx(estimate, rel=0.05, abs=0.05)
+
+
+def test_a_tight_cluster_beside_open_ground_keeps_its_order():
+    # 60 points over 100 km and 40 within a meter: cell areas span eleven
+    # orders of magnitude, and every point must still go in order of its own.
+    rng = np.random.default_rng(0)
+    xy = np.vstack([rng.uniform(0, 100, (60, 2)), 50 + rng.uniform(0, 0.001, (40, 2))])
+    sample = km_sample(xy)
+    density = voronoi_density(np.asarray(sample.xy))
+    assert density.max() / density.min() > 1e9
+    nest = samplesar.strategies.density_peel(sample, method="voronoi", min_points=3)
+    order = removed(nest)
+    assert order == list(np.argsort(density, kind="stable")[: len(order)])
+
+
+def test_voronoi_cells_of_three_points_and_near_duplicates():
+    three = np.array([(0, 0), (4, 0), (0, 4)], dtype=float)
+    assert (1.0 / voronoi_density(three)).sum() == pytest.approx(8.0)
+    near = np.array([(0, 0), (4, 0), (4, 4), (0, 4), (2, 2), (2 + 1e-7, 2)], dtype=float)
+    density = voronoi_density(near)
+    assert np.isfinite(density).all() and (1.0 / density).sum() == pytest.approx(16.0)
+
+
+def test_circle_on_a_cluster_a_few_centimeters_across():
+    # Far from the projection's origin, a tiny circle must still find every
+    # point it rests on.
+    rng = np.random.default_rng(6)
+    for trial in range(20):
+        offsets = rng.uniform(0, 1e-5, (6, 2))  # a 1 cm box, in km
+        sample = km_sample(offsets)
+        nest = samplesar.strategies.circle(sample, min_points=5)
+        local = offsets - offsets.mean(axis=0)
+        center, radius = brute_circle(local)
+        on = np.flatnonzero(np.hypot(*(local - center).T) >= radius * (1 - 1e-6))
+        after = {int(v): brute_circle(np.delete(local, v, axis=0))[1] for v in on}
+        best = min(after.values())
+        assert after[removed(nest)[0]] == pytest.approx(best, rel=1e-5), trial
+
+
+def test_circle_with_shared_positions_a_line_and_few_points():
+    doubled = km_sample([(0, 0), (0, 0), (4, 0), (4, 4), (0, 4), (2, 2), (1, 3)])
+    nest = samplesar.strategies.circle(doubled, min_points=1)
+    assert nest.n_steps == doubled.n_points  # coincident observations are one point
+    line = km_sample([(x, 0) for x in range(6)])
+    order = removed(samplesar.strategies.circle(line, min_points=1))
+    assert order[0] in (0, 5) and len(order) == 5
+    # Each end in turn: the circle on a line rests on its two ends.
+    assert sorted(order[:2]) in ([0, 1], [0, 5], [4, 5])
+    pair = km_sample([(0, 0), (1, 1)])
+    assert removed(samplesar.strategies.circle(pair, min_points=1)) == [0]

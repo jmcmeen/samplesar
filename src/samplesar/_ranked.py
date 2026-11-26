@@ -323,7 +323,8 @@ def voronoi_density(xy: np.ndarray) -> np.ndarray:
     """Each point's density as one over the area of its Voronoi cell (the
     ground nearer to it than to any other point), cut to the points' convex
     hull, in points per km². Points at one position share its cell. Zero
-    where the points make no hull (fewer than three, or in a line)."""
+    for every point where the points make no hull (fewer than three, or in
+    a line)."""
     import shapely
 
     positions, where, counts = np.unique(xy, axis=0, return_inverse=True, return_counts=True)
@@ -332,18 +333,25 @@ def voronoi_density(xy: np.ndarray) -> np.ndarray:
     hull = cloud.convex_hull
     if not isinstance(hull, shapely.Polygon) or not hull.area > 0:
         return np.zeros(len(xy))
-    cells = shapely.get_parts(shapely.voronoi_polygons(cloud, extend_to=hull))
-    # GEOS returns the cells in its own order: find each position's.
-    tree = shapely.STRtree(cells)
-    spots = shapely.points(positions)
-    pairs = tree.query(spots, predicate="intersects")
-    gap = shapely.distance(cells[pairs[1]], spots[pairs[0]])  # 0 inside; ties on shared edges
-    best = np.lexsort((pairs[1], gap, pairs[0]))
-    first = best[np.unique(pairs[0][best], return_index=True)[1]]
-    area = np.zeros(len(positions))
-    area[pairs[0][first]] = shapely.area(shapely.intersection(cells[pairs[1][first]], hull))
-    density = np.where(area > 0, counts / np.where(area > 0, area, 1.0), np.inf)
-    return np.asarray(density[where])
+    try:  # shapely 2.1 on GEOS 3.12 returns the cells in the points' order
+        cells = shapely.get_parts(shapely.voronoi_polygons(cloud, extend_to=hull, ordered=True))
+        own = np.arange(len(positions))
+    except (TypeError, shapely.errors.UnsupportedGEOSVersionError):
+        cells = shapely.get_parts(shapely.voronoi_polygons(cloud, extend_to=hull))
+        # In GEOS's own order: each position's cell is the one that holds
+        # it, the lowest-numbered if it lies on an edge between two.
+        spots = shapely.points(positions)
+        at, cell = shapely.STRtree(cells).query(spots, predicate="intersects")
+        first = np.lexsort((cell, at))
+        first = first[np.unique(at[first], return_index=True)[1]]
+        own = np.full(len(positions), -1)
+        own[at[first]] = cell[first]
+    if len(cells) != len(positions) or (own < 0).any():
+        raise RuntimeError("Some points got no Voronoi cell; please report this.")
+    area = shapely.area(shapely.intersection(cells[own], hull))
+    if not (area > 0).all():
+        raise RuntimeError("A Voronoi cell has no area inside the hull; please report this.")
+    return np.asarray((counts / area)[where])
 
 
 @register("density_peel")
@@ -396,7 +404,12 @@ def density_peel(
     if method == "voronoi":
         if bandwidth_km is not None:
             raise ValueError("bandwidth_km is only used with method='kernel'.")
-        return _by_rank(sample, voronoi_density(np.asarray(sample.xy)), min_points)
+        density = voronoi_density(np.asarray(sample.xy))
+        # Ranked on the logarithm: cell areas span many orders of magnitude
+        # (a tight cluster beside open ground), and ties are judged relative
+        # to the key's range.
+        key = np.log(density) if (density > 0).all() else np.zeros(len(density))
+        return _by_rank(sample, key, min_points)
     if bandwidth_km is None:
         bandwidth_km = scott_bandwidth(sample.xy)
     elif not (np.isfinite(bandwidth_km) and bandwidth_km > 0):

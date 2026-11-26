@@ -148,8 +148,8 @@ makes it reproducible.
 ### By the smallest enclosing circle
 
 `strategies.circle(sample, min_points=3)` finds the smallest circle around
-the remaining points, which rests on two or three of them, and removes the
-one whose loss shrinks the circle most. It trims the sample where it reaches
+the remaining points, which rests on two or three of them (more when
+several lie on it), and removes the one whose loss shrinks the circle most. It trims the sample where it reaches
 farthest, as `radial` does, but toward no fixed center: the circle moves as
 it shrinks, so a sample with a long arm loses the arm first and then closes
 on its bulk.

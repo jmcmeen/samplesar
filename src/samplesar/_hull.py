@@ -707,13 +707,16 @@ def circle(sample: Sample, min_points: int = 3) -> Nest:
     """Nest a sample by shrinking its smallest enclosing circle as fast as possible.
 
     At each step the smallest circle around the remaining points is found.
-    It rests on two or three of them; the one whose removal leaves the
-    smallest circle goes. The sample is trimmed where it reaches farthest,
+    It rests on two or three of them (more when several lie on it, or share
+    a position); the one whose removal leaves the smallest circle goes,
+    even when no removal shrinks it. The sample is trimmed where it reaches farthest,
     like [`radial`][samplesar.strategies.radial], but toward no fixed
     center: the circle moves as it shrinks, so a sample with a long arm
     loses the arm first and then closes on its bulk. Ties, to within
     floating-point rounding, go to the lowest point index. Areas are still
-    convex hull areas.
+    convex hull areas. Each step rebuilds a hull for every point the circle
+    rests on, so it is slower than the other vertex strategies on samples
+    of many thousands of points.
 
     Parameters
     ----------
@@ -734,10 +737,16 @@ def circle(sample: Sample, min_points: int = 3) -> Nest:
     points = np.asarray(sample.xy)
 
     def choose(remaining: np.ndarray, vertices: np.ndarray) -> int:
-        # The circle rests on hull vertices only, so they stand for the rest.
-        center, radius = enclosing_circle(points[vertices])
-        distance = np.hypot(*(points[vertices] - center).T)
-        resting = vertices[distance >= radius * (1 - 1e-9)]
+        # The circle rests on hull vertices only, so they stand for the
+        # rest. Measured about their own middle: in projected coordinates
+        # thousands of km from the origin, a circle a meter across would be
+        # lost in rounding.
+        corners = points[vertices]
+        local = corners - (corners.min(axis=0) + corners.max(axis=0)) / 2.0
+        center, radius = enclosing_circle(local)
+        distance = np.hypot(*(local - center).T)
+        slack = 1e-9 * radius + 1e-12 * float(np.abs(local).max())
+        resting = vertices[distance >= radius - slack]
         if len(resting) == 1 or len(remaining) <= 2:
             return int(resting.min())
         left = []
