@@ -12,7 +12,9 @@ from samplesar._http import request
 
 def test_requests_name_samplesar():
     made = request("https://example.org/a", headers={"Range": "bytes=5-"}, method="HEAD")
-    assert made.get_header("User-agent") == f"samplesar/{samplesar.__version__}"
+    assert made.get_header("User-agent") == (
+        f"samplesar/{samplesar.__version__} (+https://github.com/jmcmeen/samplesar)"
+    )
     assert made.get_header("Range") == "bytes=5-" and made.get_method() == "HEAD"
 
 

@@ -56,7 +56,7 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
-- Downloads name samplesar as their client. geoBoundaries now refuses
+- Downloads name samplesar and its repository as their client. geoBoundaries now refuses
   Python's default `User-Agent` with a 403, so `regions.admin` failed for
   any boundary not already cached.
 
