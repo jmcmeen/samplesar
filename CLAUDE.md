@@ -23,7 +23,8 @@ design turns a `Sample` of points into an area and richness table, and
    Don't copy observation data per step.
 2. **The API is grouped by job.** `samplesar.sources` gets observations into a `Sample`,
    `samplesar.regions` gives regions (polygons) to restrict them to, `samplesar.strategies`
-   nests them, `samplesar.evaluate` fits and compares nests, and `samplesar.plot` draws
+   nests them, `samplesar.designs` holds designs that aren't nests (regions as sampling
+   units), `samplesar.evaluate` fits and compares nests, and `samplesar.plot` draws
    them; implementations live in private modules and those public modules re-export them.
    A new data source, region source or strategy goes in its group, not at the top level.
    One strategy function per family, named for what it removes (`random`, `hull_*`,
@@ -43,4 +44,8 @@ design turns a `Sample` of points into an area and richness table, and
 
 - Every strategy gets tests for nestedness, its own selection rule (checked by brute
   force on small samples), reproducibility, and a hand-made sample with a known answer.
-- No real observation data in the repo: tests build synthetic samples.
+- No real observation data in the repo: tests build synthetic samples, and the examples
+  (`examples/` scripts, `docs/examples/` notebooks) run on `sources.simulated`.
+- The example notebooks are committed executed. After changing one, or anything its
+  outputs show, run it again and commit the result; `tests/test_example_notebooks.py`
+  re-runs each one.

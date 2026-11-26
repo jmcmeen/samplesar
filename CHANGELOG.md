@@ -87,6 +87,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- The README is reorganized around the two designs (nests and regions),
+  with a table of the strategies by how they shrink a sample, how to get
+  observations in, and the examples.
 - sars 0.11.12 or newer is required (was 0.11.5).
 
 ## [0.2.1] - 2026-11-23
