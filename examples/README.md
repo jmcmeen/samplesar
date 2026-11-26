@@ -25,5 +25,7 @@ put your own data instead.
 | `05_patches_and_effort.py` | Clustered samples: split into patches, thin the piles, and a band from many random nests |
 | `06_real_observations.py` | iNaturalist or GBIF records for a country or state, with a land mask (needs the network) |
 
-The same journeys, with their figures, are notebooks in
-[the documentation](https://jmcmeen.github.io/samplesar/).
+The same journeys, with their figures, are notebooks in the documentation:
+[a first nest](https://jmcmeen.github.io/samplesar/examples/first_nest/),
+[comparing strategies](https://jmcmeen.github.io/samplesar/examples/strategies/) and
+[regions as islands](https://jmcmeen.github.io/samplesar/examples/islands/).

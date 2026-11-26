@@ -2,8 +2,10 @@
 
 To try things without data, `samplesar.sources.simulated(seed=1)` makes up a
 landscape of observations (with elevations and dates) that every strategy
-runs on; the [example scripts](https://github.com/jmcmeen/samplesar/tree/main/examples)
-start from it.
+runs on. The [example scripts](https://github.com/jmcmeen/samplesar/tree/main/examples)
+and the notebooks under Examples ([a first nest](examples/first_nest.ipynb),
+[comparing strategies](examples/strategies.ipynb),
+[regions as islands](examples/islands.ipynb)) start from it.
 
 ## A sample
 

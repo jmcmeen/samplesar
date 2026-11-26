@@ -74,6 +74,8 @@ All notable changes to this project are documented here. The format is based on
   against a baseline, regions as islands, elevation and time, patches and
   effort, and real observations from GBIF with a land mask. All but the
   last run offline in seconds.
+- Example notebooks in the documentation, run in the tests: a first nest,
+  comparing strategies, and regions as islands.
 - `regions.admin_units(country, level)` and `regions.read_units(source,
   column)`: many named regions at once, each as its own polygon.
 

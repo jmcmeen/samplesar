@@ -44,6 +44,11 @@ markdown_extensions:
 
 plugins:
   - search
+  - mkdocs-jupyter:
+      # Notebooks are committed executed; the build renders their stored outputs.
+      execute: false
+      include_source: true
+      ignore_h1_titles: true
   - mkdocstrings:
       handlers:
         python:
@@ -63,6 +68,10 @@ nav:
   - Getting Started: getting-started.md
   - Sampling Strategies: strategies.md
   - Regions as Sampling Units: islands.md
+  - Examples:
+      - A first nest: examples/first_nest.ipynb
+      - Comparing strategies: examples/strategies.ipynb
+      - Regions as islands: examples/islands.ipynb
   - API Reference:
       - Samples and nests: api/core.md
       - Sources: api/sources.md
