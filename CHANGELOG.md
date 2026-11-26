@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
-- sars 0.11.11 or newer is required (was 0.11.5).
+- sars 0.11.12 or newer is required (was 0.11.5).
 
 ## [0.2.1] - 2026-11-23
 

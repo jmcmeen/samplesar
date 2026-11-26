@@ -2728,7 +2728,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pytest-xdist", extras = ["psutil"], marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17,<0.18" },
-    { name = "sars", specifier = ">=0.11.11" },
+    { name = "sars", specifier = ">=0.11.12" },
     { name = "scipy", specifier = ">=1.9.2" },
     { name = "shapely", specifier = ">=2.0" },
 ]
@@ -2736,7 +2736,7 @@ provides-extras = ["dev", "docs", "gbif", "geo", "inat", "opendata"]
 
 [[package]]
 name = "sars"
-version = "0.11.11"
+version = "0.11.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
@@ -2746,9 +2746,9 @@ dependencies = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/36/ce/4198e20e8362ba3af51267b687098205ffb1a10368ca2695f93df1e5a11d/sars-0.11.11.tar.gz", hash = "sha256:d580ce81e9ced09c7793061b6741208c16c7f313fbe7e912e48f2945366cc5ba", size = 1430370, upload-time = "2026-11-23T19:06:06.879Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/68/ee/c02029b1edeeadc9f0ae6ed43cfe5e7d0f5e0cda9a63443e41871926fbc2/sars-0.11.12.tar.gz", hash = "sha256:eb0822cf02099964c79aa4b1c33f643b180eed31fb91f1c2d4c1ee360a956248", size = 1525005, upload-time = "2026-11-26T04:47:39.596Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/54/33830526c993263b4a8064e43ad5b2575354f9cafa3bf021e002a60cd16c/sars-0.11.11-py3-none-any.whl", hash = "sha256:09c5b4c78110bd311a2282eb4b8535afb2673529df5b23a99bf55cb00942923a", size = 168820, upload-time = "2026-11-23T19:06:05.177Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/79/665c2968cf0cd1199319b16e3ba6653c48713878e83751e9b47b03716a53/sars-0.11.12-py3-none-any.whl", hash = "sha256:321b51ef48f921082b448ffa66e247ba435981f7a3387a2c03a73883755c4936", size = 188226, upload-time = "2026-11-26T04:47:38.091Z" },
 ]
 
 [[package]]
