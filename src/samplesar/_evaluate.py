@@ -18,8 +18,9 @@ MIN_FIT_POINTS = 3
 def fit_nest(nest: Nest, model: str = "power", name: str | None = None, **kwargs: Any) -> Any:
     """Fit one of sars' models to a nest's species-area data.
 
-    The areas are convex hull areas in km², so a parameter scaled by area
-    (``c`` of the power model, for example) is per km².
+    The areas are convex hull areas in km² (within the sample's mask, if it
+    has one), so a parameter that depends on the unit of area is for km²:
+    ``c`` of the power model is the species count at 1 km².
 
     Parameters
     ----------

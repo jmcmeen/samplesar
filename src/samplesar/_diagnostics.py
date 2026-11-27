@@ -72,7 +72,8 @@ def diagnostics(nest: Nest) -> pd.DataFrame:
 def autocorrelation(nest: Nest, model: str = "power", **kwargs: Any) -> dict[str, float]:
     """How far a fit's residuals along a nest are from independent.
 
-    Neighboring steps share all but one point, so their residuals tend to
+    Neighboring steps share most of their points (all but one, for the
+    strategies that remove a point at a time), so their residuals tend to
     run together. Strong autocorrelation means the fit's standard errors, R²
     and AICc treat the steps as more independent evidence than they are.
 

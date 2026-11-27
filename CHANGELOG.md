@@ -24,6 +24,15 @@ All notable changes to this project are documented here. The format is based on
 - A documentation page on patches as sampling units, and the example
   script `07_quadrats.py`.
 
+### Fixed
+
+- Docstrings that stated a quantity loosely: the power model's `c` is the
+  species count at 1 km², not "per km²" (`Nest.fit`, `evaluate.fit_nest`);
+  neighboring steps share all but one point only for strategies that
+  remove one at a time (`evaluate.autocorrelation`); a species with no
+  range is among the rarest, not the rarest (`strategies.hull_rarity`); and
+  `Sample.merge_within`'s chaining example says the points are in a row.
+
 ## [0.2.2] - 2026-11-26
 
 ### Added

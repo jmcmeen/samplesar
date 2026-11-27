@@ -513,13 +513,13 @@ class Sample:
 
         Records made at one spot (a trailhead, a feeder, a car park) differ
         only by GPS jitter. Left apart, they make the last steps of a hull
-        nest measure hulls centimeters across, which aren't area but dominate
-        the species-area curve. Points at most ``meters`` apart are linked
+        nest measure hulls centimeters across, whose area means nothing but
+        which dominate the species-area curve. Points at most ``meters`` apart are linked
         (on [`xy`][samplesar.Sample.xy], with a distorting ``crs`` corrected
         by its scale at the sample's center), and each linked group becomes
         one point at its first-seen member's coordinates, holding all the
-        group's observations. Linking chains: three points 0.8 apart with
-        ``meters=1`` become one, and a warning says when a chain spans more
+        group's observations. Linking chains: three points in a row, each
+        0.8 m from the next, become one with ``meters=1``, and a warning says when a chain spans more
         than ten times ``meters``, since its observations then move far.
 
         Parameters

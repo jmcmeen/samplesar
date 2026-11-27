@@ -136,7 +136,7 @@ def hull_rarity(
         points (km²). A species whose points make no hull (one or two
         points, or points in a line) counts as the smallest range any
         species has in the whole sample, or 1 km² if none has one, so it is
-        the rarest without being infinitely so.
+        among the rarest without being infinitely so.
     score : {"sum", "mean", "max"}
         How a vertex's species are combined. ``"sum"`` favors rich vertices
         as well as rare species; ``"mean"`` and ``"max"`` don't.
