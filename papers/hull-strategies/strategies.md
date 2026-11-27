@@ -57,6 +57,8 @@ $$
 \operatorname{top}_\varepsilon(f, C) = \{v \in C : f(v) \ge \max_C f - \varepsilon \max_C |f|\}.
 $$
 
+A strategy that minimizes a quantity $g$ has the score $f = -g$.
+
 Unless a strategy says otherwise, its choice is
 $\operatorname{top}_\varepsilon(f, V(Q_t))$, then among those
 $\operatorname{top}_\varepsilon(d_{Q_t}, \cdot)$ (the vertex farthest from
@@ -98,19 +100,22 @@ error rather than return a nest with nothing to fit.
 ## Added strategies
 
 Strategies added to samplesar after the first analysis, compared with S1 to
-S10 in `results/tables/strategies_added.csv`. They keep the notation above.
+S10 in `results/tables/strategies_added.csv` (S10 is concave peeling,
+`strategies.concave_peel`, described in the draft). They keep the notation
+above.
 
-**Fixed rankings.** Each computes a key $k(p)$ once on the whole sample and
-removes points in increasing $k$, one per step; keys within $10^{-9}$ of the
-key's range tie, and ties go to the lowest index. The hull is never
+**Fixed rankings.** Each computes a key $\kappa(p)$ once on the whole sample
+and removes points in increasing $\kappa$, one per step; keys are rounded to
+$10^{-9}$ of the key's range, keys equal after rounding tie, and ties go to
+the lowest index. The hull is never
 consulted, so interior points can go while vertices remain.
 
-| | Strategy | Key $k(p)$, removed in increasing order | Function |
+| | Strategy | Key $\kappa(p)$, removed in increasing order | Function |
 | --- | --- | --- | --- |
-| A1 | Radial | $-\lVert p - \bar{p} \rVert$, with $\bar{p}$ the mean of $P$: farthest from the center first | `strategies.radial` |
+| A1 | Radial | $-\lVert p - \bar{p} \rVert$, with $\bar{p}$ the mean of $P$: farthest from $\bar{p}$ first | `strategies.radial` |
 | A2 | Sweep east | $p_x$: the westernmost point first, a front moving east | `strategies.sweep(bearing=90)` |
 | A3 | Sweep north | $p_y$: the southernmost point first | `strategies.sweep(bearing=0)` |
-| A4 | Density peeling | $\sum_{q \in P} \exp(-\lVert p - q \rVert^2 / 2\sigma^2)$, a Gaussian kernel density with $\sigma$ from Scott's rule: sparsest first | `strategies.density_peel` |
+| A4 | Density peeling | $\sum_{q \in P} \exp(-\lVert p - q \rVert^2 / (2\sigma^2))$, a Gaussian kernel density with $\sigma$ from Scott's rule: sparsest first | `strategies.density_peel` |
 | A5 | Growth, reversed | minus the order in which Prim's algorithm adds $p$ to a region grown from the point nearest $\bar{p}$ (each time the point nearest the region): last joined, first removed | `strategies.grow` |
 
 **Random, weighted.**
@@ -156,9 +161,9 @@ and S7, choose by species and not by geometry.
 
 1. **Nested and monotone.** Every strategy gives $Q_{t+1} \subset Q_t$, so
    $A(Q_{t+1}) \le A(Q_t)$ and $R(Q_{t+1}) \le R(Q_t)$.
-2. **The hull shrinks only when a vertex goes.** For S2 to S9 every removed
-   point is on the boundary, so $H(Q_{t+1}) \subseteq H(Q_t)$ with the area
-   falling at nearly every step. S1 removes interior points too, which leave
+2. **The hull shrinks only when a vertex goes.** $H(Q_{t+1}) \subseteq
+   H(Q_t)$ always. For S2 to S9 every removed point is on the boundary, so
+   the area falls at nearly every step. S1 removes interior points too, which leave
    the hull unchanged: its area stays near $A(P)$ until the last few points,
    and its species-area curve is close to vertical.
 3. **Greedy, not optimal.** S4 to S7 choose the best single step; they don't
@@ -171,16 +176,17 @@ and S7, choose by species and not by geometry.
 
 ## Cost
 
-With $n$ points, $h$ hull vertices per step (typically $h \ll n$) and $k$
-species per point:
+The cost of choosing the points to remove, with $n$ points, $b$ hull
+vertices per step (typically $b \ll n$) and $k$ species per point.
+Measuring the nest's areas and richness afterwards is separate.
 
 | Strategies | Per step | Whole nest |
 | --- | --- | --- |
 | S1 | $O(1)$ | $O(n)$ |
-| S2, S8, S9 | one hull, $O(n \log n)$, plus $O(h^2)$ at worst to drop corners rounding pushed off straight edges | $O(n^2 \log n)$ |
+| S2, S8, S9 | one hull, $O(n \log n)$, plus $O(b^2)$ at worst to drop corners rounding pushed off straight edges | $O(n^2 \log n)$ |
 | S3 | one hull per layer | $O(n^2 \log n)$ at worst |
-| S4, S5 | $h$ hulls, $O(h\, n \log n)$ | $O(h\, n^2 \log n)$ |
-| S6, S7 | one hull and $O(hk)$ | $O(n^2 \log n)$ |
+| S4, S5 | $b$ hulls, $O(b\, n \log n)$ | $O(b\, n^2 \log n)$ |
+| S6, S7 | one hull and $O(bk)$ | $O(n^2 \log n + n\, b\, k)$ |
 
 Measured on an 893-point sample (one laptop): S4 and S5 took 0.5 to 0.8 s,
 every other strategy under 0.2 s.
@@ -188,7 +194,7 @@ every other strategy under 0.2 s.
 ## Open questions for the Methods
 
 - **Co-located records.** Records at one spot differ by GPS jitter, so the
-  last steps of S2 to S9 measure centimeter-scale hulls that aren't area.
+  last steps of S2 to S9 measure centimeter-scale hulls whose area means nothing.
   Merging points within a distance, or a minimum area, needs choosing and
   justifying (samplesar #46).
 - **Pseudo-replication.** Steps share most of their points, so R², AICc and
