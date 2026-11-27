@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-27
+
 ### Added
 
 - `designs.quadrats(sample, size_km)`: square patches of equal size as
