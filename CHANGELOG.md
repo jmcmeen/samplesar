@@ -6,6 +6,38 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `designs.quadrats(sample, size_km)`: square patches of equal size as
+  sampling units, the species counted in each. The patches of a size form a
+  grid over the sample, or with `n` that many are placed at random without
+  overlapping (`seed` makes the placement repeatable); several sizes give
+  the points of a species-area curve. `mask` measures each patch within
+  ground such as land and leaves out patches with less than `min_fraction`
+  of their area in it. The result, a `Quadrats`, is an `Islands` design, so
+  its table, fit and plots work as an island design's do.
+- `Quadrats.accumulate(size_km, order="any")`: the species-area curve from
+  combining patches of one size, the mean species in 1, 2, 3, ... patches
+  against their combined area. `order="any"` averages over every
+  combination (computed exactly), and `order="nearest"` adds each patch's
+  neighbors nearest first.
+- A documentation page on patches as sampling units, and the example
+  script `07_quadrats.py`.
+
+### Fixed
+
+- Docstrings that stated a quantity loosely: the power model's `c` is the
+  species count at 1 km², not "per km²" (`Nest.fit`, `evaluate.fit_nest`);
+  neighboring steps share all but one point only for strategies that
+  remove one at a time (`evaluate.autocorrelation`); a species with no
+  range is among the rarest, not the rarest (`strategies.hull_rarity`); and
+  `Sample.merge_within`'s chaining example says the points are in a row.
+- Documentation that disagreed with the code: a point within rounding of a
+  hull edge is not a vertex (the strategies page said it was); `circle` and
+  `hull_distance` break ties by index alone; `concave_peel` and `grid_peel`
+  remove more than convex-hull vertices; the README counted two designs and
+  six example scripts (three and seven).
+
 ## [0.2.2] - 2026-11-26
 
 ### Added

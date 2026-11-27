@@ -2,10 +2,10 @@
 
 Species-area relationship (SAR) datasets from georeferenced species records.
 samplesar builds the table of areas and species counts that
-[sars](https://jmcmeen.github.io/sars/) fits, in two ways: by shrinking one
+[sars](https://jmcmeen.github.io/sars/) fits, in three ways: by shrinking one
 sample step by step with a sampling strategy, such as a sequence of nested
-convex hulls, or by counting the species in each of several regions you
-choose.
+convex hulls, by counting the species in each of several regions you
+choose, or by counting them in square patches of equal size.
 
 ```bash
 pip install samplesar
@@ -22,6 +22,7 @@ fit = sars.sar_power(nest.sar_data())
 - [Getting started](getting-started.md): load a sample, nest it, fit the curve.
 - [Sampling strategies](strategies.md): what each design removes, step by step.
 - [Regions as sampling units](islands.md): states, parks or islands, one row each.
+- [Patches as sampling units](quadrats.md): square patches of equal size, in a grid or scattered.
 - Examples, as notebooks: [a first nest](examples/first_nest.ipynb),
   [comparing strategies](examples/strategies.ipynb) and
   [regions as islands](examples/islands.ipynb).

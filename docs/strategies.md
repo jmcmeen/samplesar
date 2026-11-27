@@ -36,13 +36,14 @@ remain.
 
 ## From the outside in
 
-These strategies only remove points on the sample's convex hull, so the
-sample shrinks from its edges inwards and each step's hull lies inside the
-one before.
+These strategies remove points from the sample's edge: vertices of its
+convex hull, or for `concave_peel` and `grid_peel` the points on a concave
+outline or in the outermost grid cells. The sample shrinks from its edges
+inwards and each step's hull lies inside the one before.
 
 A point is a hull **vertex** if the hull bends there; a point exactly on a
-straight edge between two vertices isn't one. "Exactly" is in floating point:
-a point rounding puts a hair outside the edge is a vertex. When the remaining points are collinear
+straight edge between two vertices isn't one. "Exactly" allows for rounding:
+a point within a billionth of the hull's bounding-box diagonal of an edge counts as on it. When the remaining points are collinear
 the hull is a segment, and its vertices are its two ends.
 
 ### Random hull vertex
@@ -65,7 +66,7 @@ first, and clustered edges last longer. With `power=0` it is `hull_random`.
 step: every vertex and every point on an edge, leaving only the points
 strictly inside. Edges are straight on the sample's projection: a grid laid
 out in a projected CRS (UTM, say) peels ring by ring if the sample is given
-that CRS, but rows along parallels of longitude and latitude are curved on
+that CRS, but rows along meridians and parallels are curved on
 the Earth, so a grid laid out in degrees doesn't peel by whole rows. These are the sample's convex layers (onion peeling). A step
 can remove many points, so the nest has few steps; on a regular grid each step
 takes off the outer ring. It stops before a layer would leave fewer than
@@ -100,6 +101,7 @@ The next strategies each remove one hull vertex per step, chosen by a rule
 rather than at random. Every vertex of the current hull is a candidate; ties
 go to the vertex farthest from the centroid of the hull's vertices, then to
 the lowest point index, so the nest is always the same for the same sample.
+`hull_distance` and `circle` break ties by the lowest index alone.
 
 ### By area change
 
@@ -345,7 +347,7 @@ nests = {
     "most species": samplesar.strategies.hull_species(sample, keep="most"),
     "farthest": samplesar.strategies.hull_distance(sample, remove="farthest"),
 }
-samplesar.evaluate.compare(nests)   # n_steps, n_fitted, c, z, r_squared, aicc, converged
+samplesar.evaluate.compare(nests)   # n_steps, n_fitted, c, z, r_squared, aicc, converged, at_bounds
 ```
 
 The areas are convex hull areas in km², so `c` is per km²; `z` doesn't

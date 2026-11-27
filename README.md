@@ -4,13 +4,15 @@ Species-area relationships from georeferenced species records.
 
 A species-area relationship (SAR) needs areas and the number of species in
 each. samplesar builds that table from point observations (iNaturalist,
-GBIF, a survey) in two ways, and hands it to
+GBIF, a survey) in three ways, and hands it to
 [sars](https://jmcmeen.github.io/sars/) for curve fitting:
 
 - **Nests:** shrink one sample step by step with a sampling strategy, and
   record the area and species of what remains at each step.
 - **Regions:** count the species in each of several regions you choose
   (states, parks, real islands), one row per region.
+- **Patches:** lay out square patches of equal size, in a grid or
+  scattered, and count the species in each.
 
 ```python
 import samplesar
@@ -48,7 +50,7 @@ No data needed: `sources.simulated` makes up a landscape of observations
 elevations and dates) that everything below runs on.
 
 - [Example scripts](https://github.com/jmcmeen/samplesar/tree/main/examples):
-  six short scripts, each from observations to a table and a figure. Each
+  seven short scripts, each from observations to a table and a figure. Each
   stands alone: download one and run it.
 - Notebooks in the documentation:
   [a first nest](https://jmcmeen.github.io/samplesar/examples/first_nest/),
@@ -171,6 +173,26 @@ species-area data of the island type. It is a different design
 from a nest, and the two kinds of curve aren't comparable point for point:
 see [Regions as sampling units](https://jmcmeen.github.io/samplesar/islands/).
 
+## Patches as sampling units
+
+`designs.quadrats` lays out square patches of a set size instead, as a
+quadrat survey does: a grid over the sample, or `n` patches placed at
+random.
+
+```python
+patches = samplesar.designs.quadrats(sample, [5, 10, 20, 40])   # sides, in km
+patches.to_frame()                        # one row per patch, with its size_km
+patches.fit("power")                      # every patch a row, as islands are
+patches.accumulate(10)                    # the curve from combining 10 km patches
+patches.accumulate(10, order="nearest")   # combining neighbors only
+
+scattered = samplesar.designs.quadrats(sample, [5, 10, 20], n=30, seed=1, mask=land)
+```
+
+The result is an island design whose regions are the patches, so its table,
+fit and plots work the same way. See
+[Patches as sampling units](https://jmcmeen.github.io/samplesar/quadrats/).
+
 ## Evaluating and plotting
 
 Steps of one nest share most of their points, so a single nest's R² isn't
@@ -187,7 +209,8 @@ and against chance:
 
 `samplesar.plot` draws one step of a nest (`nest`), the species-area curve
 with its power fit (`curve`), the whole nest as an animation (`animate`),
-and the regions of an island design on a map (`islands`).
+and the regions of an island design, or the patches of a quadrat design,
+on a map (`islands`).
 
 ## Development
 

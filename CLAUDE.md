@@ -24,8 +24,8 @@ design turns a `Sample` of points into an area and richness table, and
 2. **The API is grouped by job.** `samplesar.sources` gets observations into a `Sample`
    (and data about them, such as elevations from an elevation model),
    `samplesar.regions` gives regions (polygons) to restrict them to, `samplesar.strategies`
-   nests them, `samplesar.designs` holds designs that aren't nests (regions as sampling
-   units), `samplesar.evaluate` fits and compares nests, and `samplesar.plot` draws
+   nests them, `samplesar.designs` holds designs that aren't nests (regions or equal-area
+   patches as sampling units), `samplesar.evaluate` fits and compares nests, and `samplesar.plot` draws
    them; implementations live in private modules and those public modules re-export them.
    A new data source, region source or strategy goes in its group, not at the top level.
    One strategy function per family, named for what it removes (`random`, `hull_*`,

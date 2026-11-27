@@ -68,6 +68,7 @@ nav:
   - Getting Started: getting-started.md
   - Sampling Strategies: strategies.md
   - Regions as Sampling Units: islands.md
+  - Patches as Sampling Units: quadrats.md
   - Examples:
       - A first nest: examples/first_nest.ipynb
       - Comparing strategies: examples/strategies.ipynb
