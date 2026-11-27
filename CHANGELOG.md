@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `designs.quadrats(sample, size_km)`: square patches of equal size as
+  sampling units, the species counted in each. The patches of a size form a
+  grid over the sample, or with `n` that many are placed at random without
+  overlapping (`seed` makes the placement repeatable); several sizes give
+  the points of a species-area curve. `mask` measures each patch within
+  ground such as land and leaves out patches with less than `min_fraction`
+  of their area in it. The result, a `Quadrats`, is an `Islands` design, so
+  its table, fit and plots work as an island design's do.
+
 ## [0.2.2] - 2026-11-26
 
 ### Added

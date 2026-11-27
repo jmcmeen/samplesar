@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numbers
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import Any, Literal
 
@@ -224,11 +224,9 @@ class Islands:
                 f"Not in the design: {', '.join(map(str, missing[:5]))}; known: "
                 f"{', '.join(self.names[:10])}."
             )
-        return Islands(
-            sample=self.sample,
+        return replace(
+            self,
             regions={n: self.regions[n] for n in wanted if n in self.regions},
-            area=self.area,
-            mask=self.mask,
             known_areas={n: self.known_areas[n] for n in wanted if n in self.known_areas},
             units={n: self.units[n] for n in wanted if n in self.units},
         )

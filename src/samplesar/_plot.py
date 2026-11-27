@@ -189,11 +189,15 @@ def curve(nest: Nest | Islands, ax: Axes | None = None, fit: bool = True) -> Axe
     ----------
     nest : Nest or Islands
         The nest to draw, or the regions of
-        [`designs.islands`][samplesar.designs.islands].
+        [`designs.islands`][samplesar.designs.islands] or the patches of
+        [`designs.quadrats`][samplesar.designs.quadrats].
     ax : matplotlib.axes.Axes, optional
         Axes to draw on; by default a new figure.
     fit : bool
-        Also draw the power model fitted with sars (``nest.fit()``).
+        Also draw the power model fitted with sars (``nest.fit()``), when
+        there is one to fit: three rows or more, and for
+        [`designs.quadrats`][samplesar.designs.quadrats] patches of more
+        than one size.
 
     Returns
     -------
@@ -205,7 +209,9 @@ def curve(nest: Nest | Islands, ax: Axes | None = None, fit: bool = True) -> Axe
         _, ax = plt.subplots()
     data = nest.sar_data()
     ax.scatter(data["area"], data["species"], s=14, color="C0", label=nest.label)
-    if fit and len(data) >= 3:
+    # Patches of one size are one point on the curve: nothing to fit.
+    one_size = getattr(nest, "_sizes_with_data", lambda: 2)() < 2  # noqa: PLR2004
+    if fit and len(data) >= 3 and not one_size:
         model = nest.fit()
         areas = np.geomspace(data["area"].min(), data["area"].max(), 100)
         c, z = model.params["c"], model.params["z"]
