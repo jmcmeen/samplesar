@@ -32,6 +32,11 @@ All notable changes to this project are documented here. The format is based on
   remove one at a time (`evaluate.autocorrelation`); a species with no
   range is among the rarest, not the rarest (`strategies.hull_rarity`); and
   `Sample.merge_within`'s chaining example says the points are in a row.
+- Documentation that disagreed with the code: a point within rounding of a
+  hull edge is not a vertex (the strategies page said it was); `circle` and
+  `hull_distance` break ties by index alone; `concave_peel` and `grid_peel`
+  remove more than convex-hull vertices; the README counted two designs and
+  six example scripts (three and seven).
 
 ## [0.2.2] - 2026-11-26
 

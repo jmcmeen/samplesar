@@ -4,7 +4,7 @@ Species-area relationships from georeferenced species records.
 
 A species-area relationship (SAR) needs areas and the number of species in
 each. samplesar builds that table from point observations (iNaturalist,
-GBIF, a survey) in two ways, and hands it to
+GBIF, a survey) in three ways, and hands it to
 [sars](https://jmcmeen.github.io/sars/) for curve fitting:
 
 - **Nests:** shrink one sample step by step with a sampling strategy, and
@@ -50,7 +50,7 @@ No data needed: `sources.simulated` makes up a landscape of observations
 elevations and dates) that everything below runs on.
 
 - [Example scripts](https://github.com/jmcmeen/samplesar/tree/main/examples):
-  six short scripts, each from observations to a table and a figure. Each
+  seven short scripts, each from observations to a table and a figure. Each
   stands alone: download one and run it.
 - Notebooks in the documentation:
   [a first nest](https://jmcmeen.github.io/samplesar/examples/first_nest/),

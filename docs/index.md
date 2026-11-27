@@ -2,10 +2,10 @@
 
 Species-area relationship (SAR) datasets from georeferenced species records.
 samplesar builds the table of areas and species counts that
-[sars](https://jmcmeen.github.io/sars/) fits, in two ways: by shrinking one
+[sars](https://jmcmeen.github.io/sars/) fits, in three ways: by shrinking one
 sample step by step with a sampling strategy, such as a sequence of nested
-convex hulls, or by counting the species in each of several regions you
-choose.
+convex hulls, by counting the species in each of several regions you
+choose, or by counting them in square patches of equal size.
 
 ```bash
 pip install samplesar

@@ -25,7 +25,7 @@ outside in agree with one another and give slopes of 0.15 to 0.30, the range
 of classic SARs, while greedy rules bias the slope. Records made at one spot
 dominate the end of every nest unless points within a few meters are merged,
 which in simulations largely restores the slope that clustering destroys.
-Hull peeling is also by far the fastest hull strategy. We recommend hull
+Hull peeling is also the fastest hull strategy. We recommend hull
 peeling of merged points, compared against a random-vertex baseline, as the
 default, and provide the strategies in the Python package samplesar.
 
@@ -123,7 +123,7 @@ vertex whose loss most shrinks the smallest enclosing circle (A12).
 
 Points closer than a set distance were merged into one, keeping all their
 observations (single linkage on the projected points; each group placed at
-its first-seen member). The main results use 10 m for the park samples, 25 m
+its first-seen member). The main results use 10 m for the park sample, 25 m
 for Monteverde, 50 m for the Great Smoky Mountains and 100 m for East
 Tennessee, Costa Rica and the Southern Appalachians; sensitivity to the
 distance was tested from 0 to 50 m on the park sample.
@@ -174,7 +174,7 @@ vertex by land area (M1 keeps the most, M2 the least).
 | --- | --- | --- | --- | --- | --- | --- |
 | Steele Creek Park area, all taxa | 4,431 | 3,992 | 1,281 | 17.3 | 10 | 1,224 |
 | East Tennessee, frogs | 10,314 | 9,803 | 21 | 69,580 | 100 | 1,500 |
-| Great Smoky Mountains, birds | 16,344 | 15,460 | 211 | 3,210 | 50 | 1,500 |
+| Great Smoky Mountains, birds | 16,344 | 15,460 | 211 | 3,209 | 50 | 1,500 |
 | Monteverde, Costa Rica, frogs | 1,309 | 1,137 | 55 | 319 | 25 | 685 |
 | Costa Rica, frogs | 53,580 | 44,595 | 121 | 68,500 | 100 | 1,500 |
 | Southern Appalachians, frogs | 19,953 | 18,881 | 27 | 173,144 | 100 | 1,500 |
@@ -221,15 +221,16 @@ and S4), the greedy rules made little difference.
 On the park sample, merging within 5 m removed 50% of the points (across
 Table 2 the share ranged from 4%, for Southern Appalachian salamanders, to
 50%).
-Without merging, hull nests ended on hulls of well under a square meter (the
-smallest fitted area of hull peeling was 0.03 m²), and every hull strategy
+Without merging, most hull nests ended on hulls of well under a square meter (the
+smallest fitted area of hull peeling was 0.03 m²; only S4, S6 and S9 ended
+on larger ones), and every hull strategy
 but S4 and S9 gave *z* between 0.15 and 0.22.
 Merging within 2 to 10 m raised hull peeling's *z* to 0.30 to 0.31, and it
 was 0.27 at 25 m; at 50 m, with 230 points left, the slopes of most hull
 strategies rose (0.46 for hull peeling), a sign of over-merging at the scale
 of a park
 (Fig. 4). The simulations isolate the
-effect (Fig. 5): with no clustering, the outside-in strategies (S2, S3, S5,
+effect (Fig. 5): with no clustering, six of the hull strategies (S2, S3, S5,
 S7, S8, S10) gave a median *z* of 0.42 to 0.48; with half the records at one
 spot, *z* fell to 0.07 to 0.08 for the raw records, but stayed at 0.26 to
 0.44 after merging within 10 m.
@@ -258,8 +259,8 @@ substantially.
 
 Strategies differ in the shapes they leave (Fig. 1, Fig. 6): hull peeling,
 S2 and S8 keep the hull compact and centered; S4 and S9 leave elongated hulls
-that span the sample, which is why their areas stay large and their slopes
-steep.
+that span the sample, which is why their areas stay large and S4's slope is
+the steepest.
 
 ### 3.6 The added strategies
 
@@ -272,9 +273,9 @@ across the four. Density peeling (A4) gave 0.15 to 0.27, and fell 0.10 below
 hull peeling for Costa Rica.
 
 Direction mattered. Sweeping a front east (A2) or north (A3) gave slopes
-from 0.15 to 1.22, differing between the two bearings by up to 0.33 on one
-sample (0.52 east and 0.19 north for Great Smoky Mountains birds) and above
-0.5 on four: a sweep leaves a strip whose hull loses area slowly, so its
+from 0.15 to 1.22. The two bearings differed by up to 0.33 on one
+sample (0.52 east and 0.19 north for Great Smoky Mountains birds), and a
+sweep's slope was above 0.5 on four samples: a sweep leaves a strip whose hull loses area slowly, so its
 slope reflects the sample's shape along the bearing more than its richness.
 
 Scale mattered less. From fine to coarse grid cells the number of steps fell
@@ -299,7 +300,7 @@ indistinguishable from a random-vertex nest: the baseline's 95% range was
 narrow, 0.014 to 0.069 wide.
 
 **On land only.** A quarter of the thinned Costa Rica sample's hull is sea
-(23%). Measured on land, the slope of every hull strategy but S4 rose, by
+(23%). Measured on land, the slope of every strategy from S2 to S10 but S4 rose, by
 0.01 to 0.03 (hull peeling from 0.27 to 0.30), and hull peeling moved inside the
 random-vertex baseline (p = 0.12, from 0.04); keeping area (S4) fell from
 0.54 to 0.44, since the area it kept was partly sea. Choosing the vertex by
@@ -314,8 +315,8 @@ strategies that remove one vertex per step by a random or cheap rule (S2,
 S6 to S9), 19 s for keeping area (S4) and 95 s for cutting it fastest (S5).
 The fitted exponents were 1.2 for random removal, 1.6 for hull peeling, 1.8
 to 1.9 for the one-vertex strategies and concave peeling, 1.9 for S4 and 2.3
-for S5, which re-measures the hull without each candidate vertex at every
-step. A laptop (Apple M5 Pro) ran every strategy about 1.6 times faster,
+for S5, which both re-measure the hull without each candidate vertex at
+every step. A laptop (Apple M5 Pro) ran every strategy about 1.6 times faster,
 with the same exponents to within 0.04.
 
 ## 4. Discussion
