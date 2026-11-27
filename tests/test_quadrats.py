@@ -333,3 +333,135 @@ def test_a_design_built_directly_holds_only_patches():
         )
     with pytest.raises(ValueError, match="No square"):
         samplesar.Quadrats(sample=made.sample, regions=made.regions)
+
+
+def _brute(made, side, order, min_observations=1):
+    """accumulate, the slow way: every combination, or every nearest-first walk."""
+    from itertools import combinations
+
+    sample = made.sample
+    table = made.to_frame()
+    table = table[(table["size_km"] == side) & (table["n_observations"] >= min_observations)]
+    names = table["region"].tolist()
+    areas = dict(zip(table["region"], table["area"], strict=True))
+    held = {name: set(sample.subset(made._members[name]).data["species"]) for name in names}
+    rows = []
+    for k in range(1, len(names) + 1):
+        if order == "any":
+            groups = list(combinations(names, k))
+        else:
+            groups = []
+            for start in names:
+                # Whole cells apart in a grid, so equally near patches tie exactly.
+                place = (
+                    made.cells if side in made.origins else {n: made.squares[n][1:] for n in names}
+                )
+                x, y = place[start]
+                near = sorted(
+                    names,
+                    key=lambda n: (
+                        n != start,
+                        (place[n][0] - x) ** 2 + (place[n][1] - y) ** 2,
+                        names.index(n),
+                    ),
+                )
+                groups.append(near[:k])
+        rows.append(
+            (
+                k,
+                np.mean([sum(areas[n] for n in group) for group in groups]),
+                np.mean([len(set().union(*(held[n] for n in group))) for group in groups]),
+            )
+        )
+    return rows
+
+
+@pytest.mark.parametrize("order", ["any", "nearest"])
+@pytest.mark.parametrize("n", [None, 5])
+def test_accumulate_matches_brute_force(order, n):
+    sample = scattered(120, seed=5, species=25)
+    # 9.3 km cells: distances between their centers differ in the last bit
+    # where they are equal, which must not decide the order.
+    sizes = {"any": [30, 45], "nearest": [9.3, 45]}[order] if n is None else [15, 30]
+    made = samplesar.designs.quadrats(sample, sizes, n=n, seed=2)
+    curve = made.accumulate(order=order)
+    assert curve.columns.tolist() == ["size_km", "patches", "area", "species"]
+    for side in made.sizes:
+        got = curve[curve["size_km"] == side]
+        expected = _brute(made, side, order)
+        assert got["patches"].tolist() == [k for k, _, _ in expected]
+        assert got["area"].tolist() == pytest.approx([a for _, a, _ in expected])
+        assert got["species"].tolist() == pytest.approx([s for _, _, s in expected])
+
+
+def test_accumulate_with_a_known_answer():
+    # Four patches holding 1, 3, 2 and 4 species, none shared.
+    made = samplesar.designs.quadrats(corners(), 60)
+    curve = made.accumulate()
+    assert curve["patches"].tolist() == [1, 2, 3, 4]
+    assert curve["species"].tolist() == pytest.approx([2.5, 5.0, 7.5, 10.0])
+    assert curve["area"].tolist() == pytest.approx([3600, 7200, 10800, 14400], rel=1e-5)
+    # Nearest first, the two equally near neighbors of a patch in the design's
+    # order: the pairs hold 1 + 3, 3 + 1, 2 + 1 and 4 + 3 species.
+    near = made.accumulate(order="nearest")
+    assert near["species"].tolist() == pytest.approx([2.5, 4.5, 7.5, 10.0])
+
+
+def test_neighbors_share_species():
+    # Species change from west to east, so neighbors add fewer new ones.
+    rng = np.random.default_rng(0)
+    lon = rng.uniform(0, 2, 600)
+    sample = samplesar.sources.dataframe(
+        pd.DataFrame(
+            {
+                "species": [f"s{int(x * 10) + int(rng.integers(0, 3))}" for x in lon],
+                "lon": lon,
+                "lat": rng.uniform(0, 0.3, 600),
+            }
+        )
+    )
+    made = samplesar.designs.quadrats(sample, 20)
+    anywhere, near = made.accumulate(), made.accumulate(order="nearest")
+    assert (near["species"] <= anywhere["species"] + 1e-9).all()
+    assert near["species"].iloc[2] < anywhere["species"].iloc[2] - 1
+    # Both end with every patch, and so with every species in them.
+    assert near["species"].iloc[-1] == pytest.approx(anywhere["species"].iloc[-1])
+    assert anywhere["species"].iloc[-1] == pytest.approx(sample.n_species)
+    assert anywhere["species"].is_monotonic_increasing
+
+
+def test_accumulate_sizes_and_effort():
+    sample = scattered()
+    made = samplesar.designs.quadrats(sample, [10, 20, 40])
+    assert made.accumulate(20)["size_km"].unique().tolist() == [20.0]
+    assert made.accumulate([40, 10])["size_km"].unique().tolist() == [40.0, 10.0]
+    table = made.to_frame()
+    busy = int(((table["size_km"] == 10) & (table["n_observations"] >= 5)).sum())
+    assert len(made.accumulate(10, min_observations=5)) == busy
+    assert len(made.accumulate(10, min_observations=0)) == int((table["size_km"] == 10).sum())
+    assert made.accumulate([40, 10], min_observations=40)["size_km"].unique().tolist() == [40.0]
+    with pytest.raises(KeyError, match="No patches of 15 km"):
+        made.accumulate(15)
+    with pytest.raises(ValueError, match="order must be"):
+        made.accumulate(order="random")
+    with pytest.raises(ValueError, match="observation"):
+        made.accumulate(min_observations=10**6)
+
+
+def test_accumulate_finds_a_size_however_it_was_computed():
+    made = samplesar.designs.quadrats(scattered(), [0.3 * 100, 45])
+    for asked in (30, 0.1 * 100 + 0.2 * 100, np.float32(0.3) * 100, np.float64(30)):
+        assert made.accumulate(asked)["size_km"].unique().tolist() == [made.sizes[0]]
+
+
+def test_neighbors_can_find_more_species_than_any_patches():
+    # Species alternate along a row of patches, so a neighbor always adds one.
+    sample = samplesar.sources.dataframe(
+        pd.DataFrame({"species": list("ababab"), "lon": np.arange(6) * 0.1, "lat": [0.0] * 6})
+    )
+    made = samplesar.designs.quadrats(sample, 11.1)
+    assert made.to_frame()["n_points"].tolist() == [1] * 6
+    assert made.accumulate()["species"].tolist() == pytest.approx([1.0, 1.6, 1.9, 2.0, 2.0, 2.0])
+    assert made.accumulate(order="nearest")["species"].tolist() == pytest.approx(
+        [1.0, 2, 2, 2, 2, 2]
+    )

@@ -33,7 +33,7 @@ def test_example_runs_and_saves_its_figure(script, tmp_path):
 def test_there_are_examples_and_the_readme_lists_them():
     listed = (EXAMPLES / "README.md").read_text()
     scripts = sorted(p.name for p in EXAMPLES.glob("0*.py"))
-    assert len(scripts) == 6
+    assert len(scripts) == 7
     for name in scripts:
         assert f"`{name}`" in listed
 

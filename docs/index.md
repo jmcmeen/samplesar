@@ -22,6 +22,7 @@ fit = sars.sar_power(nest.sar_data())
 - [Getting started](getting-started.md): load a sample, nest it, fit the curve.
 - [Sampling strategies](strategies.md): what each design removes, step by step.
 - [Regions as sampling units](islands.md): states, parks or islands, one row each.
+- [Patches as sampling units](quadrats.md): square patches of equal size, in a grid or scattered.
 - Examples, as notebooks: [a first nest](examples/first_nest.ipynb),
   [comparing strategies](examples/strategies.ipynb) and
   [regions as islands](examples/islands.ipynb).

@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format is based on
   ground such as land and leaves out patches with less than `min_fraction`
   of their area in it. The result, a `Quadrats`, is an `Islands` design, so
   its table, fit and plots work as an island design's do.
+- `Quadrats.accumulate(size_km, order="any")`: the species-area curve from
+  combining patches of one size, the mean species in 1, 2, 3, ... patches
+  against their combined area. `order="any"` averages over every
+  combination (computed exactly), and `order="nearest"` adds each patch's
+  neighbors nearest first.
+- A documentation page on patches as sampling units, and the example
+  script `07_quadrats.py`.
 
 ## [0.2.2] - 2026-11-26
 

@@ -11,6 +11,8 @@ GBIF, a survey) in two ways, and hands it to
   record the area and species of what remains at each step.
 - **Regions:** count the species in each of several regions you choose
   (states, parks, real islands), one row per region.
+- **Patches:** lay out square patches of equal size, in a grid or
+  scattered, and count the species in each.
 
 ```python
 import samplesar
@@ -171,6 +173,26 @@ species-area data of the island type. It is a different design
 from a nest, and the two kinds of curve aren't comparable point for point:
 see [Regions as sampling units](https://jmcmeen.github.io/samplesar/islands/).
 
+## Patches as sampling units
+
+`designs.quadrats` lays out square patches of a set size instead, as a
+quadrat survey does: a grid over the sample, or `n` patches placed at
+random.
+
+```python
+patches = samplesar.designs.quadrats(sample, [5, 10, 20, 40])   # sides, in km
+patches.to_frame()                        # one row per patch, with its size_km
+patches.fit("power")                      # every patch a row, as islands are
+patches.accumulate(10)                    # the curve from combining 10 km patches
+patches.accumulate(10, order="nearest")   # combining neighbors only
+
+scattered = samplesar.designs.quadrats(sample, [5, 10, 20], n=30, seed=1, mask=land)
+```
+
+The result is an island design whose regions are the patches, so its table,
+fit and plots work the same way. See
+[Patches as sampling units](https://jmcmeen.github.io/samplesar/quadrats/).
+
 ## Evaluating and plotting
 
 Steps of one nest share most of their points, so a single nest's R² isn't
@@ -187,7 +209,8 @@ and against chance:
 
 `samplesar.plot` draws one step of a nest (`nest`), the species-area curve
 with its power fit (`curve`), the whole nest as an animation (`animate`),
-and the regions of an island design on a map (`islands`).
+and the regions of an island design, or the patches of a quadrat design,
+on a map (`islands`).
 
 ## Development
 

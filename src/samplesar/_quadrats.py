@@ -13,10 +13,11 @@ import numpy as np
 import pandas as pd
 import shapely
 from pyproj import Transformer
+from scipy.special import gammaln
 
 from samplesar._boundary import as_geometry, polygonal
 from samplesar._islands import Islands, geodesic_area
-from samplesar._sample import WGS84, Sample
+from samplesar._sample import WGS84, Sample, point_species
 
 MAX_PATCHES = 20_000  # each is a polygon measured on the ellipsoid
 EDGE_PIECES = 16  # a patch's straight sides curve in longitude and latitude
@@ -201,6 +202,156 @@ class Quadrats(Islands):
             )
         return super().fit(model, min_observations, **kwargs)
 
+    def accumulate(
+        self,
+        size_km: float | Sequence[float] | None = None,
+        order: str = "any",
+        min_observations: int = 1,
+    ) -> pd.DataFrame:
+        """The species-area curve from combining patches of one size.
+
+        Patches of a size are one point on a curve when each is a row of
+        its own. Taken together they give a whole curve: the species in
+        one patch, in two, in three and so on, against their combined
+        area. This is how curves are drawn from a grid of quadrats or from
+        scattered ones, and it is a different curve from
+        [`fit`][samplesar.Quadrats.fit]'s, which has one row per patch and
+        needs several sizes.
+
+        Parameters
+        ----------
+        size_km : float or sequence of float, optional
+            The patch size to combine, or several; by default every size
+            in the design, each on its own.
+        order : {"any", "nearest"}
+            Which patches are combined. ``"any"``: every combination of k
+            patches, wherever they lie; the mean species count over all of
+            them is computed exactly from the number of patches each
+            species is in, without drawing any. ``"nearest"``: only
+            neighbors. From each patch in turn the others are added
+            nearest first (by the distance between centers; equally near
+            patches in the design's order), and the curves from all the
+            starting patches are averaged. Nearby patches usually share
+            more species than distant ones, and then this curve lies below
+            the other.
+        min_observations : int
+            Leave out patches with fewer observations than this, as
+            [`sar_data`][samplesar.Islands.sar_data] does: by default the
+            patches without any. Patches of no area are left out too, and
+            a size left with no patches has no rows.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per size and number of patches: ``size_km``,
+            ``patches`` (how many are combined), ``area`` (their mean
+            combined area, km²) and ``species`` (their mean species
+            count). The last row of a size has every patch, so its species
+            are all those the patches hold.
+
+        Raises
+        ------
+        ValueError
+            If ``order`` is unknown, or no patch of any size asked for has
+            enough observations.
+        KeyError
+            If the design has no patches of a size asked for.
+        """
+        if order not in ("any", "nearest"):
+            raise ValueError(f"order must be 'any' or 'nearest', got {order!r}")
+        known = self.sizes
+        if size_km is None:
+            wanted = known
+        else:
+            # Sizes are told apart by the six digits that name their patches,
+            # so 0.1 + 0.2 finds the 0.3 km patches.
+            by_label = {f"{side:g}": side for side in known}
+            asked = _sizes(size_km)
+            missing = [side for side in asked if f"{side:g}" not in by_label]
+            wanted = [by_label[f"{side:g}"] for side in asked if f"{side:g}" in by_label]
+            if missing:
+                raise KeyError(
+                    f"No patches of {', '.join(f'{side:g}' for side in missing)} km; the design "
+                    f"has {', '.join(f'{side:g}' for side in known)} km."
+                )
+        assert self.sample is not None
+        species, n_species = point_species(self.sample)
+        frame = self._frame
+        keep = (frame["n_observations"] >= min_observations) & (frame["area"] > 0)
+        parts = []
+        for side in wanted:
+            rows = frame[keep & (frame["size_km"] == side)]
+            if rows.empty:
+                continue
+            names = rows["region"].tolist()
+            areas = rows["area"].to_numpy(dtype=float)
+            count = len(names)
+            # Which species each patch holds, as pairs (patch, species) sorted by species.
+            patch: list[int] = []
+            found: list[int] = []
+            for i, name in enumerate(names):
+                inside = self._members[name]
+                if len(inside):
+                    held = np.unique(np.concatenate([species[p] for p in inside])).tolist()
+                    patch.extend([i] * len(held))
+                    found.extend(held)
+            patch_of = np.asarray(patch, dtype=np.int64)
+            species_of = np.asarray(found, dtype=np.int64)
+            by_species = np.argsort(species_of, kind="stable")
+            patch_of, species_of = patch_of[by_species], species_of[by_species]
+            k = np.arange(1, count + 1)
+            richness: np.ndarray
+            area: np.ndarray
+            if order == "any":
+                occupied = np.bincount(species_of, minlength=n_species)
+                # Species in the same number of patches share a row.
+                occupied, shared = np.unique(occupied[occupied > 0], return_counts=True)
+                # A species in m of the N patches is missed by k of them
+                # with probability C(N - m, k) / C(N, k).
+                free = count - occupied[:, None]
+                with np.errstate(invalid="ignore"):
+                    log_missed = (
+                        gammaln(free + 1)
+                        - gammaln(free - k[None, :] + 1)
+                        - gammaln(count + 1)
+                        + gammaln(count - k[None, :] + 1)
+                    )
+                missed = np.where(free >= k[None, :], np.exp(log_missed), 0.0)
+                richness = shared.sum() - shared @ missed
+                area = k * areas.mean()
+            else:
+                # How far apart two patches are: in a grid, counted in whole
+                # cells, so that equally near patches are exactly tied.
+                places: np.ndarray
+                if side in self.origins:
+                    places = np.array([self.cells[n] for n in names], dtype=np.int64)
+                else:
+                    places = np.array([self.squares[n][1:] for n in names], dtype=float)
+                starts = np.flatnonzero(np.diff(species_of, prepend=-1))
+                seen = np.zeros(count)
+                covered = np.zeros(count)
+                rank = np.empty(count, dtype=np.int64)
+                for start in range(count):
+                    distance = ((places - places[start]) ** 2).sum(axis=1)
+                    distance[start] = -1  # the starting patch comes first
+                    nearest = np.argsort(distance, kind="stable")
+                    rank[nearest] = np.arange(count)
+                    # Each species enters with the first of its patches reached.
+                    if len(starts):
+                        first = np.minimum.reduceat(rank[patch_of], starts)
+                        seen += np.bincount(first, minlength=count).cumsum()
+                    covered += np.cumsum(areas[nearest])
+                richness = seen / count
+                area = covered / count
+            parts.append(
+                pd.DataFrame({"size_km": side, "patches": k, "area": area, "species": richness})
+            )
+        if not parts:
+            raise ValueError(
+                f"No patch of the sizes asked for has {min_observations} observation(s) or more."
+            )
+        return pd.concat(parts, ignore_index=True)
+
 
 def _sizes(size_km: Any) -> list[float]:
     if isinstance(size_km, Mapping):
@@ -291,7 +442,9 @@ def quadrats(
         By default the patches of a size form a grid over the sample's
         extent, centered on it, patch against patch. With ``n``, that many
         patches of each size are placed at random within the extent
-        instead, none overlapping another of its size.
+        instead, none overlapping another of its size. Placed one after
+        another at random, patches leave gaps too small for the next, so
+        they can fill about half of the extent at most.
     seed : int, optional
         Seeds the random placement, so a design can be made again. A grid
         has nothing random in it and doesn't use it.
@@ -406,7 +559,8 @@ def quadrats(
                 where = "" if ground is None else " within the mask"
                 raise ValueError(
                     f"Only {len(placed)} of {n} patches of {side:g} km fit{where} without "
-                    "overlapping. Ask for fewer or smaller patches."
+                    "overlapping; patches placed at random fill about half of the sample's "
+                    "extent at most. Ask for fewer or smaller patches, or use a grid (no n)."
                 )
     if not regions:
         raise ValueError(
